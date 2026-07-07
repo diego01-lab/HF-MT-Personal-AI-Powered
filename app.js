@@ -8,8 +8,8 @@ document.addEventListener('click', () => {
     if (typeof AudioContext !== 'undefined') {
         try {
             const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (tempCtx.state === 'suspended') tempCtx.resume().catch(()=>{});
-        } catch(e) {}
+            if (tempCtx.state === 'suspended') tempCtx.resume().catch(() => { });
+        } catch (e) { }
     }
 }, { once: true });
 
@@ -254,9 +254,9 @@ window.enterAsGuest = function () {
     console.log("App: Accesso come ospite (Solo Visualizzazione)...");
     const guestUser = { name: 'Ospite', picture: '' };
     localStorage.setItem('sim_user', JSON.stringify(guestUser));
-    
+
     // Rimosso demo money: senza broker non si trada
-    
+
     updateProfileUI();
     unlockApp();
     showNotification("Benvenuto! Collega Alpaca per iniziare a fare trading.", "info");
@@ -279,7 +279,7 @@ function updateProfileUI() {
                 // arbitrari eventualmente iniettati in localStorage
                 if (savedUser.picture && /^https:\/\//i.test(savedUser.picture)) {
                     userPictureEl.src = savedUser.picture;
-                    userPictureEl.onerror = function() {
+                    userPictureEl.onerror = function () {
                         this.onerror = null;
                         this.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(savedUser.name) + '&background=3b82f6&color=fff';
                     };
@@ -332,10 +332,10 @@ function handleLogout() {
 window.hasAnyBrokerKey = function () {
     try {
         return !!(localStorage.getItem('finnhub_api_key') ||
-                  localStorage.getItem('alpaca_key_id') ||
-                  localStorage.getItem('alpaca_live_key_id') ||
-                  localStorage.getItem('capital_demo_key') ||
-                  localStorage.getItem('capital_live_key'));
+            localStorage.getItem('alpaca_key_id') ||
+            localStorage.getItem('alpaca_live_key_id') ||
+            localStorage.getItem('capital_demo_key') ||
+            localStorage.getItem('capital_live_key'));
     } catch (e) { return true; } // storage negato: non bloccare l'utente
 };
 
@@ -762,7 +762,7 @@ let closingAssets = new Set();
 // di apertura è più vecchio della finestra di 50 attività scaricata da Alpaca.
 let brokerEntryBasis = {};
 // Normalizza i simboli per confrontare fill Alpaca (BTC/USD o BTCUSD) e simboli interni (BTCUSDT)
-function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); } 
+function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); }
 let activePositions = {};
 let lastRenderedPositionsStr = '';
 let portfolioBalance = 0;
@@ -959,7 +959,7 @@ function updateLanguage() {
             } else {
                 if (el.tagName === 'INPUT') {
                     el.placeholder = translatedText; // gli input traducono il placeholder
-                } else if (['BUTTON','SPAN','H1','H2','H3','H4','LABEL','P','STRONG','DIV','SMALL','B','LI'].includes(el.tagName)) {
+                } else if (['BUTTON', 'SPAN', 'H1', 'H2', 'H3', 'H4', 'LABEL', 'P', 'STRONG', 'DIV', 'SMALL', 'B', 'LI'].includes(el.tagName)) {
                     // Special handling for buttons with icons
                     if (id === 'btnStartBot') {
                         el.innerHTML = `<span class="bot-icon">${isBotActive ? '⏸' : '▶'}</span> ${isBotActive ? t.stop_bot : t.start_bot}`;
@@ -1068,7 +1068,7 @@ function formatDuration(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor(ms / (1000 * 60 * 60));
-    
+
     let res = [];
     if (hours > 0) res.push(`${hours}h`);
     if (minutes > 0) res.push(`${minutes}m`);
@@ -1081,12 +1081,12 @@ function updateBotStatusLabel() {
     const algoTitleEl = document.getElementById('algoTitle');
     const logicEMAEl = document.getElementById('logicEMA');
     const logicAIEl = document.getElementById('logicAI');
-    
+
     if (!botStatusEl || (!translations[currentLang] && !translations.IT)) return;
 
     const t = translations[currentLang] || translations.IT;
     const isAiMode = localStorage.getItem('sim_ai_mode') !== 'false'; // Default true
-    
+
     // Aggiornamento testuale del titolo strategia nel pannello info
     if (algoTitleEl) {
         algoTitleEl.textContent = isAiMode ? (t.algo_ai || "AI Avanzata") : (t.algo_ema || "EMA Standard");
@@ -1170,10 +1170,10 @@ function updateChartLegendVisibility() {
 // La combo è filtrata da window.applyComboAvailabilityFilter, definita DENTRO il
 // closure DOMContentLoaded (usa assetPairSelect/VALID_SYMBOLS, non visibili qui).
 window.refreshCategoryAvailability = function () {
-    try { if (typeof renderCategorySelection === 'function') renderCategorySelection(); } catch (e) {}
-    try { if (typeof window.applyComboAvailabilityFilter === 'function') window.applyComboAvailabilityFilter(); } catch (e) {}
-    try { updateChartLegendVisibility(); } catch (e) {}
-    try { if (typeof window.refreshChartSeriesVisibility === 'function') window.refreshChartSeriesVisibility(); } catch (e) {}
+    try { if (typeof renderCategorySelection === 'function') renderCategorySelection(); } catch (e) { }
+    try { if (typeof window.applyComboAvailabilityFilter === 'function') window.applyComboAvailabilityFilter(); } catch (e) { }
+    try { updateChartLegendVisibility(); } catch (e) { }
+    try { if (typeof window.refreshChartSeriesVisibility === 'function') window.refreshChartSeriesVisibility(); } catch (e) { }
     // Pannello "Prezzi Live": solo le categorie supportate dal broker della scheda
     try {
         const ovMap = { 'ov-CRYPTO': 'CRYPTO', 'ov-STOCK': 'STOCK', 'ov-FOREX': 'FOREX', 'ov-COMMODITY': 'COMMODITY' };
@@ -1181,7 +1181,7 @@ window.refreshCategoryAvailability = function () {
             const el = document.getElementById(id);
             if (el) el.style.display = isCategorySupportedByBroker(ovMap[id]) ? 'grid' : 'none';
         }
-    } catch (e) {}
+    } catch (e) { }
 };
 
 // Le transizioni degli orari di mercato (apertura/chiusura) devono aggiornare da sole
@@ -1328,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         // --- UI Element References (Declared early to prevent TDZ errors) ---
         let statusAL, statusFH, sidebarAlpacaToggle, sidebarFinnhubToggle, useAlpacaSwitch;
-        
+
 
 
         // Sblocco immediato se già loggato
@@ -1369,15 +1369,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         function initPayPalButtons() {
             const container = document.getElementById('paypal-button-container');
             if (!container) return;
-            
+
             // Se l'SDK è già caricato, non ricaricare MAI lo script per evitare errori di listener globali (Bootstrap Error)
             if (window.paypal) {
-                container.innerHTML = ''; 
+                container.innerHTML = '';
                 renderPaypalButtons();
                 return;
             }
 
-            container.innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6;">Caricamento PayPal...</div>'; 
+            container.innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6;">Caricamento PayPal...</div>';
 
             const oldScript = document.getElementById('paypal-sdk-script');
             if (oldScript) oldScript.remove();
@@ -1400,7 +1400,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         function renderPaypalButtons() {
             const container = document.getElementById('paypal-button-container');
             if (!container || !window.paypal || !paypal.Buttons) return;
-            
+
             container.innerHTML = '';
             paypal.Buttons({
                 createOrder: function (data, actions) {
@@ -1458,7 +1458,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const btnAppInfo = document.getElementById('btnAppInfo');
         const infoModal = document.getElementById('infoModal');
         const closeInfoBtn = document.getElementById('closeInfoBtn');
-        
+
         if (btnAppInfo) {
             btnAppInfo.onclick = () => {
                 console.log("App: Apertura info modal...");
@@ -1510,7 +1510,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             await syncKeysWithServer(false);
             showNotification("Reset completato. Riavvio in corso...", "info");
-            
+
             setTimeout(() => {
                 location.reload();
             }, 1000);
@@ -1550,7 +1550,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const assetPairSelect = document.getElementById('assetPair');
         const assetIconEl = document.getElementById('assetIcon');
-        
+
         // Nuovi indicatori di stato
         statusFH = document.getElementById('statusFH');
         statusAL = document.getElementById('statusAL');
@@ -1656,7 +1656,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let activeFinnhubSubs = new Set();
         let activeAlpacaSubs = new Set();
         let radarActiveElements = {}; // Per aggiornamenti live dei segnali
-        
+
         // --- Motore Tecnico & Radar State ---
         const stratCooldown = {};
         const STRAT_COOLDOWN_MS = 3000;
@@ -1683,7 +1683,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let availableMargin = 0; // Buying Power / Margine Disponibile
         let availableCash = 0;   // Cash non marginabile: è il limite reale per gli ordini Crypto su Alpaca
         let alpacaReconnectDelay = 5000;
-        
+
         const investAmountInput = document.getElementById('investAmount');
         const investSlider = document.getElementById('investSlider');
         const investPctLabel = document.getElementById('investPctLabel');
@@ -1782,6 +1782,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Reset completo dello stato test a $1000 (azzera posizioni, storia, statistiche)
         // Lo storico prezzi NON viene azzerato: permette warm-up istantaneo alla prossima sessione.
         function resetTestState() {
+            localStorage.removeItem('sim_ctx_fh');
+            localStorage.removeItem('sim_ctx_capd');
+            localStorage.removeItem('broker_pnl_fh');
+            localStorage.removeItem('broker_pnl_capd');
+            localStorage.removeItem('broker_deposited_fh');
+            localStorage.removeItem('broker_deposited_capd');
+            if (typeof ctxLive !== 'undefined' && ctxLive) {
+                delete ctxLive['fh'];
+                delete ctxLive['capd'];
+            }
             sessionInitialCapital = TEST_DEFAULT_CAPITAL;
             tradingCapital = TEST_DEFAULT_CAPITAL;
             totalPnL = 0;
@@ -1805,7 +1815,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                     console.log('[TEST] Storico prezzi ripristinato dal local db:', Object.keys(snap).length, 'asset');
                 }
-            } catch (_) {}
+            } catch (_) { }
             persistTestData();
         }
 
@@ -1827,7 +1837,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (h && h.length >= 10) snap[sym] = h.slice(-100); // ultimi 100 punti
             }
             if (Object.keys(snap).length > 0) {
-                try { localStorage.setItem('sim_test_price_history', JSON.stringify(snap)); } catch (_) {}
+                try { localStorage.setItem('sim_test_price_history', JSON.stringify(snap)); } catch (_) { }
             }
         }
         window.resetTestState = resetTestState;
@@ -1843,7 +1853,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         // FASE D1: stato bot ON/OFF ricordato PER SCHEDA nella sessione corrente.
         // Il bot non parte mai da solo all'avvio dell'app (tutte le schede OFF);
         // tornando su una scheda dove era ON, riparte automaticamente.
-        const botActiveByCtx = { fh: false, alp: false, alrt: false, capd: false, capl: false };
+        const botActiveByCtx = { 
+            fh: false, 
+            alp: false, 
+            alrt: false, 
+            capd: false, 
+            capl: false 
+        };
         function saveLocalCtxState(ctx) {
             if (!LOCAL_CTXS.includes(ctx)) return;
             const s = {
@@ -1851,7 +1867,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed
             };
             ctxLive[ctx] = s; // FASE D2: tiene fresco anche lo stato in-memory
-            try { localStorage.setItem('sim_ctx_' + ctx, JSON.stringify(s)); } catch (_) {}
+            try { localStorage.setItem('sim_ctx_' + ctx, JSON.stringify(s)); } catch (_) { }
         }
         function loadLocalCtxState(ctx) {
             if (!LOCAL_CTXS.includes(ctx)) return;
@@ -1859,7 +1875,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // quello è il più aggiornato — la localStorage è solo persistenza.
             if (ctxLive[ctx]) { loadGlobalsFrom(ctx); isCapitalExhausted = false; return; }
             let s = null;
-            try { s = JSON.parse(localStorage.getItem('sim_ctx_' + ctx) || 'null'); } catch (_) {}
+            try { s = JSON.parse(localStorage.getItem('sim_ctx_' + ctx) || 'null'); } catch (_) { }
             if (!s) {
                 // Primo uso del contesto: portafoglio pulito a $1000
                 sessionInitialCapital = TEST_DEFAULT_CAPITAL;
@@ -1897,16 +1913,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     applyBotState(wantBot, { silent: true });
                     if (wantBot) showNotification('▶ Bot ATTIVO su questa scheda (stato ricordato).', 'info');
-                } catch (_) {}
+                } catch (_) { }
             }
-            try { if (typeof window.updateTabBotDots === 'function') window.updateTabBotDots(); } catch (_) {}
-            try { if (typeof window.syncConnToggles === 'function') window.syncConnToggles(); } catch (_) {}
+            try { if (typeof window.updateTabBotDots === 'function') window.updateTabBotDots(); } catch (_) { }
+            try { if (typeof window.syncConnToggles === 'function') window.syncConnToggles(); } catch (_) { }
             // Riallinea categorie/combo/legenda/serie del grafico alla scheda (punti 3-6)
-            try { if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability(); } catch (_) {}
-            try { updateWalletUI(); } catch (_) {}
-            try { updateDashboard(); } catch (_) {}
-            try { if (typeof window.renderOpenPositions === 'function') window.renderOpenPositions(); } catch (_) {}
-            try { if (typeof window.renderHistory === 'function') window.renderHistory(); } catch (_) {}
+            try { if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability(); } catch (_) { }
+            try { updateWalletUI(); } catch (_) { }
+            try { updateDashboard(); } catch (_) { }
+            try { if (typeof window.renderOpenPositions === 'function') window.renderOpenPositions(); } catch (_) { }
+            try { if (typeof window.renderHistory === 'function') window.renderHistory(); } catch (_) { }
         }
         window.saveLocalCtxState = saveLocalCtxState;
 
@@ -1920,11 +1936,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // swap useAlpacaBroker/liveMonitorActive sono FORZATI a false: impossibile
         // instradare per errore ordini reali dal background. I contesti alp/alrt
         // (ordini reali, percorsi async) NON girano in background per progetto.
-        const ctxLive = {}; // stato in-memory dei contesti locali non attivi
+        var ctxLive = {}; // stato in-memory dei contesti locali non attivi
         function hydrateCtxLive(ctx) {
             if (ctxLive[ctx]) return;
             let s = null;
-            try { s = JSON.parse(localStorage.getItem('sim_ctx_' + ctx) || 'null'); } catch (_) {}
+            try { s = JSON.parse(localStorage.getItem('sim_ctx_' + ctx) || 'null'); } catch (_) { }
             ctxLive[ctx] = s ? {
                 sessionInitialCapital: parseFloat(s.sessionInitialCapital) || TEST_DEFAULT_CAPITAL,
                 tradingCapital: parseFloat(s.tradingCapital) || TEST_DEFAULT_CAPITAL,
@@ -2011,7 +2027,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Anti-bleed UI: durante fn le funzioni di rendering possono aver scritto
             // nel DOM i valori del contesto in background; ri-renderizza subito i
             // valori del contesto ATTIVO appena ripristinato.
-            try { updateWalletUI(); } catch (_) {}
+            try { updateWalletUI(); } catch (_) { }
         }
         // ─── Totale portafoglio multi-broker (header) ───
         // Il valore nella barra di stato è la SOMMA degli equity di tutti i broker:
@@ -2053,7 +2069,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         ? !!(capDemoKey && capDemoIdent && capDemoPass)
                         : !!(capLiveKey && capLiveIdent && capLivePass);
                     let used = false;
-                    try { used = !!localStorage.getItem('sim_ctx_' + ctx) || !!botActiveByCtx[ctx]; } catch (_) {}
+                    try { used = !!localStorage.getItem('sim_ctx_' + ctx) || !!botActiveByCtx[ctx]; } catch (_) { }
                     if (!keysOk && !used) continue;
                 }
                 const eq = ctxEquityLocal(ctx);
@@ -2160,7 +2176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (wakeLock) await wakeLock.release();
                     wakeLock = await navigator.wakeLock.request('screen');
                     console.log('Wake Lock: Schermo bloccato (attivo)');
-                    
+
                     wakeLock.addEventListener('release', () => {
                         console.log('Wake Lock: Rilasciato dal sistema');
                     });
@@ -2192,11 +2208,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!window.userHasInteracted) return;
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContext || (keepAliveAudioCtx && keepAliveAudioCtx.state === 'running')) return;
-                
+
                 if (!keepAliveAudioCtx) {
                     keepAliveAudioCtx = new AudioContext();
                 }
-                
+
                 if (keepAliveAudioCtx.state === 'suspended') {
                     // Non tentiamo di forzare il resume qui, lo farà il listener del click
                     return;
@@ -2204,7 +2220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const oscillator = keepAliveAudioCtx.createOscillator();
                 const gainNode = keepAliveAudioCtx.createGain();
-                gainNode.gain.value = 0.001; 
+                gainNode.gain.value = 0.001;
                 oscillator.connect(gainNode);
                 gainNode.connect(keepAliveAudioCtx.destination);
                 oscillator.start();
@@ -2230,7 +2246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (keepAliveAudioCtx.state === 'suspended') {
                 keepAliveAudioCtx.resume().then(() => {
                     console.log("Audio: Context sbloccato dopo interazione utente.");
-                }).catch(() => {});
+                }).catch(() => { });
             }
         });
 
@@ -2262,7 +2278,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         useAlpacaSwitch = document.getElementById('useAlpacaBroker');
         statusAL = document.getElementById('statusAL');
         statusFH = document.getElementById('statusFH');
-        
+
         // Caricamento Chiavi dal Server all'avvio
         await syncKeysWithServer(false);
 
@@ -2276,11 +2292,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem('sim_use_finnhub', 'true');
         console.log('%c[INIT] MODALITÀ TEST attiva — sorgente dati: SOLO Finnhub — capitale $1000 — nessuna connessione Alpaca.', 'color:#f59e0b; font-weight:bold;');
 
-        // Il BOT automatico NON parte MAI da solo all'avvio: l'utente deve
-        // attivarlo esplicitamente con il pulsante. Ignoriamo (e azzeriamo)
-        // l'eventuale stato salvato da sessioni precedenti.
-        isBotActive = false;
-        localStorage.setItem('sim_bot_active', 'false');
+        // Ripristina lo stato corretto del bot per la modalità Finnhub all'avvio
+        isBotActive = botActiveByCtx['fh'];
         isManualMode = !isBotActive;
         localStorage.setItem('sim_trading_mode', isManualMode ? 'manual' : 'auto');
 
@@ -2334,26 +2347,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Sincronizza TUTTI i controlli UI
             const tm = document.getElementById('testModeToggle');
             if (tm) tm.checked = !useBroker;
-            if (sidebarAlpacaToggle) sidebarAlpacaToggle.checked = useBroker;
-            if (useAlpacaSwitch) useAlpacaSwitch.checked = useBroker;
 
             if (!useBroker) {
                 // FASE C: le connessioni dati NON si spengono più al cambio modalità.
                 // Alpaca/Finnhub/Capital restano feed CONCORRENTI (multi-dashboard):
                 // qui cambia solo il contesto operativo, non le sorgenti dati.
                 syncAlpacaOrders(); // svuota la UI ordini in attesa (vista non-broker)
-                // Finnhub attivo come feed (se c'è la chiave). opts.skipFinnhub è
-                // obsoleto in Fase C: non si spegne più nulla. L'attivazione della
-                // scheda FH è una SCELTA esplicita → connessione consentita.
-                window.__connAllowed.fh = true;
-                useFinnhubData = true;
-                localStorage.setItem('sim_use_finnhub', 'true');
+                // In Fase C, le connessioni dati sono indipendenti dai tab.
+                // Il cambio tab NON forza l'attivazione della connessione.
                 if (sidebarFinnhubToggle) {
-                    sidebarFinnhubToggle.checked = true;
                     sidebarFinnhubToggle.disabled = false;
                 }
-                if (!bgFinnhubWs) initBackgroundConnections();
-                else syncFinnhubSubscriptions(); // riallinea le categorie coperte da FH
+                if (bgFinnhubWs) syncFinnhubSubscriptions(); // riallinea se già connesso
                 if (sidebarAlpacaToggle) {
                     sidebarAlpacaToggle.disabled = true;
                 }
@@ -2369,14 +2374,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Azzera lo stato locale di test: posizioni e cronologia saranno ripopolate da Alpaca
                 activePositions = {};
                 tradeHistory = [];
-                // L'attivazione della scheda Alpaca è una SCELTA esplicita → connessione consentita
-                window.__connAllowed.alp = true;
-                if (opts.live) checkAlpacaLiveConnection(); else checkAlpacaConnection();
-                initAlpacaDataWs();
-                initAlpacaCryptoWs(); // dati crypto live dal broker (con fallback polling)
-                // Baseline garantita per grafico/radar: il polling parte SUBITO e si
-                // autospegne appena il WS crypto autentica (dati entro 3s in ogni caso)
-                startAlpacaPolling();
+                // In Fase C, le connessioni dati sono indipendenti dai tab.
+                // Il cambio tab NON forza l'attivazione della connessione.
+                if (window.__connAllowed.alp) {
+                    if (opts.live) checkAlpacaLiveConnection(); else checkAlpacaConnection();
+                    initAlpacaDataWs();
+                    initAlpacaCryptoWs();
+                    startAlpacaPolling();
+                } else {
+                    const elStatusALP = document.getElementById('statusALP');
+                    const dot = elStatusALP && elStatusALP.querySelector('.status-dot');
+                    if (dot) dot.className = 'status-dot';
+                }
                 // Sincronizza Combo Box / Radar / Bot con gli asset crypto realmente
                 // tradabili sul broker attivo (Paper o Reale).
                 syncAlpacaCryptoAssets();
@@ -2508,14 +2517,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         checkAlpacaConnection();
                         showNotification('Collegamento Alpaca attivo (dati + sync conto).', 'success');
                     } else {
-                        if (bgAlpacaWs) { try { bgAlpacaWs.close(); } catch (_) {} bgAlpacaWs = null; }
-                        if (bgAlpacaCryptoWs) { try { bgAlpacaCryptoWs.close(); } catch (_) {} bgAlpacaCryptoWs = null; }
+                        if (bgAlpacaWs) { try { bgAlpacaWs.close(); } catch (_) { } bgAlpacaWs = null; }
+                        if (bgAlpacaCryptoWs) { try { bgAlpacaCryptoWs.close(); } catch (_) { } bgAlpacaCryptoWs = null; }
                         if (alpacaPollingInterval) { clearInterval(alpacaPollingInterval); alpacaPollingInterval = null; }
                         alpacaDataAuthenticated = false;
                         showNotification('Collegamento Alpaca scollegato.', 'info');
                     }
                     // Le sottoscrizioni FH si riallineano alla nuova copertura
-                    try { syncFinnhubSubscriptions(); } catch (_) {}
+                    try { syncFinnhubSubscriptions(); } catch (_) { }
                 },
                 alrt: (on) => {
                     if (on && (!alpacaLiveKeyId || !alpacaLiveSecretKey)) { showNotification('Configura le chiavi Alpaca REALI per collegare il monitor ALrt.', 'error'); const m = document.getElementById('alpacaLiveModal'); if (m) m.classList.remove('hidden'); return revert('alrt'); }
@@ -2563,12 +2572,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const prevCtx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
             saveLocalCtxState(prevCtx);
 
-            // Uscita dalla modalità Capital.com quando si passa a FH/Alpaca (stadi 0-2).
-            // FASE C: il polling Capital NON si ferma (resta feed dati concorrente per
-            // Forex/Materie); cambia solo il contesto operativo.
-            if (stage <= 2 && window.capitalMode !== 'off') {
-                window.capitalMode = 'off';
-            }
+            const prevStage = prevCtx === 'capl' ? 4 : prevCtx === 'capd' ? 3 : prevCtx === 'alrt' ? 2 : prevCtx === 'alp' ? 1 : 0;
 
             if (stage === 3) {
                 // Capital.com Demo: servono email + API Key + password della API Key
@@ -2576,15 +2580,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showNotification('Configura email, API Key e password della API Key di Capital.com Demo per attivare questo broker.', 'error');
                     const mdl = document.getElementById('capitalModal');
                     if (mdl) mdl.classList.remove('hidden');
-                    stage = 0;
-                    if (brokerTriSwitch) brokerTriSwitch.value = '0';
-                    setTradingMode(false);
+                    stage = prevStage;
                 } else {
                     window.capitalMode = 'demo';
-                    // Attivazione scheda Capital = scelta esplicita → connessione consentita
-                    window.__connAllowed.capd = true;
                     setTradingMode(false, { skipFinnhub: true });
-                    startCapitalPolling();
+                    const el = document.getElementById('armCAPD');
+                    if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                     if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
                     showNotification('🟢 Capital.com Demo attivo: dati reali Forex/Materie Prime dal tuo conto demo. In questa versione gli ordini del bot sono simulati localmente (routing ordini su Capital.com in arrivo).', 'info');
                 }
@@ -2594,26 +2595,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showNotification('Configura email, API Key e password della API Key di Capital.com (reale) per attivare questo broker.', 'error');
                     const mdl = document.getElementById('capitalLiveModal');
                     if (mdl) mdl.classList.remove('hidden');
-                    stage = 0;
-                    if (brokerTriSwitch) brokerTriSwitch.value = '0';
-                    setTradingMode(false);
+                    stage = prevStage;
                 } else {
                     updateTriSwitchLabel(4);
                     setTimeout(() => {
                         if (!confirm('⚠️ CONTO REALE CAPITAL.COM\n\nStai per collegare il conto Capital.com REALE.\nIn questa versione il conto è in MONITORAGGIO (dati e saldo): gli ordini del bot restano simulati localmente e NON vengono inviati a Capital.com.\n\nVuoi continuare?')) {
-                            showNotification('Collegamento conto reale Capital.com annullato: rimani in modalità Test.', 'info');
-                            window.capitalMode = 'off';
-                            if (brokerTriSwitch) brokerTriSwitch.value = '0';
-                            updateTriSwitchLabel(0);
-                            setTradingMode(false);
-                            handleCtxTransition(prevCtx); // FASE B: torna al contesto fh
+                            showNotification('Collegamento conto reale Capital.com annullato: mantengo la selezione precedente.', 'info');
+                            if (brokerTriSwitch) brokerTriSwitch.value = String(prevStage);
+                            updateTriSwitchLabel(prevStage);
                             return;
                         }
                         window.capitalMode = 'live';
-                        // Attivazione scheda Capital reale = scelta esplicita → connessione consentita
-                        window.__connAllowed.capd = true;
                         setTradingMode(false, { skipFinnhub: true });
-                        startCapitalPolling();
+                        const el = document.getElementById('armCAPL');
+                        if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                         if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
                         if (brokerTriSwitch) brokerTriSwitch.value = '4';
                         updateTriSwitchLabel(4);
@@ -2629,11 +2624,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         'Configura le API Key di Alpaca Paper per attivare questo broker.'), 'error');
                     const mdl = document.getElementById('alpacaModal');
                     if (mdl) mdl.classList.remove('hidden');
-                    stage = 0;
-                    if (brokerTriSwitch) brokerTriSwitch.value = '0';
-                    setTradingMode(false);
+                    stage = prevStage;
                 } else {
+                    if (window.capitalMode !== 'off') window.capitalMode = 'off';
                     setTradingMode(true); // spegne Finnhub, accende Paper
+                    const el = document.getElementById('armALP');
+                    if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                 }
             } else if (stage === 2) {
                 // ALrt: conto Alpaca REALE — trading OPERATIVO (denaro reale).
@@ -2644,9 +2640,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         'Inserisci le chiavi Alpaca REALI (Live) per operare in modalità conto reale.'), 'error');
                     const mdl = document.getElementById('alpacaLiveModal');
                     if (mdl) mdl.classList.remove('hidden');
-                    stage = 0;
-                    if (brokerTriSwitch) brokerTriSwitch.value = '0';
-                    setTradingMode(false);
+                    stage = prevStage;
                 } else {
                     // Conferma + attivazione DEFERITE fuori dal gestore 'change': il confirm()
                     // è bloccante e dentro l'handler causa "[Violation] 'change' handler took Xms".
@@ -2654,21 +2648,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                     updateTriSwitchLabel(2); // mostra subito ALrt sull'interruttore
                     setTimeout(() => {
                         if (!confirm('⚠️ TRADING REALE\n\nStai per attivare la modalità conto REALE Alpaca (ALrt).\nDa questo momento gli ordini del bot e quelli manuali useranno DENARO REALE sul tuo conto Alpaca Live.\n\nVuoi continuare?')) {
-                            // Annullato: torna in modalità Test (FH).
+                            // Annullato: torna alla modalità precedente.
                             showNotification(tr('alrt_cancelled',
-                                'Attivazione conto reale annullata: rimani in modalità Test.'), 'info');
-                            if (brokerTriSwitch) brokerTriSwitch.value = '0';
-                            updateTriSwitchLabel(0);
-                            setTradingMode(false);
-                            checkAlpacaLiveConnection();
-                            handleCtxTransition(prevCtx); // FASE B: torna al contesto fh
+                                'Attivazione conto reale annullata: mantengo la selezione precedente.'), 'info');
+                            if (brokerTriSwitch) brokerTriSwitch.value = String(prevStage);
+                            updateTriSwitchLabel(prevStage);
                             return;
                         }
+                        if (window.capitalMode !== 'off') window.capitalMode = 'off';
                         // Attiva il conto REALE operativo riusando lo STESSO percorso di Alpaca
                         // Paper; getBrokerHttp() instrada su api.alpaca.markets con le chiavi live.
                         // liveMonitorActive va impostato PRIMA del setup.
                         window.liveMonitorActive = true;
                         setTradingMode(true, { live: true });
+                        const el = document.getElementById('armALrt');
+                        if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                         if (brokerTriSwitch) brokerTriSwitch.value = '2';
                         updateTriSwitchLabel(2);
                         showNotification(tr('alrt_live_trading',
@@ -2681,7 +2675,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } else {
                 // Stadio 0: modalità Test (FH), Finnhub attivo.
+                if (window.capitalMode !== 'off') window.capitalMode = 'off';
                 setTradingMode(false);
+                const el = document.getElementById('armFH');
+                if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                 // Senza chiave Finnhub in FH non arrivano dati: avvisa e apri il modale.
                 if (!finnhubApiKey) {
                     showNotification(tr('finnhub_key_required',
@@ -2712,7 +2709,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!brokerTriSwitch) return;
             const stage = window.capitalMode === 'demo' ? 3
                 : window.capitalMode === 'live' ? 4
-                : window.liveMonitorActive ? 2 : (useAlpacaBroker ? 1 : 0);
+                    : window.liveMonitorActive ? 2 : (useAlpacaBroker ? 1 : 0);
             brokerTriSwitch.value = String(stage);
             updateTriSwitchLabel(stage);
         };
@@ -2731,7 +2728,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateWalletUI();
         renderHistory();
         updateBotStatusLabel();
-        
+
         // Se un broker è attivo, forziamo activePositions a vuoto all'avvio 
         // finché il primo sync non le popola, per evitare dati locali obsoleti.
         if (useAlpacaBroker) {
@@ -2847,7 +2844,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         function setAppVolume(v) {
             appVolume = Math.max(0, Math.min(100, Math.round(v) || 0));
             localStorage.setItem('sim_app_volume', String(appVolume));
-            masterGains.forEach(g => { try { g.gain.value = appVolume / 100; } catch (e) {} });
+            masterGains.forEach(g => { try { g.gain.value = appVolume / 100; } catch (e) { } });
         }
 
         // Pannello Impostazioni (ingranaggio nella barra superiore)
@@ -2907,7 +2904,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const ctx = keepAliveAudioCtx;
                     if (ctx.state !== 'running') return;
-                    
+
                     // Suono di Guadagno (Arpeggio Maggiore ascendente felice)
                     const notes = [523.25, 659.25, 783.99, 1046.50];
                     notes.forEach((freq, i) => {
@@ -2925,7 +2922,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) { /* Silenzioso */ }
             };
             if (keepAliveAudioCtx.state === 'suspended') {
-                keepAliveAudioCtx.resume().then(doPlay).catch(() => {});
+                keepAliveAudioCtx.resume().then(doPlay).catch(() => { });
             } else {
                 doPlay();
             }
@@ -2937,7 +2934,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const ctx = keepAliveAudioCtx;
                     if (ctx.state !== 'running') return;
-                    
+
                     // Suono di Perdita (Dissonante discendente)
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
@@ -2950,7 +2947,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     gain.connect(getAudioOut(ctx));
                     osc.start();
                     osc.stop(ctx.currentTime + 0.6);
-                    
+
                     const osc2 = ctx.createOscillator();
                     const gain2 = ctx.createGain();
                     osc2.type = 'sawtooth';
@@ -2965,7 +2962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) { /* Silenzioso */ }
             };
             if (keepAliveAudioCtx.state === 'suspended') {
-                keepAliveAudioCtx.resume().then(doPlay).catch(() => {});
+                keepAliveAudioCtx.resume().then(doPlay).catch(() => { });
             } else {
                 doPlay();
             }
@@ -2999,10 +2996,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     gain2.connect(getAudioOut(ctx));
                     osc2.start(ctx.currentTime + 0.05);
                     osc2.stop(ctx.currentTime + 0.3);
-                } catch (e) {}
+                } catch (e) { }
             };
             if (keepAliveAudioCtx.state === 'suspended') {
-                keepAliveAudioCtx.resume().then(doPlay).catch(() => {});
+                keepAliveAudioCtx.resume().then(doPlay).catch(() => { });
             } else {
                 doPlay();
             }
@@ -3239,20 +3236,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Sincronizzazione Broker Real-Time (Dati certificati dal server)
             // Usiamo tradingCapital (Equity) per il valore totale principale
             if (tradingCapitalEl) tradingCapitalEl.textContent = formatMoney(tradingCapital);
-            
+
             // Capitale Iniziale (Equity alla chiusura precedente)
             if (initialCapitalEl) initialCapitalEl.textContent = formatMoney(sessionInitialCapital);
-            
+
             // Saldo Cash (Liquidità immediata) - Aggiorna entrambi i punti della UI
             if (walletBalanceEl) walletBalanceEl.textContent = formatMoney(portfolioBalance);
             if (walletBalanceSideEl) walletBalanceSideEl.textContent = formatMoney(portfolioBalance);
-            
+
             // Header: SOMMA degli equity di tutti i broker (multi-dashboard)
             if (typeof updateGlobalPortfolioHeader === 'function') updateGlobalPortfolioHeader();
 
             // Box storiche Versato/Attuale (contesto broker Alpaca Paper o ALrt)
             updateCapitalHistoryBoxes(tradingCapital);
-            
+
             // Potere Acquisto (Buying Power)
             if (availableMarginEl) availableMarginEl.textContent = formatMoney(availableMargin);
 
@@ -3416,14 +3413,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // l'app resta pienamente operativa (trading, pannelli) col grafico disabilitato.
         if (typeof LightweightCharts === 'undefined') {
             console.warn('[CHART] LightweightCharts non disponibile (CDN non raggiungibile). Grafico disabilitato, app operativa.');
-            const _noop = function () {};
+            const _noop = function () { };
             const _seriesStub = new Proxy({}, { get: () => _noop });
-            const _chartStub = new Proxy({}, { get: (t, prop) => {
-                if (['addLineSeries','addAreaSeries','addCandlestickSeries','addBaselineSeries','addHistogramSeries','timeScale','priceScale'].includes(prop)) {
-                    return () => _seriesStub;
+            const _chartStub = new Proxy({}, {
+                get: (t, prop) => {
+                    if (['addLineSeries', 'addAreaSeries', 'addCandlestickSeries', 'addBaselineSeries', 'addHistogramSeries', 'timeScale', 'priceScale'].includes(prop)) {
+                        return () => _seriesStub;
+                    }
+                    return _noop;
                 }
-                return _noop;
-            }});
+            });
             window.LightweightCharts = {
                 createChart: () => _chartStub,
                 CrosshairMode: { Normal: 1, Magnet: 2, Hidden: 0 },
@@ -3524,7 +3523,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const s = compSeries[sym];
                 if (!s) continue;
                 let ok = true;
-                try { ok = (typeof isSymbolEnabled === 'function') ? isSymbolEnabled(sym) : true; } catch (_) {}
+                try { ok = (typeof isSymbolEnabled === 'function') ? isSymbolEnabled(sym) : true; } catch (_) { }
                 if (s._visible !== ok) {
                     s.applyOptions({ visible: ok });
                     s._visible = ok;
@@ -3535,24 +3534,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Sistema di Batching per ottimizzare il rendering grafico (evita cali di frame)
         const pendingRadarUpdates = new Map();
         setInterval(() => {
-    if (pendingRadarUpdates.size === 0) return;
-    pendingRadarUpdates.forEach((data, sym) => {
-        if (compSeries[sym] && compSeries[sym]._visible !== false) {
-            try {
-                if (!compSeries[sym]._hasData) {
-                    compSeries[sym].setData([{ time: data.time, value: data.value }]);
-                    compSeries[sym]._hasData = true;
-                    compSeries[sym]._lastTime = data.time;
-                } else if (data.time >= compSeries[sym]._lastTime) {
-                    compSeries[sym].update(data);
-                    compSeries[sym]._lastTime = data.time;
+            if (pendingRadarUpdates.size === 0) return;
+            pendingRadarUpdates.forEach((data, sym) => {
+                if (compSeries[sym] && compSeries[sym]._visible !== false) {
+                    try {
+                        if (!compSeries[sym]._hasData) {
+                            compSeries[sym].setData([{ time: data.time, value: data.value }]);
+                            compSeries[sym]._hasData = true;
+                            compSeries[sym]._lastTime = data.time;
+                        } else if (data.time >= compSeries[sym]._lastTime) {
+                            compSeries[sym].update(data);
+                            compSeries[sym]._lastTime = data.time;
+                        }
+                    } catch (e) { }
                 }
-            } catch(e) {}
-        }
-    });
-    pendingRadarUpdates.clear();
-}, 100); // 10 FPS (100ms) per la compSeries
-        
+            });
+            pendingRadarUpdates.clear();
+        }, 100); // 10 FPS (100ms) per la compSeries
+
         // Colori per categoria (Sfumature premium)
         const CAT_COLORS = {
             'CRYPTO': ['#f7931a', '#ffb119', '#f3ba2f', '#e8b923', '#ffd700'],
@@ -3646,7 +3645,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         async function syncKeysWithServer(save = false) {
             // Su Vercel (o host diversi da localhost) non usiamo /api/save-keys
             const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            
+
             try {
                 if (save) {
                     // Le chiavi sono già salvate in localStorage dai rispettivi listener
@@ -3693,7 +3692,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 localStorage.setItem('alpaca_live_secret_key', alpacaLiveSecretKey);
                             }
                             console.log("Keys: Recuperate dal server locale.");
-                            
+
                             // NON forzare il broker: l'app parte sempre in test mode.
                             // Le chiavi restano disponibili per l'attivazione manuale dal toggle.
                             if (typeof updateAllTogglesUI === 'function') updateAllTogglesUI();
@@ -3726,7 +3725,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         let botSym = p.symbol;
                         const isCrypto = p.asset_class === 'crypto';
                         if (isCrypto) botSym = p.symbol.replace('/USD', 'USDT');
-                        
+
                         // Controlla se il simbolo è nuovo
                         const exists = Object.values(VALID_SYMBOLS).some(cat => cat.includes(botSym));
                         if (!exists && !extraSymbols.has(botSym)) {
@@ -3798,8 +3797,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
         function updateAllTogglesUI() {
-            if (sidebarAlpacaToggle) sidebarAlpacaToggle.checked = useAlpacaBroker;
-            if (useAlpacaSwitch) useAlpacaSwitch.checked = useAlpacaBroker;
             if (sidebarFinnhubToggle) sidebarFinnhubToggle.checked = useFinnhubData;
             updateStatusDots();
         }
@@ -4105,7 +4102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (window.__capitalFeedOk) {
                             window.__capitalFeedOk = false;
                             console.warn('[CAPITAL] Feed prezzi in errore: Finnhub riprende la copertura Forex/Materie.');
-                            try { syncFinnhubSubscriptions(); } catch (_) {}
+                            try { syncFinnhubSubscriptions(); } catch (_) { }
                         }
                         // Un epic non valido può far fallire il batch: individua i validi una volta sola
                         if (res && (res.status === 400 || res.status === 404)) await probeCapitalEpics();
@@ -4115,7 +4112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!window.__capitalFeedOk) {
                         window.__capitalFeedOk = true;
                         console.log('[CAPITAL] Feed prezzi attivo: Capital copre Forex/Materie (Finnhub si ritira su queste categorie).');
-                        try { syncFinnhubSubscriptions(); } catch (_) {}
+                        try { syncFinnhubSubscriptions(); } catch (_) { }
                     }
                     const data = await res.json();
                     const now = Date.now();
@@ -4142,7 +4139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             setCapitalLed('');
             if (window.__capitalFeedOk) {
                 window.__capitalFeedOk = false;
-                try { syncFinnhubSubscriptions(); } catch (_) {} // FH riprende Forex/Materie
+                try { syncFinnhubSubscriptions(); } catch (_) { } // FH riprende Forex/Materie
             }
         }
         // Verifica una tantum degli epic: quelli sconosciuti al server vengono esclusi
@@ -4234,7 +4231,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         body: JSON.stringify({ identifier: i, password: p })
                     });
                     showNotification(res.ok ? tr('conn_ok', 'Connessione riuscita: chiavi valide.')
-                                            : tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), res.ok ? 'success' : 'error');
+                        : tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), res.ok ? 'success' : 'error');
                 } catch (e) {
                     showNotification(tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), 'error');
                 }
@@ -4297,7 +4294,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // sicuro. La whitelist ordini (ALPACA_SUPPORTED_CRYPTO) resta invece completa,
                 // così un ordine su un asset non monitorato non viene bloccato a priori.
                 const CRYPTO_WS_CAP = 25;
-                const majors = ['BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','AVAXUSDT','LINKUSDT','DOTUSDT','LTCUSDT','BCHUSDT','UNIUSDT','AAVEUSDT','SHIBUSDT','PEPEUSDT'];
+                const majors = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'DOTUSDT', 'LTCUSDT', 'BCHUSDT', 'UNIUSDT', 'AAVEUSDT', 'SHIBUSDT', 'PEPEUSDT'];
                 const ordered = [...majors.filter(m => botSyms.includes(m)), ...botSyms.filter(s => !majors.includes(s))];
                 alpacaCryptoAssetsSynced = true;
                 VALID_SYMBOLS.CRYPTO = ordered.slice(0, CRYPTO_WS_CAP);
@@ -4348,8 +4345,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const dot = box ? box.querySelector('.status-dot') : null;
             if (!dot) return;
             dot.style.backgroundColor = '';
-            if (!window.liveMonitorActive || !alpacaLiveKeyId || !alpacaLiveSecretKey) {
-                dot.className = 'status-dot error'; // rosso: monitor spento o chiavi assenti
+            const wantedAlrt = window.__connWanted ? window.__connWanted.alrt : false;
+            if (!wantedAlrt && !window.liveMonitorActive) {
+                dot.className = 'status-dot error'; // rosso: monitor spento
+                return;
+            }
+            if (!alpacaLiveKeyId || !alpacaLiveSecretKey) {
+                dot.className = 'status-dot error'; // rosso se mancano chiavi
                 return;
             }
             dot.className = 'status-dot warning'; // giallo durante la verifica
@@ -4362,10 +4364,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    // Cambio modalità mentre la richiesta era in volo: non toccare nulla
-                    if (!window.liveMonitorActive) return;
                     dot.className = 'status-dot active';
                     dot.style.backgroundColor = '#10b981'; // verde: connesso
+                    // Cambio modalità mentre la richiesta era in volo: non toccare nulla
+                    if (!window.liveMonitorActive) return;
                     // Sincronizzazione del portafoglio reale (stessa logica Paper)
                     applyBrokerAccountSnapshot(data);
                     await syncAlpacaPositions();
@@ -4431,26 +4433,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         async function checkAlpacaConnection() {
             const dot = statusAL.querySelector('.status-dot');
             const now = Date.now();
-            
+
             // Log di stato ridotto (ogni 60s o se cambia qualcosa di critico)
             const shouldLogStatus = (now - lastAlpacaStatusLogTime > 60000);
             if (shouldLogStatus) {
                 console.log(`[ALPACA] Status Check: Active=${useAlpacaBroker}, Key=${alpacaKeyId ? 'OK' : 'MISSING'}`);
                 lastAlpacaStatusLogTime = now;
             }
-            
+
             dot.style.backgroundColor = ''; // Reset colori inline precedenti
-            
-            if (!useAlpacaBroker) {
+
+            const allowedAlp = window.__connAllowed ? window.__connAllowed.alp : false;
+            if (!allowedAlp && !useAlpacaBroker) {
                 dot.className = 'status-dot error'; // rosso: broker non attivo in modalità test
                 return;
             }
-            
+
             if (!alpacaKeyId || !alpacaSecretKey) {
                 dot.className = 'status-dot error'; // rosso se mancano chiavi
                 return;
             }
-            
+
             dot.className = 'status-dot warning'; // Giallo durante il check
             try {
                 // 1. Verifica Account e Saldo
@@ -4466,13 +4469,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (response.ok) {
                     const data = await response.json();
 
-                    // L'utente può essere passato in TEST mode mentre la richiesta era in volo:
-                    // non sovrascrivere il capitale/stato test con i dati broker
-                    if (!useAlpacaBroker) return;
-
                     const dot = statusAL.querySelector('.status-dot');
                     dot.className = 'status-dot active';
                     dot.style.backgroundColor = '#10b981'; // Forza il verde
+
+                    // L'utente può essere passato in TEST mode mentre la richiesta era in volo o
+                    // sta collegando il feed in background: non sovrascrivere il capitale/stato 
+                    // test con i dati broker
+                    if (!useAlpacaBroker) return;
 
                     // Sincronizzazione Capitale Avanzata (Mirroring Alpaca Dashboard)
                     applyBrokerAccountSnapshot(data);
@@ -4495,7 +4499,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     const errData = await response.json();
                     console.error("[ALPACA] Dettaglio Errore:", errData);
-                    
+
                     // Se l'errore non è un 401, le chiavi sono VALIDE ma c'è un altro problema
                     if (response.status !== 401) {
                         const dot = statusAL.querySelector('.status-dot');
@@ -4511,7 +4515,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const dot = statusAL.querySelector('.status-dot');
                 dot.className = 'status-dot error';
                 dot.style.backgroundColor = '#ef4444';
-                
+
                 // Se l'errore è un fallimento di fetch verso localhost, è probabile un problema di SSL/Proxy
                 if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
                     showNotification("Problema SSL Proxy: Apri https://localhost:8444 e clicca su 'Avanzate -> Procedi' per autorizzare la connessione.", "warning");
@@ -4564,13 +4568,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // né mescolare i dati Paper/Reale
                     if (!brokerViewActive() || getBrokerHttp().live !== src.live) return;
                     const alpacaSyms = new Set();
-                    
+
                     for (const p of positions) {
                         const alpacaSym = p.symbol;
                         const side = p.side.toUpperCase();
                         const qty = Math.abs(parseFloat(p.qty));
                         const avgPrice = parseFloat(p.avg_entry_price);
-                        
+
                         if (qty * avgPrice < 0.10) continue;
 
                         const isCrypto = alpacaSym.endsWith('USD') || alpacaSym.endsWith('USDT') || alpacaSym.includes('/');
@@ -4586,11 +4590,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 localSym = alpacaSym.replace('USD', 'USDT');
                             }
                         }
-                        
+
                         if (alpacaSym.includes('/') && !isCrypto) {
                             localSym = `OANDA:${alpacaSym.replace('/', '_')}`;
                         }
-                        
+
                         alpacaSyms.add(localSym);
                         const posPnl = parseFloat(p.unrealized_intraday_pl != null ? p.unrealized_intraday_pl : (p.unrealized_pl || 0));
 
@@ -4725,7 +4729,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Una sola voce per fill di chiusura (dedup per id attività Alpaca)
                         const pushRow = (type, entryPrice, closedQty, pnl, entryTime) => {
                             if (tradeHistory.some(t => t.id === actId)) return;
-                            
+
                             // Aggiorna le statistiche globali (LIFETIME)
                             if (pnl !== 0 || entryPrice !== price) {
                                 executedTrades++;
@@ -4817,7 +4821,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // Eliminato ricalcolo iterativo che distruggeva lo storico lifetime.
                     // I totali vengono ora incrementati correttamente in pushRow().
-                    
+
                     // Salvataggio per persistenza
                     localStorage.setItem('sim_gross_profit', grossProfit);
                     localStorage.setItem('sim_gross_loss', grossLoss);
@@ -4826,7 +4830,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     if (addedNew) {
                         tradeHistory.sort((a, b) => b.time - a.time);
-                        
+
                         const todayStr = new Date().toLocaleDateString();
                         while (tradeHistory.length > 100) {
                             const oldestTrade = tradeHistory[tradeHistory.length - 1];
@@ -4836,7 +4840,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 break;
                             }
                         }
-                        
+
                         localStorage.setItem('sim_trade_history', JSON.stringify(tradeHistory));
                         renderHistory();
                         // Logga SOLO quando la cronologia cambia davvero: evita le
@@ -5002,7 +5006,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnClearHistory) {
             btnClearHistory.addEventListener('click', () => {
                 if (!confirm("Sei sicuro di voler resettare tutte le statistiche della sessione e la cronologia?")) return;
-                
+
                 tradeHistory = [];
                 grossProfit = 0;
                 grossLoss = 0;
@@ -5013,7 +5017,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 persistData(); // instrada su chiavi test o broker secondo la modalità
                 updateWalletUI();
                 updateDashboard();
-                
+
                 tradeListEl.innerHTML = `<div class="empty-state">${tr('history_cleared', 'Cronologia cancellata. In attesa di nuovi segnali...')}</div>`;
                 showNotification("Statistiche e cronologia resettate.", "info");
             });
@@ -5026,12 +5030,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.warn(`[SYSTEM] Chiave Finnhub mancante per ${symbol}. I dati potrebbero non essere aggiornati.`);
                 return;
             }
-            
+
             // Log per debug utente: conferma che il bot non si ferma
             if (isBotActive) {
                 console.log(`[SYSTEM] Cambio asset in corso (${symbol}). Il bot rimane ATTIVO in background.`);
             }
-            
+
             connectToMarket(symbol);
             updateMarketRadarTarget(symbol);
         }
@@ -5042,7 +5046,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             currentPrice = globalPrices[symbol] || 0;
             previousPrice = 0;
-            
+
             // Recupera lo storico dal background engine per rendere il bot istantaneo
             if (bgPriceHistories && bgPriceHistories[symbol]) {
                 priceHistory = [...bgPriceHistories[symbol]];
@@ -5050,7 +5054,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 priceHistory = [];
             }
-            
+
             currentCandle = null;
             lastCandleTime = 0;
 
@@ -5115,6 +5119,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         // --- Bot Engine Control ---
         if (btnStartBot) {
             btnStartBot.addEventListener('click', () => {
+                // Se stiamo per AVVIARE il bot, controlliamo che la connessione del contesto attuale sia attiva
+                if (!isBotActive) {
+                    const ctx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
+                    let isArmed = false;
+                    if (ctx === 'fh') isArmed = window.__connAllowed && window.__connAllowed.fh;
+                    else if (ctx === 'alp') isArmed = window.__connAllowed && window.__connAllowed.alp;
+                    else if (ctx === 'capd') isArmed = window.__connAllowed && window.__connAllowed.capd;
+                    else if (ctx === 'capl') isArmed = window.__connWanted && window.__connWanted.capl;
+                    else if (ctx === 'alrt') isArmed = window.__connWanted && window.__connWanted.alrt;
+                    
+                    if (!isArmed) {
+                        showNotification("Attiva l'interruttore di connessione per questo broker prima di avviare il trading automatico.", 'warning');
+                        return;
+                    }
+                }
+                
                 // FASE D1: il tasto agisce sulla SCHEDA corrente; ogni contesto broker
                 // ricorda il suo stato bot (ripristinato al ritorno sulla scheda).
                 applyBotState(!isBotActive);
@@ -5128,7 +5148,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // opts.silent = true → nessuna notifica (transizioni automatiche di scheda).
         function applyBotState(on, opts = {}) {
             isBotActive = !!on;
-            localStorage.setItem('sim_bot_active', isBotActive);
+            const ctx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
+            botActiveByCtx[ctx] = isBotActive;
+            
             // UNIFICAZIONE: Bot Active = Auto Mode, Bot Stopped = Manual Mode
             isManualMode = !isBotActive;
             localStorage.setItem('sim_trading_mode', isManualMode ? 'manual' : 'auto');
@@ -5162,8 +5184,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             updateBotStatusLabel();
             updateDashboard();
-            // Tiene allineati mappa per-scheda, puntini e disponibilità tasti manuali
-            botActiveByCtx[(typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh'] = isBotActive;
+            // Tiene allineati puntini e disponibilità tasti manuali
             if (typeof window.updateTabBotDots === 'function') window.updateTabBotDots();
             if (typeof window.updateManualControlsAvailability === 'function') window.updateManualControlsAvailability();
         }
@@ -5294,11 +5315,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.forceCloseLocal = function (sym) {
             if (!activePositions[sym]) return;
             if (!confirm(`Vuoi davvero rimuovere ${sym} SOLO dal simulatore? La posizione reale sul broker RESTERÀ APERTA. Usa questo solo se hai già gestito l'ordine manualmente.`)) return;
-            
+
             const pos = activePositions[sym];
             const price = globalPrices[sym] || pos.entryPrice;
             const pnl = pos.type === 'LONG' ? (price - pos.entryPrice) * pos.amount : (pos.entryPrice - price) * pos.amount;
-            
+
             addTradeToHistory(pos.type, pos.entryPrice, price, pnl, pos.amount, sym, pos.openTime, Date.now(), false, 'FORCE_LOCAL');
             delete activePositions[sym];
             persistData();
@@ -5367,7 +5388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // --- Motore Tecnico Locale (sostituisce AI che richiedeva API key) ---
         function evaluateStrategyAI(sym, history, price) {
             try {
-                if (!history || history.length < 2) { 
+                if (!history || history.length < 2) {
                     return;
                 }
                 const now = Date.now();
@@ -5377,182 +5398,182 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (stratCooldown[cdKey] && now - stratCooldown[cdKey] < STRAT_COOLDOWN_MS) return;
                 stratCooldown[cdKey] = now;
 
-            // --- Calcolo Indicatori ---
-            const rsi = calculateRSI(history, Math.min(14, history.length - 1));
-            const ema12 = calculateEMA(history, Math.min(12, history.length));
-            const ema26 = calculateEMA(history, Math.min(26, history.length));
-            const bb = calculateBollingerBands(history, Math.min(20, history.length));
-            const macd = (ema12 && ema26) ? ema12 - ema26 : null;
-            const momentum = calculateMomentum(history, Math.min(10, history.length - 1));
+                // --- Calcolo Indicatori ---
+                const rsi = calculateRSI(history, Math.min(14, history.length - 1));
+                const ema12 = calculateEMA(history, Math.min(12, history.length));
+                const ema26 = calculateEMA(history, Math.min(26, history.length));
+                const bb = calculateBollingerBands(history, Math.min(20, history.length));
+                const macd = (ema12 && ema26) ? ema12 - ema26 : null;
+                const momentum = calculateMomentum(history, Math.min(10, history.length - 1));
 
-            const prevHistory = history.slice(0, -1);
-            const prevEma12 = calculateEMA(prevHistory, Math.min(12, prevHistory.length));
-            const prevEma26 = calculateEMA(prevHistory, Math.min(26, prevHistory.length));
-            const prevMacd = (prevEma12 && prevEma26) ? prevEma12 - prevEma26 : null;
+                const prevHistory = history.slice(0, -1);
+                const prevEma12 = calculateEMA(prevHistory, Math.min(12, prevHistory.length));
+                const prevEma26 = calculateEMA(prevHistory, Math.min(26, prevHistory.length));
+                const prevMacd = (prevEma12 && prevEma26) ? prevEma12 - prevEma26 : null;
 
-            const pct5 = history.length >= 6 ? (price / history[history.length - 6] - 1) * 100 : 0;
-            const pct10 = history.length >= 11 ? (price / history[history.length - 11] - 1) * 100 : 0;
+                const pct5 = history.length >= 6 ? (price / history[history.length - 6] - 1) * 100 : 0;
+                const pct10 = history.length >= 11 ? (price / history[history.length - 11] - 1) * 100 : 0;
 
-            if (!rsi || !ema12 || !ema26 || !bb) return;
+                if (!rsi || !ema12 || !ema26 || !bb) return;
 
-            // --- Sistema a Punti base (bullish/bearish) ---
-            let bullScore = 0, bearScore = 0;
-            const reasons = [];
+                // --- Sistema a Punti base (bullish/bearish) ---
+                let bullScore = 0, bearScore = 0;
+                const reasons = [];
 
-            // RSI
-            if (rsi > 55 && rsi < 75) { bullScore += 2; reasons.push(`RSI momentum`); }
-            else if (rsi >= 75) { bearScore += 1; reasons.push(`RSI ipercomprato`); }
-            else if (rsi < 45 && rsi > 25) { bearScore += 2; reasons.push(`RSI bear momentum`); }
-            else if (rsi <= 25) { bullScore += 1; reasons.push(`RSI ipervenduto`); }
+                // RSI
+                if (rsi > 55 && rsi < 75) { bullScore += 2; reasons.push(`RSI momentum`); }
+                else if (rsi >= 75) { bearScore += 1; reasons.push(`RSI ipercomprato`); }
+                else if (rsi < 45 && rsi > 25) { bearScore += 2; reasons.push(`RSI bear momentum`); }
+                else if (rsi <= 25) { bullScore += 1; reasons.push(`RSI ipervenduto`); }
 
-            // EMA crossover
-            if (prevEma12 && prevEma26) {
-                const wasBull = prevEma12 > prevEma26;
-                const isBull = ema12 > ema26;
-                if (!wasBull && isBull) { bullScore += 3; reasons.push('EMA bull cross'); }
-                if (wasBull && !isBull) { bearScore += 3; reasons.push('EMA bear cross'); }
-                else if (isBull) { bullScore += 1; }
-                else { bearScore += 1; }
-            }
-
-            // MACD momentum
-            if (macd && prevMacd) {
-                if (macd > 0 && prevMacd <= 0) { bullScore += 2; reasons.push('MACD cross up'); }
-                if (macd < 0 && prevMacd >= 0) { bearScore += 2; reasons.push('MACD cross down'); }
-                else if (macd > 0) { bullScore += 1; }
-                else if (macd < 0) { bearScore += 1; }
-            }
-
-            // Bollinger Bands
-            const bbPos = (price - bb.lower) / (bb.upper - bb.lower);
-            if (bbPos < 0.15) { bullScore += 2; reasons.push('BB lower'); }
-            else if (bbPos > 0.85) { bearScore += 2; reasons.push('BB upper'); }
-
-            // --- LETTURA MODULI AI ATTIVI ---
-            const useNLP = document.getElementById('aiModeSentiment')?.checked;
-            const useLSTM = document.getElementById('aiModeLSTM')?.checked;
-            const useRL = document.getElementById('aiModeRL')?.checked;
-
-            if (useNLP) {
-                const sentimentRandom = Math.random();
-                if (sentimentRandom > 0.96) { 
-                    bearScore += 6; reasons.push('NLP Panic News (-)'); 
-                    console.log(`📰 [AI NLP] Rilevato panic-sentiment globale su ${sym}. Blocco long.`);
-                } else if (sentimentRandom < 0.04) { 
-                    bullScore += 6; reasons.push('NLP Euphoria (+)'); 
+                // EMA crossover
+                if (prevEma12 && prevEma26) {
+                    const wasBull = prevEma12 > prevEma26;
+                    const isBull = ema12 > ema26;
+                    if (!wasBull && isBull) { bullScore += 3; reasons.push('EMA bull cross'); }
+                    if (wasBull && !isBull) { bearScore += 3; reasons.push('EMA bear cross'); }
+                    else if (isBull) { bullScore += 1; }
+                    else { bearScore += 1; }
                 }
-            }
 
-            if (useLSTM) {
-                const lstmScore = Math.random();
-                if (lstmScore > 0.75) { bullScore += 2; reasons.push('LSTM Bullish'); }
-                else if (lstmScore < 0.25) { bearScore += 2; reasons.push('LSTM Bearish'); }
-            }
-
-            if (useRL && window.rlMemory && window.rlMemory[sym] !== undefined) {
-                // Memoria per simbolo E direzione (long/short), con decadimento
-                // temporale: un asset che ha fatto perdere sui LONG viene
-                // penalizzato SOLO sui long, proporzionalmente all'entità delle
-                // perdite, e la penalità evapora col passare delle ore.
-                let m = window.rlMemory[sym];
-                if (typeof m === 'number') m = { long: m, short: m, t: now }; // vecchio formato ±1
-                const decay = Math.pow(0.5, (now - (m.t || now)) / RL_HALF_LIFE_MS);
-                const adjLong = Math.max(-5, Math.min(3, Math.round((m.long || 0) * decay)));
-                const adjShort = Math.max(-5, Math.min(3, Math.round((m.short || 0) * decay)));
-                if (adjLong !== 0) { bullScore = Math.max(0, bullScore + adjLong); reasons.push(`RL long ${adjLong > 0 ? '+' : ''}${adjLong}`); }
-                if (adjShort !== 0) { bearScore = Math.max(0, bearScore + adjShort); reasons.push(`RL short ${adjShort > 0 ? '+' : ''}${adjShort}`); }
-            }
-
-            const totalScore = bullScore + bearScore;
-            const confidence = totalScore > 0 ? Math.round((Math.max(bullScore, bearScore) / totalScore) * 100) : 50;
-            const net = bullScore - bearScore;
-
-            // --- Decisione ---
-            let signal = 'HOLD';
-            if (net >= 3) signal = 'BUY';
-            else if (net <= -3) signal = 'SELL';
-
-            const pos = activePositions[sym];
-
-            const decision = { signal, confidence, reasoning: reasons.slice(0, 3).join(' | ') || 'HOLD neutro' };
-
-            console.log(`📊 [STRAT] ${sym} | bull=${bullScore} bear=${bearScore} net=${net} → ${signal} (${confidence}%) | ${decision.reasoning}`);
-            showAISignal(sym, decision);
-
-            if (isManualMode || !isBotActive) return;
-
-            // Gestione Apertura e Chiusura Dinamica basata su AI
-            const isBullTrend = price > ema26;
-            const isBearTrend = price < ema26;
-
-            if (!pos) {
-                // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
-                const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
-                // SL: diamo respiro per il rumore di fondo (circa metà della banda, minimo 0.5%, max 5%)
-                const dynamicSL = Math.min(5.0, Math.max(0.5, (volatilityPct / 2)));
-                // TP: Risk/Reward ratio di 1:1.5
-                const dynamicTP = Math.min(15.0, Math.max(1.0, (dynamicSL * 1.5)));
-
-                // Filtro evidenza minima: con pochi punti totali la "confidenza"
-                // percentuale è ingannevole (3 punti contro 0 = 100% ma è un
-                // segnale debolissimo). Servono almeno 6 punti complessivi.
-                const totalEvidence = bullScore + bearScore;
-
-                // APERTURA
-                if (signal === 'BUY' && confidence >= 65 && isBullTrend && totalEvidence >= 6) {
-                    console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
-                    
-                    const tpInput = document.getElementById('botTargetProfit');
-                    const slInput = document.getElementById('botStopLoss');
-                    if(tpInput) tpInput.value = dynamicTP.toFixed(2);
-                    if(slInput) slInput.value = dynamicSL.toFixed(2);
-
-                    openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
+                // MACD momentum
+                if (macd && prevMacd) {
+                    if (macd > 0 && prevMacd <= 0) { bullScore += 2; reasons.push('MACD cross up'); }
+                    if (macd < 0 && prevMacd >= 0) { bearScore += 2; reasons.push('MACD cross down'); }
+                    else if (macd > 0) { bullScore += 1; }
+                    else if (macd < 0) { bearScore += 1; }
                 }
-                if (signal === 'SELL' && confidence >= 65 && isBearTrend && totalEvidence >= 6) {
-                    console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
-                    
-                    const tpInput = document.getElementById('botTargetProfit');
-                    const slInput = document.getElementById('botStopLoss');
-                    if(tpInput) tpInput.value = dynamicTP.toFixed(2);
-                    if(slInput) slInput.value = dynamicSL.toFixed(2);
 
-                    openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
-                }
-            } else {
-                // CHIUSURA DINAMICA (AI Reversal) — con filtro anti-churn:
-                // nei primi 90s la posizione non viene chiusa da segnali opposti
-                // (rumore) e il segnale contrario deve essere convinto (>= 60%).
-                const posAgeMs = pos.openTime ? (now - pos.openTime) : Infinity;
-                const canReverse = posAgeMs >= MIN_REVERSAL_AGE_MS;
-                // OPZIONE A (filtro anti-inversione): su un'inversione DEBOLE con posizione
-                // in PERDITA NON chiudiamo (evita di realizzare piccole perdite su flip
-                // incerti = churn). Chiudiamo per inversione solo se: il segnale contrario
-                // è FORTE (≥75% o evidenza netta doppia), OPPURE la posizione è almeno a
-                // pari (breakeven+). Il taglio delle perdite vere resta allo STOP-LOSS, che
-                // gira in un ciclo di rischio separato e NON è toccato da questo filtro.
-                if (pos.type === 'LONG') {
-                    const unrealizedPct = pos.entryPrice ? (price / pos.entryPrice - 1) * 100 : 0;
-                    const reversal = (signal === 'SELL' && confidence >= 60) || (net <= -2 && !isBullTrend);
-                    const strongReversal = (signal === 'SELL' && confidence >= 75) || (net <= -4 && !isBullTrend);
-                    if (canReverse && reversal && (strongReversal || unrealizedPct >= 0)) {
-                        console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
-                        closeTrade(sym, price, 'AI_REVERSAL');
-                    }
-                } else if (pos.type === 'SHORT') {
-                    const unrealizedPct = pos.entryPrice ? (pos.entryPrice / price - 1) * 100 : 0;
-                    const reversal = (signal === 'BUY' && confidence >= 60) || (net >= 2 && !isBearTrend);
-                    const strongReversal = (signal === 'BUY' && confidence >= 75) || (net >= 4 && !isBearTrend);
-                    if (canReverse && reversal && (strongReversal || unrealizedPct >= 0)) {
-                        console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
-                        closeTrade(sym, price, 'AI_REVERSAL');
+                // Bollinger Bands
+                const bbPos = (price - bb.lower) / (bb.upper - bb.lower);
+                if (bbPos < 0.15) { bullScore += 2; reasons.push('BB lower'); }
+                else if (bbPos > 0.85) { bearScore += 2; reasons.push('BB upper'); }
+
+                // --- LETTURA MODULI AI ATTIVI ---
+                const useNLP = document.getElementById('aiModeSentiment')?.checked;
+                const useLSTM = document.getElementById('aiModeLSTM')?.checked;
+                const useRL = document.getElementById('aiModeRL')?.checked;
+
+                if (useNLP) {
+                    const sentimentRandom = Math.random();
+                    if (sentimentRandom > 0.96) {
+                        bearScore += 6; reasons.push('NLP Panic News (-)');
+                        console.log(`📰 [AI NLP] Rilevato panic-sentiment globale su ${sym}. Blocco long.`);
+                    } else if (sentimentRandom < 0.04) {
+                        bullScore += 6; reasons.push('NLP Euphoria (+)');
                     }
                 }
+
+                if (useLSTM) {
+                    const lstmScore = Math.random();
+                    if (lstmScore > 0.75) { bullScore += 2; reasons.push('LSTM Bullish'); }
+                    else if (lstmScore < 0.25) { bearScore += 2; reasons.push('LSTM Bearish'); }
+                }
+
+                if (useRL && window.rlMemory && window.rlMemory[sym] !== undefined) {
+                    // Memoria per simbolo E direzione (long/short), con decadimento
+                    // temporale: un asset che ha fatto perdere sui LONG viene
+                    // penalizzato SOLO sui long, proporzionalmente all'entità delle
+                    // perdite, e la penalità evapora col passare delle ore.
+                    let m = window.rlMemory[sym];
+                    if (typeof m === 'number') m = { long: m, short: m, t: now }; // vecchio formato ±1
+                    const decay = Math.pow(0.5, (now - (m.t || now)) / RL_HALF_LIFE_MS);
+                    const adjLong = Math.max(-5, Math.min(3, Math.round((m.long || 0) * decay)));
+                    const adjShort = Math.max(-5, Math.min(3, Math.round((m.short || 0) * decay)));
+                    if (adjLong !== 0) { bullScore = Math.max(0, bullScore + adjLong); reasons.push(`RL long ${adjLong > 0 ? '+' : ''}${adjLong}`); }
+                    if (adjShort !== 0) { bearScore = Math.max(0, bearScore + adjShort); reasons.push(`RL short ${adjShort > 0 ? '+' : ''}${adjShort}`); }
+                }
+
+                const totalScore = bullScore + bearScore;
+                const confidence = totalScore > 0 ? Math.round((Math.max(bullScore, bearScore) / totalScore) * 100) : 50;
+                const net = bullScore - bearScore;
+
+                // --- Decisione ---
+                let signal = 'HOLD';
+                if (net >= 3) signal = 'BUY';
+                else if (net <= -3) signal = 'SELL';
+
+                const pos = activePositions[sym];
+
+                const decision = { signal, confidence, reasoning: reasons.slice(0, 3).join(' | ') || 'HOLD neutro' };
+
+                console.log(`📊 [STRAT] ${sym} | bull=${bullScore} bear=${bearScore} net=${net} → ${signal} (${confidence}%) | ${decision.reasoning}`);
+                showAISignal(sym, decision);
+
+                if (isManualMode || !isBotActive) return;
+
+                // Gestione Apertura e Chiusura Dinamica basata su AI
+                const isBullTrend = price > ema26;
+                const isBearTrend = price < ema26;
+
+                if (!pos) {
+                    // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
+                    const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
+                    // SL: diamo respiro per il rumore di fondo (circa metà della banda, minimo 0.5%, max 5%)
+                    const dynamicSL = Math.min(5.0, Math.max(0.5, (volatilityPct / 2)));
+                    // TP: Risk/Reward ratio di 1:1.5
+                    const dynamicTP = Math.min(15.0, Math.max(1.0, (dynamicSL * 1.5)));
+
+                    // Filtro evidenza minima: con pochi punti totali la "confidenza"
+                    // percentuale è ingannevole (3 punti contro 0 = 100% ma è un
+                    // segnale debolissimo). Servono almeno 6 punti complessivi.
+                    const totalEvidence = bullScore + bearScore;
+
+                    // APERTURA
+                    if (signal === 'BUY' && confidence >= 65 && isBullTrend && totalEvidence >= 6) {
+                        console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
+
+                        const tpInput = document.getElementById('botTargetProfit');
+                        const slInput = document.getElementById('botStopLoss');
+                        if (tpInput) tpInput.value = dynamicTP.toFixed(2);
+                        if (slInput) slInput.value = dynamicSL.toFixed(2);
+
+                        openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
+                    }
+                    if (signal === 'SELL' && confidence >= 65 && isBearTrend && totalEvidence >= 6) {
+                        console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
+
+                        const tpInput = document.getElementById('botTargetProfit');
+                        const slInput = document.getElementById('botStopLoss');
+                        if (tpInput) tpInput.value = dynamicTP.toFixed(2);
+                        if (slInput) slInput.value = dynamicSL.toFixed(2);
+
+                        openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
+                    }
+                } else {
+                    // CHIUSURA DINAMICA (AI Reversal) — con filtro anti-churn:
+                    // nei primi 90s la posizione non viene chiusa da segnali opposti
+                    // (rumore) e il segnale contrario deve essere convinto (>= 60%).
+                    const posAgeMs = pos.openTime ? (now - pos.openTime) : Infinity;
+                    const canReverse = posAgeMs >= MIN_REVERSAL_AGE_MS;
+                    // OPZIONE A (filtro anti-inversione): su un'inversione DEBOLE con posizione
+                    // in PERDITA NON chiudiamo (evita di realizzare piccole perdite su flip
+                    // incerti = churn). Chiudiamo per inversione solo se: il segnale contrario
+                    // è FORTE (≥75% o evidenza netta doppia), OPPURE la posizione è almeno a
+                    // pari (breakeven+). Il taglio delle perdite vere resta allo STOP-LOSS, che
+                    // gira in un ciclo di rischio separato e NON è toccato da questo filtro.
+                    if (pos.type === 'LONG') {
+                        const unrealizedPct = pos.entryPrice ? (price / pos.entryPrice - 1) * 100 : 0;
+                        const reversal = (signal === 'SELL' && confidence >= 60) || (net <= -2 && !isBullTrend);
+                        const strongReversal = (signal === 'SELL' && confidence >= 75) || (net <= -4 && !isBullTrend);
+                        if (canReverse && reversal && (strongReversal || unrealizedPct >= 0)) {
+                            console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
+                            closeTrade(sym, price, 'AI_REVERSAL');
+                        }
+                    } else if (pos.type === 'SHORT') {
+                        const unrealizedPct = pos.entryPrice ? (pos.entryPrice / price - 1) * 100 : 0;
+                        const reversal = (signal === 'BUY' && confidence >= 60) || (net >= 2 && !isBearTrend);
+                        const strongReversal = (signal === 'BUY' && confidence >= 75) || (net >= 4 && !isBearTrend);
+                        if (canReverse && reversal && (strongReversal || unrealizedPct >= 0)) {
+                            console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
+                            closeTrade(sym, price, 'AI_REVERSAL');
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`[STRAT ERROR] Errore critico su ${sym}:`, err);
             }
-        } catch (err) {
-            console.error(`[STRAT ERROR] Errore critico su ${sym}:`, err);
         }
-    }
 
         // AI Signal UI overlay
         let lastRadarUpdate = {};
@@ -5746,16 +5767,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // -- Risk Management Adattivo (Kelly Sizing) --
                 const W = Math.min(0.90, confidence / 100);
                 const rTP = dynTP || parseFloat(document.getElementById('botTargetProfit')?.value) || 1.5;
-                const rSL = dynSL || parseFloat(document.getElementById('botStopLoss')?.value) || 1.0; 
-                const R = rTP / (rSL === 0 ? 1.0 : rSL); 
-                
+                const rSL = dynSL || parseFloat(document.getElementById('botStopLoss')?.value) || 1.0;
+                const R = rTP / (rSL === 0 ? 1.0 : rSL);
+
                 let K = W - ((1 - W) / R);
-                K = Math.max(0.1, Math.min(K, 1.0)); 
-                
+                K = Math.max(0.1, Math.min(K, 1.0));
+
                 const scaleFactor = K * 2;
                 const originalUsd = investUsd;
                 investUsd = investUsd * scaleFactor;
-                
+
                 if (isBotActive) {
                     console.log(`[AI KELLY] ${sym} Confidenza: ${confidence}% | W: ${W.toFixed(2)} | R: ${R.toFixed(2)} | K: ${K.toFixed(2)} => Scalato $${originalUsd.toFixed(0)} -> $${investUsd.toFixed(0)}`);
                 }
@@ -5843,12 +5864,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             // --- ROUTING ORDINI ---
-            
+
 
             if (brokerViewActive() && !restrictedAssets.has(sym)) {
                 const isForex = sym.includes('OANDA');
                 const isCrypto = sym.includes('USDT');
-                
+
                 // Whitelist crypto supportati dal broker: sincronizzata da
                 // syncAlpacaCryptoAssets() (usa la lista a livello di modulo, non una copia fissa).
                 if (isCrypto && !ALPACA_SUPPORTED_CRYPTO.includes(sym)) {
@@ -5883,7 +5904,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 let qtyVal = investUsd / price;
                 if (isForex) {
-                    qtyVal = Math.floor(qtyVal); 
+                    qtyVal = Math.floor(qtyVal);
                 } else if (isCrypto) {
                     qtyVal = Math.floor(qtyVal * 10000) / 10000; // 4 decimali per Crypto su Alpaca
                 } else {
@@ -5914,14 +5935,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // --- BUDGET SESSIONE ---
                     sessionBudgetUsed += actualCost;
                     updateSessionBudgetUI();
-                    
+
                     updateWalletUI();
 
 
                     // --- SINCRONIZZAZIONE IMMEDIATA ---
                     if (typeof playOpenSound === 'function') playOpenSound();
                     console.log(`[ORDER] Inviato ordine per ${sym}. Attendo sincronizzazione broker...`);
-                    if (isBotActive) botNotify('open', tr('bot_opened', `Posizione aperta: ${type} ${sym.replace('USDT','')}.`), 'success', 3000);
+                    if (isBotActive) botNotify('open', tr('bot_opened', `Posizione aperta: ${type} ${sym.replace('USDT', '')}.`), 'success', 3000);
                     setTimeout(() => {
                         if (brokerViewActive()) syncAlpacaPositions();
                     }, 1000);
@@ -5930,12 +5951,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Lo SHORT su azioni richiede almeno 1 quota INTERA (Alpaca non consente
                     // frazioni allo scoperto): con un investimento troppo piccolo per il prezzo
                     // dell'azione la qty arrotonda a 0. Avviso throttolato (niente spam).
-                    botNotify('qty0', tr('bot_skip_qty', `Importo per operazione troppo basso per ${sym.replace('USDT','')} (lo SHORT azioni richiede ≥ 1 quota intera). Aumenta l'importo per trade.`), 'warning', 30000);
+                    botNotify('qty0', tr('bot_skip_qty', `Importo per operazione troppo basso per ${sym.replace('USDT', '')} (lo SHORT azioni richiede ≥ 1 quota intera). Aumenta l'importo per trade.`), 'warning', 30000);
                     if (isBotActive) bumpSkipped('qty');
                     return;
                 }
             }
-            
+
             if (activePositions[sym]) {
                 activePositions[sym].dynamicTP = dynTP;
                 activePositions[sym].dynamicSL = dynSL;
@@ -5986,7 +6007,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     let alpacaSym = sym;
                     if (sym.includes('USDT')) alpacaSym = sym.replace('USDT', '/USD');
                     let identifier = pos.brokerAssetId || alpacaSym;
-                    
+
                     console.log(`[ALPACA] Avvio chiusura per: ${sym} (ID: ${identifier}, Qty: ${pos.amount})`);
 
                     // Step 0: cancella eventuali ordini pendenti sul simbolo.
@@ -6030,7 +6051,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     } else {
                         const rawErr = await response.text();
                         console.warn(`[ALPACA] Liquidazione fallita (${response.status}), provo Fallback LIMIT...`, rawErr);
-                        
+
                         // Metodo 2: Fallback con Ordine LIMIT
                         const side = pos.type === 'LONG' ? 'sell' : 'buy';
                         let qty = Math.floor(pos.amount * 10000) / 10000;
@@ -6042,9 +6063,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 qty: qty.toString(),
                                 side: side,
                                 type: 'limit',
-                                limit_price: limitPrice.toFixed(sym.includes('USDT') || sym.includes('OANDA') ? 4 : 2), 
-                                time_in_force: 'day',
-                                extended_hours: true 
+                                limit_price: limitPrice.toFixed(sym.includes('USDT') || sym.includes('OANDA') ? 4 : 2),
+                                time_in_force: (alpacaSym.includes('/') || alpacaSym.endsWith('USD') || alpacaSym.endsWith('USDT') || sym.includes('CRYPTO')) ? 'gtc' : 'day',
+                                extended_hours: true
                             };
 
                             const orderResp = await fetch(`${ALPACA_BASE}/v2/orders`, {
@@ -6077,7 +6098,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             fetch(`${ALPACA_BASE}/v2/orders/${washErr.existing_order_id}`, {
                                                 method: 'DELETE',
                                                 headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                                            }).catch(() => {});
+                                            }).catch(() => { });
                                         }
                                     } catch (e) { /* errTxt non-JSON: nessun id da cancellare */ }
                                     showNotification(`Alpaca: chiusura ${sym} bloccata da un ordine opposto ancora pendente sul broker. Riprovo tra 30 secondi.`, "warning");
@@ -6100,11 +6121,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Annota l'entry reale per il FILL di chiusura in arrivo (vedi syncAlpacaHistory)
                     brokerEntryBasis[normFillSym(sym)] = { price: pos.entryPrice, time: pos.openTime, type: pos.type };
                     if (pnl > 0) playCashSound(); else playLossSound();
-                    
+
                     sessionBudgetUsed -= pos.invested;
                     if (sessionBudgetUsed < 0) sessionBudgetUsed = 0;
                     updateSessionBudgetUI();
-                    
+
                     delete activePositions[sym];
                     updateWalletUI();
                     updateDashboard();
@@ -6153,7 +6174,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tradeListEl.innerHTML = `<div class="empty-state">${tr('waiting_trades', 'In attesa di operazioni...')}</div>`;
                 return;
             }
-            
+
             const fragment = document.createDocumentFragment();
             tradeHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
@@ -6168,7 +6189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const row = document.createElement('div');
                 row.className = `trade-row ${trade.type}`;
-                
+
                 // Parser robusto per le date (gestisce sia timestamp che stringhe legacy)
                 const parseDate = (d) => {
                     if (!d) return new Date();
@@ -6195,7 +6216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const isPositive = trade.pnl > 0;
                 const pnlClass = trade.pnl === 0 ? 'neutral' : (isPositive ? 'positive' : 'negative');
                 const pnlSign = isPositive ? '+' : '';
-                
+
                 const type = getAssetType(tradeSym);
                 const icons = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' };
                 const icon = icons[type] || '💰';
@@ -6318,7 +6339,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sym: validSym,
                 reason
             });
-            
+
             const todayStr = new Date().toLocaleDateString();
             while (tradeHistory.length > 50) {
                 const oldestTrade = tradeHistory[tradeHistory.length - 1];
@@ -6328,7 +6349,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     break;
                 }
             }
-            
+
             // Salva sulla chiave corretta secondo la modalità (test vs broker)
             localStorage.setItem(brokerViewActive() ? 'sim_trade_history' : 'sim_test_history', JSON.stringify(tradeHistory));
 
@@ -6398,7 +6419,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const sessionROIEl = document.getElementById('sessionROI');
 
             if (totalTradesEl) totalTradesEl.textContent = dailyTrades;
-            
+
             // PnL Realizzato (Oggi)
             if (totalPnLEl) {
                 const sign = dailyPnL >= 0 ? '+' : '';
@@ -6422,7 +6443,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sessionRevenueEl.textContent = `${sign}${formatMoney(dailyPnL)}`;
                 sessionRevenueEl.style.color = dailyPnL >= 0 ? '#10b981' : '#ef4444';
             }
-            
+
             // Riepilogo Netto Cronologia
             const historyDailyNetEl = document.getElementById('historyDailyNet');
             if (historyDailyNetEl) {
@@ -6430,7 +6451,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 historyDailyNetEl.textContent = `${hSign}${formatMoney(dailyPnL)}`;
                 historyDailyNetEl.style.color = dailyPnL > 0 ? '#10b981' : dailyPnL < 0 ? '#ef4444' : '#fff';
             }
-            
+
             // Riepilogo Netto Latente (Posizioni Aperte)
             const openDailyNetEl = document.getElementById('openDailyNet');
             if (openDailyNetEl) {
@@ -6457,7 +6478,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Visibilità pulsanti trading manuale
             if (activePositions[assetPairSelect.value]) {
                 // Se c'è una posizione aperta, mostriamo i bottoni di apertura (per incrementare) 
-                openActions.classList.remove('hidden'); 
+                openActions.classList.remove('hidden');
             } else {
                 openActions.classList.remove('hidden');
             }
@@ -6533,7 +6554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 if (isBotActive && manageRisk) {
                     const closePending = closingAssets.has(sym) || (Date.now() - (recentlyClosed[sym] || 0) < 30000);
-                    
+
                     const useRisk = document.getElementById('aiModeRisk')?.checked;
                     if (useRisk) {
                         // -- Trailing Stop Loss via ATR --
@@ -6542,22 +6563,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                         } else {
                             if (!pos.peakPrice || livePrice < pos.peakPrice) pos.peakPrice = livePrice;
                         }
-                        
+
                         let currentATR = 0;
                         if (bgPriceHistories[sym] && bgPriceHistories[sym].length >= 14) {
                             currentATR = calculateATR(bgPriceHistories[sym], 14);
                         }
-                        
+
                         if (currentATR && currentATR > 0 && pos.peakPrice) {
                             // Trailing stop più STRETTO (1.0×ATR, prima 1.5×): blocca il
                             // profitto su ritracci più piccoli dal massimo raggiunto, così si
                             // "mette in cascina" prima invece di restituire il guadagno. Resta
                             // attivo solo in profitto (unrealizedPct > 0.1) → non chiude in perdita.
                             const trailingDistance = currentATR * 1.0;
-                            const isReversing = pos.type === 'LONG' 
+                            const isReversing = pos.type === 'LONG'
                                 ? (livePrice <= pos.peakPrice - trailingDistance)
                                 : (livePrice >= pos.peakPrice + trailingDistance);
-                                
+
                             if (isReversing && unrealizedPct > 0.1 && !pos.isActuallyClosing && !closePending) {
                                 console.log(`[AI RISK] Trailing SL su ${sym}. Peak: ${pos.peakPrice.toFixed(4)}, Attuale: ${livePrice.toFixed(4)}, ATR: ${currentATR.toFixed(4)}`);
                                 closeTrade(sym, livePrice, 'TRAILING_SL');
@@ -6625,7 +6646,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const durationStr = formatDuration(durationMs);
                 const isClosing = closingAssets.has(sym);
                 const btnActionStr = isClosing ? `<span class="loading-spinner"></span> ${tr('closing', 'Chiudendo...')}` : tr('btn_close', 'Chiudi');
-                
+
                 const safeSym = sym.replace(/[^a-zA-Z0-9]/g, '');
                 let el = document.getElementById(`pos-el-${safeSym}`);
 
@@ -6668,13 +6689,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const updateT = (sel, val) => { if (el._v[sel] !== val) { el._q(sel).textContent = val; el._v[sel] = val; } };
                 const updateH = (sel, val) => { if (el._v[sel] !== val) { el._q(sel).innerHTML = val; el._v[sel] = val; } };
-                const updateC = (sel, color) => { if (el._v[sel+'_c'] !== color) { el._q(sel).style.color = color; el._v[sel+'_c'] = color; } };
+                const updateC = (sel, color) => { if (el._v[sel + '_c'] !== color) { el._q(sel).style.color = color; el._v[sel + '_c'] = color; } };
 
                 updateT('.pos-cat-icon', catIcon);
                 updateT('.pos-sym', sym);
                 updateT('.pos-type-badge', pos.type);
                 updateT('.pos-time', `${timeStr} (${durationStr})`);
-                
+
                 const btnClose = el._q('.btn-close-pos');
                 if (el._v.btnClose !== isClosing) {
                     btnClose.disabled = isClosing;
@@ -6807,7 +6828,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             lastValidAsset = symbol;
             resetState(symbol);
             connectFinnhubChart(symbol);
-            
+
             // Forza sincronizzazione sottoscrizioni per il nuovo asset
             syncFinnhubSubscriptions();
             syncAlpacaDataSubscriptions();
@@ -6993,15 +7014,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             // FASE C: i feed Alpaca partono se ci sono le CHIAVI e l'utente ha
             // CONSENTITO la connessione (leva ALP o scheda Alpaca attivata)
             const shouldStartAlpacaData = !!getBrokerHttp().key && window.__connAllowed.alp;
-            
+
             if (shouldStartAlpacaData) {
                 // Se abbiamo Finnhub, usiamo Alpaca SOLO per le Crypto per non saturare il limite di 1 connessione (Free Plan)
                 const needAlpacaStocks = !useFinnhubData;
-                
+
                 if (needAlpacaStocks && !bgAlpacaWs) {
                     initAlpacaDataWs();
                 }
-                
+
                 if (!bgAlpacaCryptoWs) {
                     // Ritardiamo leggermente la connessione crypto se abbiamo appena avviato quella stocks
                     const delay = (needAlpacaStocks && !bgAlpacaWs) ? 2000 : 0;
@@ -7033,7 +7054,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (cryptoCount > 0 || stockCount > 0) {
                         console.log(`[RADAR HEARTBEAT] Asset tracciati: Crypto=${cryptoCount}, Stocks/Forex=${stockCount}`);
                     }
-                    
+
                     // Se non ci sono dati, forziamo una riconnessione
                 }, 60000);
             }
@@ -7076,12 +7097,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                             : (msg.bp > 0 && msg.ap > 0 ? (msg.bp + msg.ap) / 2 : (msg.ap || msg.bp));
                         if (!price || price <= 0) return;
                         const now = Date.now();
-                        
+
                         // Mappa i simboli Alpaca (es. EUR/USD) nei nomi bot (es. OANDA:EUR_USD)
                         if (sym.includes('/')) {
                             sym = `OANDA:${sym.replace('/', '_')}`;
                         }
-                        
+
                         globalPrices[sym] = price;
                         const cat = getAssetType(sym);
                         updateBackgroundHistoryAndStrategy(sym, price, now, cat);
@@ -7104,7 +7125,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 activeAlpacaSubs.forEach(s => { if (!s.endsWith('_CRY')) activeAlpacaSubs.delete(s); });
                 // Riconnetti SOLO se siamo ancora in broker mode (mai in test mode)
                 if (useAlpacaBroker) {
-                    console.warn(`[ALPACA WS] Chiuso. Riconnessione tra ${alpacaReconnectDelay/1000}s...`);
+                    console.warn(`[ALPACA WS] Chiuso. Riconnessione tra ${alpacaReconnectDelay / 1000}s...`);
                     setTimeout(initAlpacaDataWs, alpacaReconnectDelay);
                     // Reset delay dopo averlo usato (per tornare ai 5s normali se il problema sparisce)
                     alpacaReconnectDelay = 5000;
@@ -7120,13 +7141,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Evita connessioni duplicate o se il WS è già stabilito
             if (!alpacaKeyId || !alpacaSecretKey) return;
             if (bgAlpacaCryptoWs && bgAlpacaCryptoWs.readyState <= 1) return; // CONNECTING o OPEN
-            
+
             // Se è già noto che il WS non è supportato dall'account, usa solo il polling
             if (window.alpacaCryptoWsFailed) {
                 startAlpacaPolling();
                 return;
             }
-            
+
             // Endpoint corrente Alpaca per il crypto stream (il vecchio /v2/crypto non esiste più)
             console.log("[ALPACA CRYPTO] Avvio connessione (v1beta3)...");
             try {
@@ -7235,7 +7256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const _bk = getBrokerHttp();
             const alpacaKeyId = _bk.key, alpacaSecretKey = _bk.secret;
             if (!alpacaKeyId || !alpacaSecretKey) return;
-            
+
             console.log("[ALPACA] Polling attivo (WebSocket non disponibile). Intervallo: 3s.");
             alpacaPollingInterval = setInterval(async () => {
                 // Se il WS si è ristabilito, ferma il polling
@@ -7250,13 +7271,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     alpacaPollingInterval = null;
                     return;
                 }
-                
+
                 // Batch poll dei prezzi crypto via REST
                 const cryptoSyms = VALID_SYMBOLS.CRYPTO;
                 const alpacaSyms = cryptoSyms.map(s => s.replace('USDT', '/USD')).join(',');
                 // latest/trades: prezzo dell'ultimo scambio reale (piu' reattivo della chiusura barra 1-min)
                 const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/latest/trades?symbols=${encodeURIComponent(alpacaSyms)}`;
-                
+
                 try {
                     const res = await fetch(url, {
                         headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
@@ -7286,27 +7307,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         function isMarketOpen(type) {
             if (type === 'CRYPTO') return true;
-            
+
             const now = new Date();
-            const estTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}));
+            const estTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
             const day = estTime.getDay();
             const hours = estTime.getHours();
             const minutes = estTime.getMinutes();
-            
+
             if (type === 'FOREX' || type === 'COMMODITY') {
                 if (day === 5 && hours >= 17) return false;
                 if (day === 6) return false;
                 if (day === 0 && hours < 17) return false;
                 return true;
             }
-            
+
             if (type === 'STOCK') {
                 if (day === 0 || day === 6) return false;
                 const timeVal = hours * 60 + minutes;
-                if (timeVal >= 9*60+30 && timeVal < 16*60) return true;
+                if (timeVal >= 9 * 60 + 30 && timeVal < 16 * 60) return true;
                 return false;
             }
-            
+
             return true;
         }
 
@@ -7358,7 +7379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // --- AGGIORNAMENTO INDICATORI CATEGORIE (RADAR MULTI-ASSET) ---
             const nowTime = Math.floor(now / 1000);
-            
+
             // 1. Aggiorna la linea di confronto solo se è l'asset visualizzato
             if (!sessionStartPrices[sym]) sessionStartPrices[sym] = price;
             let pctChange = ((price / sessionStartPrices[sym]) - 1) * 100;
@@ -7400,7 +7421,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 // Aggiunge alla coda invece di renderizzare subito
                 pendingRadarUpdates.set(sym, { time: nowTime, value: pctChange });
-                
+
                 // Make sure it's visible if it was previously hidden
                 if (!compSeries[sym]._visible) {
                     compSeries[sym].applyOptions({ visible: true });
@@ -7430,13 +7451,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // FASE C — priorità dei feed per categoria (evita tick doppi con i feed
             // concorrenti): STOCK/CRYPTO → Alpaca se ci sono le chiavi, altrimenti
             // Finnhub; FOREX/COMMODITY → Capital.com se configurato, altrimenti Finnhub.
-            const alpacaFeeds = !!getBrokerHttp().key;
+            const alpacaFeeds = !!getBrokerHttp().key && window.__connAllowed && window.__connAllowed.alp;
             // Capital copre Forex/Materie solo se il suo feed è SANO (primo poll ok):
             // con chiavi salvate ma login fallito, Finnhub resta la fonte — prima il
             // grafico Forex restava "in attesa" per sempre.
             const capitalFeeds = !!window.__capitalFeedOk;
             const fhCovers = (t) => !(((t === 'CRYPTO' || t === 'STOCK') && alpacaFeeds) ||
-                                      ((t === 'FOREX' || t === 'COMMODITY') && capitalFeeds));
+                ((t === 'FOREX' || t === 'COMMODITY') && capitalFeeds));
             for (const cat in VALID_SYMBOLS) {
                 if (fhCovers(cat)) VALID_SYMBOLS[cat].forEach(s => requiredSubs.add(s));
             }
@@ -7530,15 +7551,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         async function preloadHistory(symbol) {
             if (!symbol || restrictedAssets.has(symbol)) return;
-            
+
             const cat = getAssetType(symbol);
-            
+
             // Forex e Commodity non hanno sorgenti di candle disponibili:
             // - Finnhub: solo azioni (piano gratuito)
             // - Alpaca: non supporta Forex spot
             // I prezzi live arriveranno tramite WebSocket, skip del preload.
             if (cat === 'FOREX' || cat === 'COMMODITY') return;
-            
+
             // Se Finnhub è già stato bloccato (403), saltiamo tutto tranne Crypto (che usa Alpaca)
             if (window.finnhubForbidden && cat !== 'CRYPTO') return;
 
@@ -7571,7 +7592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (finnhubApiKey) {
                     const assetType = getAssetType(symbol);
                     const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
-                    
+
                     if (historicalData.length === 0) {
                         // Se Finnhub è già stato segnato come Forbidden in questa sessione, saltiamo a priori
                         if (window.finnhubForbidden) return;
@@ -7607,7 +7628,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         time: d.time,
                         value: ((d.close / base) - 1) * 100
                     }));
-                    
+
                     const isCurrent = (assetPairSelect && symbol === assetPairSelect.value);
                     if (isCurrent && mainAssetCompSeries) {
                         const shortName = symbol.replace('USDT', '').replace('OANDA:', '').replace('_', '/');
@@ -7634,11 +7655,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const baseUrl = isForex ? `${ALPACA_DATA_BASE}/v1beta1/forex/bars` : `${ALPACA_DATA_BASE}/v2/stocks/bars`;
                 const feedParam = !isForex ? '&feed=iex' : '';
                 const alpacaUrl = `${baseUrl}?symbols=${encodeURIComponent(cleanSym)}&timeframe=1Min&limit=100${feedParam}`;
-                
+
                 const aRes = await fetch(alpacaUrl, {
                     headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
                 });
-                
+
                 if (aRes.ok) {
                     const aData = await aRes.json();
                     const bars = aData.bars ? aData.bars[cleanSym] : null;
@@ -7702,7 +7723,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!whitelist.includes(symbol)) return;
 
             const catIcon = { 'CRYPTO': '🔥', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '🥇' }[cat] || '🔥';
-            
+
             // Se esiste già un segnale live per questo simbolo, lo aggiorniamo
             if (radarActiveElements[symbol]) {
                 const el = radarActiveElements[symbol];
@@ -7777,7 +7798,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) { return; }
             }
             if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
-                sharedAudioCtx.resume().catch(() => {}); // Silenzia fallimento se non c'è gesture
+                sharedAudioCtx.resume().catch(() => { }); // Silenzia fallimento se non c'è gesture
             }
         }
         window.addEventListener('click', initAudio, { once: true });
@@ -7799,7 +7820,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 gain.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.1);
                 osc.start();
                 osc.stop(sharedAudioCtx.currentTime + 0.1);
-            } catch (e) {}
+            } catch (e) { }
         }
 
 
@@ -7810,7 +7831,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const _bk = getBrokerHttp();
             const ALPACA_BASE = _bk.base, alpacaKeyId = _bk.key, alpacaSecretKey = _bk.secret;
             if (!brokerViewActive() || !alpacaKeyId || !alpacaSecretKey) return false;
-            
+
             // Pulisce il simbolo per Alpaca (es. USD/JPY invece di OANDA:USD_JPY)
             let alpacaSym = symbol.replace('.OANDA', '').trim();
             if (alpacaSym.includes(':')) {
@@ -7845,7 +7866,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 }
             } catch (e) { console.warn("[ALPACA] Errore cancellazione ordini preventivi:", e); }
-            
+
             lastOrderTimes[symbol] = Date.now(); // Traccia il tempo dell'ordine per il sync
 
             const url = `${ALPACA_BASE}/v2/orders`;
@@ -7867,11 +7888,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     },
                     body: JSON.stringify(body)
                 });
-                
+
                 // Se errore 422, potrebbe essere "not found" o "extended hours"
                 if (response.status === 422) {
                     const errData = await response.clone().json();
-                    
+
                     // Caso A: Asset non trovato (riprova senza slash)
                     if (errData.message && errData.message.includes('not found') && alpacaSym.includes('/')) {
                         console.warn(`[ALPACA] Asset ${alpacaSym} non trovato. Riprovo senza slash...`);
@@ -7885,7 +7906,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             },
                             body: JSON.stringify(altBody)
                         });
-                    } 
+                    }
                     // Caso B: Mercato chiuso / Extended Hours (richiede LIMIT order)
                     else if (errData.message && errData.message.toLowerCase().includes('extended hours')) {
                         console.warn(`[ALPACA] Mercato chiuso per ${symbol}. Riprovo con ordine LIMIT (Extended Hours)...`);
@@ -7894,15 +7915,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                             // Offset dello 0.1% per favorire l'esecuzione (buy leggermente sopra, sell leggermente sotto)
                             const sideFactor = side.toLowerCase() === 'buy' ? 1.001 : 0.999;
                             const limitPrice = livePrice * sideFactor;
-                            
-                            const extBody = { 
-                                ...body, 
-                                type: 'limit', 
-                                limit_price: limitPrice.toFixed(symbol.includes('USDT') || symbol.includes('OANDA') ? 4 : 2), 
-                                time_in_force: 'day', 
-                                extended_hours: true 
+
+                            const extBody = {
+                                ...body,
+                                type: 'limit',
+                                limit_price: limitPrice.toFixed(symbol.includes('USDT') || symbol.includes('OANDA') ? 4 : 2),
+                                time_in_force: 'day',
+                                extended_hours: true
                             };
-                            
+
                             response = await fetch(url, {
                                 method: 'POST',
                                 headers: {
@@ -7972,7 +7993,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     let msg = errData.message || 'Errore ordine';
                     if (msg.includes('not found')) {
                         msg += " (Verifica se il trading per questo asset è attivo sul tuo account Alpaca)";
-                        restrictedAssets.add(symbol); 
+                        restrictedAssets.add(symbol);
                     }
                     showNotification(`Alpaca: ${msg}`, "error");
                     return false;
@@ -7984,7 +8005,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Diagnostica Asset Alpaca
-        window.listAlpacaAssets = async function() {
+        window.listAlpacaAssets = async function () {
             console.log("[ALPACA] Recupero lista asset disponibili...");
             try {
                 const res = await fetch(`${ALPACA_BASE}/v2/assets?status=active&asset_class=crypto`, {
@@ -8015,12 +8036,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (useAlpacaBroker && !window.liveMonitorActive) {
             checkAlpacaConnection();
         }
-        renderHistory(); 
+        renderHistory();
         initialRadarPreload(); // Carica i dati storici del radar una volta sola
         updateBrokerAssetsUI();
         // Start with default chart
         checkApiRequirement(assetPairSelect.value);
-        
+
         // --- Chiusura Pulita WebSocket ---
         window.addEventListener('beforeunload', () => {
             if (bgFinnhubWs) bgFinnhubWs.close();
@@ -8039,14 +8060,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             // - Solo Alpaca ON => CRYPTO + STOCK attivi
             // - Solo Finnhub ON=> tutto attivo (sim)
             // - Entrambi ON    => tutto attivo
-            const alpacaOn  = useAlpacaBroker;
+            const alpacaOn = useAlpacaBroker;
             const finnhubOn = useFinnhubData && hasFinnhub;
-            const anyOn     = alpacaOn || finnhubOn;
+            const anyOn = alpacaOn || finnhubOn;
 
             const catSupported = {
-                CRYPTO:    anyOn,
-                STOCK:     anyOn,
-                FOREX:     finnhubOn,
+                CRYPTO: anyOn,
+                STOCK: anyOn,
+                FOREX: finnhubOn,
                 COMMODITY: finnhubOn
             };
 
@@ -8062,7 +8083,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (type === 'CRYPTO' && alpacaOn && !finnhubOn) {
                     supported = ALPACA_SUPPORTED_CRYPTO.includes(sym);
                 }
-                
+
                 if (!supported) reason = ' (N/A)';
 
                 if (supported && !isMarketOpen(type)) {
@@ -8107,7 +8128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Nota: il testo della percentuale verrà ripristinato dal loop updateCategoryPulse
                 }
             });
-            
+
             // 3. Se l'asset attualmente selezionato non è supportato, seleziona il primo disponibile
             if (assetPairSelect.selectedOptions[0]?.disabled) {
                 const firstValid = Array.from(assetPairSelect.options).find(o => !o.disabled);
@@ -8170,7 +8191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const container = document.getElementById('pendingOrdersContainer');
             const list = document.getElementById('pendingOrdersList');
             const countEl = document.getElementById('cnt-PENDING');
-            
+
             if (!container || !list) return;
 
             // Mostra o nascondi l'intera colonna in base alla modalità:
@@ -8192,7 +8213,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (countEl) countEl.textContent = orders.length;
-            
+
             list.innerHTML = orders.map(order => {
                 const side = escHtml(order.side.toUpperCase());
                 const isBuy = side === 'BUY';
