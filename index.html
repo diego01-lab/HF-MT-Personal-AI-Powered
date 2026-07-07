@@ -1113,7 +1113,7 @@
                                 (SHORT)</button>
                             <!-- Quantità di asset per l'ordine manuale: vuoto = importo
                                  automatico dal cursore "Quantità per Trade" -->
-                            <input type="number" id="manualQty" min="0" step="any" placeholder="Qtà (auto)"
+                            <input type="number" id="manualQty" min="0" step="any" placeholder="Qtà (auto)" value="1"
                                 data-tooltip="Quantità di unità dell'asset per l'ordine manuale. Vuoto = usa l'importo automatico."
                                 style="width:86px; background:rgba(0,0,0,0.4); border:1px solid var(--border-color); color:#fff; border-radius:8px; padding:8px 10px; font-size:0.78rem; outline:none;">
                         </div>
@@ -1661,6 +1661,12 @@
     </div>
 
     <script src="legal.js" defer></script>
+    <script src="brokers/finnhub.js" defer></script>
+    <script src="brokers/alpacapaper.js" defer></script>
+    <script src="brokers/alpacareal.js" defer></script>
+    <script src="brokers/capitalcomdemo.js" defer></script>
+    <script src="brokers/capitalcomtrading.js" defer></script>
+    <script src="grafico.js" defer></script>
     <script src="app.js" defer></script>
 </body>
 

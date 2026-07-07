@@ -3072,17 +3072,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const EMA_TREND_PERIOD = 200;
         const RSI_PERIOD = 14;
 
-        let chartWs = null;
         let currentCandle = null;
         let lastCandleTime = 0;
-        // FIX SICUREZZA: nessuna chiave Finnhub hardcoded
-        finnhubApiKey = localStorage.getItem('finnhub_api_key') || '';
 
-        // ─── Contabilità storica per-broker: Capitale Versato / Capitale Attuale ───
-        // Ogni broker (fh/alp/alrt/capd/capl) ha il suo registro dei versamenti in
-        // localStorage; il "Capitale Attuale" è l'equity corrente = versamenti −
-        // perdite + profitti dell'intero storico. La differenza tra le due box è
-        // quindi il P&L di sempre su quel broker.
+        const sessionStartPrices = {};
+        
         function getBrokerCtx() {
             // FASE D2: durante l'esecuzione di un motore in background il contesto
             // "corrente" è quello del motore (ledger/persistenza instradati giusti)
@@ -3410,177 +3404,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnWithdrawAll) btnWithdrawAll.addEventListener('click', withdrawAllFunds);
 
         // Fallback difensivo: se la libreria del grafico (CDN) non è raggiungibile,
-        // l'app resta pienamente operativa (trading, pannelli) col grafico disabilitato.
-        if (typeof LightweightCharts === 'undefined') {
-            console.warn('[CHART] LightweightCharts non disponibile (CDN non raggiungibile). Grafico disabilitato, app operativa.');
-            const _noop = function () { };
-            const _seriesStub = new Proxy({}, { get: () => _noop });
-            const _chartStub = new Proxy({}, {
-                get: (t, prop) => {
-                    if (['addLineSeries', 'addAreaSeries', 'addCandlestickSeries', 'addBaselineSeries', 'addHistogramSeries', 'timeScale', 'priceScale'].includes(prop)) {
-                        return () => _seriesStub;
-                    }
-                    return _noop;
-                }
-            });
-            window.LightweightCharts = {
-                createChart: () => _chartStub,
-                CrosshairMode: { Normal: 1, Magnet: 2, Hidden: 0 },
-                LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
-                PriceScaleMode: { Normal: 0, Logarithmic: 1, Percentage: 2, IndexedTo100: 3 },
-            };
-        }
-
-        const chartContainer = document.getElementById('tvchart');
-        // La creazione del grafico misura il contenitore (getBoundingClientRect):
-        // se il layout della pagina è "sporco" in quel momento, la misura forza
-        // un reflow sincrono dell'intera pagina — costoso (~30ms) su questa UI
-        // ricca di pannelli — che Chrome segnala come "[Violation] Forced reflow
-        // while executing JavaScript". Durante l'avvio il layout resta sporco
-        // soprattutto perché il web font 'Inter' viene caricato in modo async e
-        // a ogni applicazione re-invalida il layout del testo. Aspettando che i
-        // font siano pronti e lasciando al browser un frame per impaginare, la
-        // misura del grafico cade su un layout già pulito: la lettura è immediata
-        // e la violazione sparisce. autoSize delega poi il ridimensionamento a un
-        // ResizeObserver interno (misura dopo il layout, senza forzare reflow),
-        // coprendo anche resize di finestra e pannelli.
-        try {
-            if (document.fonts && document.fonts.ready) {
-                await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]);
-            }
-        } catch (e) { /* fonts API non disponibile: si prosegue comunque */ }
-        await new Promise(resolve => {
-            let settled = false;
-            const done = () => { if (!settled) { settled = true; resolve(); } };
-            requestAnimationFrame(() => requestAnimationFrame(done));
-            setTimeout(done, 150); // fallback se la tab è in background (rAF sospeso)
-        });
-        const chart = LightweightCharts.createChart(chartContainer, {
-            autoSize: true,
-            layout: {
-                background: { type: 'solid', color: 'transparent' },
-                textColor: '#94a3b8',
-                fontSize: 11,
-                fontFamily: "'Inter', sans-serif",
-            },
-            grid: {
-                vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-                horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
-            },
-            crosshair: {
-                mode: LightweightCharts.CrosshairMode.Normal,
-                vertLine: { color: 'rgba(148, 163, 184, 0.3)', width: 1, style: 2, labelBackgroundColor: '#1e293b' },
-                horzLine: { color: 'rgba(148, 163, 184, 0.3)', width: 1, style: 2, labelBackgroundColor: '#1e293b' },
-            },
-            rightPriceScale: {
-                borderColor: 'rgba(255, 255, 255, 0.12)',
-                scaleMargins: { top: 0.1, bottom: 0.15 },
-                autoScale: true,
-                alignLabels: true
-            },
-            leftPriceScale: {
-                visible: true,
-                borderColor: 'rgba(255, 255, 255, 0.1)',
-                scaleMargins: { top: 0.45, bottom: 0.1 },
-                autoScale: true,
-            },
-            timeScale: {
-                borderColor: 'rgba(255, 255, 255, 0.12)',
-                timeVisible: true,
-                secondsVisible: false,
-                rightOffset: 20,
-                barSpacing: 10,
-                minBarSpacing: 4,
-            },
-            watermark: {
-                visible: true,
-                fontSize: 48,
-                horzAlign: 'center',
-                vertAlign: 'center',
-                color: 'rgba(255, 255, 255, 0.04)',
-                text: 'SIMULATORE HFT',
-            },
-        });
-
-        const mainSeries = chart.addAreaSeries({
-            lineColor: '#10b981',
-            topColor: 'rgba(16, 185, 129, 0.4)',
-            bottomColor: 'rgba(16, 185, 129, 0.0)',
-            lineWidth: 3,
-            priceLineVisible: true,
-            lastValueVisible: true,
-        });
-
-        // Comparison Series (Normalized %) - Tutti gli asset per il Radar Multi-Asset
-        const compSeries = {};
-        const sessionStartPrices = {};
-
-        // Mostra/nasconde le linee % del grafico in base alla disponibilità del
-        // broker della scheda visualizzata (chiamata da refreshCategoryAvailability
-        // a ogni cambio scheda; a regime i tick riallineano comunque la visibilità).
-        window.refreshChartSeriesVisibility = function () {
-            for (const sym in compSeries) {
-                const s = compSeries[sym];
-                if (!s) continue;
-                let ok = true;
-                try { ok = (typeof isSymbolEnabled === 'function') ? isSymbolEnabled(sym) : true; } catch (_) { }
-                if (s._visible !== ok) {
-                    s.applyOptions({ visible: ok });
-                    s._visible = ok;
-                }
-            }
-        };
-
-        // Sistema di Batching per ottimizzare il rendering grafico (evita cali di frame)
-        const pendingRadarUpdates = new Map();
-        setInterval(() => {
-            if (pendingRadarUpdates.size === 0) return;
-            pendingRadarUpdates.forEach((data, sym) => {
-                if (compSeries[sym] && compSeries[sym]._visible !== false) {
-                    try {
-                        if (!compSeries[sym]._hasData) {
-                            compSeries[sym].setData([{ time: data.time, value: data.value }]);
-                            compSeries[sym]._hasData = true;
-                            compSeries[sym]._lastTime = data.time;
-                        } else if (data.time >= compSeries[sym]._lastTime) {
-                            compSeries[sym].update(data);
-                            compSeries[sym]._lastTime = data.time;
-                        }
-                    } catch (e) { }
-                }
-            });
-            pendingRadarUpdates.clear();
-        }, 100); // 10 FPS (100ms) per la compSeries
-
-        // Colori per categoria (Sfumature premium)
-        const CAT_COLORS = {
-            'CRYPTO': ['#f7931a', '#ffb119', '#f3ba2f', '#e8b923', '#ffd700'],
-            'STOCK': ['#3b82f6', '#60a5fa', '#93c5fd', '#2563eb', '#1d4ed8'],
-            'FOREX': ['#10b981', '#34d399', '#6ee7b7', '#059669', '#047857'],
-            'COMMODITY': ['#eab308', '#facc15', '#fde047', '#ca8a04', '#a16207']
-        };
-
-        // Inizializzazione serie per TUTTI i simboli
-        let colorIndices = { 'CRYPTO': 0, 'STOCK': 0, 'FOREX': 0, 'COMMODITY': 0 };
-
-        // Inizializzazione compSeries (disabilitata per ottimizzare la performance di rendering)
-
-        // Linea dedicata solo all'asset selezionato (quello che l'utente sta guardando)
-        const mainAssetCompSeries = chart.addLineSeries({
-            color: '#ffffff',
-            lineWidth: 3,
-            priceFormat: { type: 'percent' },
-            priceScaleId: 'left',
-            title: 'ASSET',
-            lastValueVisible: true,
-            priceLineVisible: false
-        });
-
-
-        // Ridimensionamento del grafico: gestito interamente da autoSize (vedi
-        // createChart sopra). Il ResizeObserver interno reagisce sia al resize
-        // della finestra sia alle variazioni di layout dei pannelli, senza
-        // leggere clientWidth/Height a mano e senza forzare reflow sincroni.
+        ChartManager.init('tvchart');
 
         // Global Escape key listener to close all modals
         window.addEventListener('keydown', (e) => {
@@ -3966,7 +3790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // HTTP unificato: CapacitorHttp (nativo) su Android, fetch nel browser.
         // Ritorna { ok, status, json(), headers(nomi in minuscolo) }.
-        async function capitalHttp(base, path, { method = 'GET', headers = {}, body = null } = {}) {
+        async function appFetch(base, path, opts = {}) {
             const url = base + path;
             const CH = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp;
             if (CH) {
@@ -3984,55 +3808,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Login: crea la sessione e memorizza CST + X-SECURITY-TOKEN
         async function capitalLogin(mode) {
-            const cfg = getCapitalCfg(mode);
-            if (!cfg.key || !cfg.ident || !cfg.pass) return false;
-            // Rate limit documentato: max 1 POST /session al secondo
-            const since = Date.now() - capLastLoginAt;
-            if (since < 1100) await new Promise(r => setTimeout(r, 1100 - since));
-            capLastLoginAt = Date.now();
-            try {
-                const res = await capitalHttp(cfg.base, '/api/v1/session', {
-                    method: 'POST',
-                    headers: { 'X-CAP-API-KEY': cfg.key, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ identifier: cfg.ident, password: cfg.pass })
-                });
-                if (res.ok) {
-                    const cst = res.headers['cst'];
-                    const sec = res.headers['x-security-token'];
-                    if (cst && sec) {
-                        capSession[cfg.mode] = { cst, sec, t: Date.now() };
-                        console.log(`[CAPITAL] Sessione creata (${cfg.mode}).`);
-                        return true;
-                    }
-                    console.warn('[CAPITAL] Sessione OK ma token non leggibili dagli header (CORS expose-headers?).');
-                    return false;
-                }
-                console.warn(`[CAPITAL] Login fallito (${res.status}): API Key/email/password errate?`);
-                setCapitalLed('error');
-                return false;
-            } catch (e) {
-                console.warn('[CAPITAL] Errore login:', e && e.message ? e.message : e);
-                setCapitalLed('error');
-                return false;
-            }
+            const mgr = getCapitalManager(mode);
+            if (!mgr) return false;
+            const ok = await mgr.login();
+            if (!ok) setCapitalLed('error');
+            return ok;
         }
 
         // Richiesta autenticata con retry automatico su 401 (sessione scaduta)
         async function capitalAuthed(path, opts = {}) {
-            const cfg = getCapitalCfg();
-            let s = capSession[cfg.mode];
-            if (!s) { if (!await capitalLogin(cfg.mode)) return null; s = capSession[cfg.mode]; }
-            const doReq = () => capitalHttp(cfg.base, path, {
-                ...opts,
-                headers: { ...(opts.headers || {}), 'X-CAP-API-KEY': cfg.key, 'CST': capSession[cfg.mode].cst, 'X-SECURITY-TOKEN': capSession[cfg.mode].sec }
-            });
-            let res = await doReq();
-            if (res.status === 401) {
-                capSession[cfg.mode] = null;
-                if (!await capitalLogin(cfg.mode)) return res;
-                res = await doReq();
-            }
-            return res;
+            const mgr = getCapitalManager();
+            if (!mgr) return null;
+            return await mgr.authedReq(path, opts);
         }
 
         function setCapitalLed(state) { // 'active' | 'error' | ''
@@ -4253,6 +4040,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return { base: ALPACA_LIVE_BASE, key: alpacaLiveKeyId, secret: alpacaLiveSecretKey, live: true };
             }
             return { base: ALPACA_BASE, key: alpacaKeyId, secret: alpacaSecretKey, live: false };
+        }
+        function getAlpacaManager() {
+            const _bk = getBrokerHttp();
+            if (!_bk.key) return null;
+            const mgr = _bk.live ? window.AlpacaRealManager : window.AlpacaPaperManager;
+            if (mgr) mgr.setKeys(_bk.key, _bk.secret);
+            return mgr;
         }
 
         // true se una sorgente broker (Paper o Reale) va sincronizzata/mostrata
@@ -4555,117 +4349,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         async function syncAlpacaPositions() {
-            const src = getBrokerHttp(); // Paper o conto REALE (ALrt, sola lettura)
-            if (!brokerViewActive() || !src.key || !src.secret) return;
+            const mgr = getAlpacaManager();
+            if (!mgr) return;
             try {
-                const url = `${src.base}/v2/positions`;
-                const response = await fetch(url, {
-                    headers: { 'apca-api-key-id': src.key, 'apca-api-secret-key': src.secret }
-                });
-                if (response.ok) {
-                    const positions = await response.json();
-                    // Cambio modalità durante la richiesta: non toccare lo stato test
-                    // né mescolare i dati Paper/Reale
-                    if (!brokerViewActive() || getBrokerHttp().live !== src.live) return;
-                    const alpacaSyms = new Set();
+                const positions = await mgr.getPositions();
+                if (!brokerViewActive()) return;
+                
+                let anyChanges = false;
+                for (const pos of positions) {
+                    const sym = pos.symbol;
+                    const isLong = pos.side === 'long';
+                    const qty = Math.abs(parseFloat(pos.qty));
+                    const entryPrice = parseFloat(pos.avg_entry_price);
 
-                    for (const p of positions) {
-                        const alpacaSym = p.symbol;
-                        const side = p.side.toUpperCase();
-                        const qty = Math.abs(parseFloat(p.qty));
-                        const avgPrice = parseFloat(p.avg_entry_price);
-
-                        if (qty * avgPrice < 0.10) continue;
-
-                        const isCrypto = alpacaSym.endsWith('USD') || alpacaSym.endsWith('USDT') || alpacaSym.includes('/');
-
-                        // Normalizzazione Simbolo: Mappiamo i simboli Alpaca Crypto verso i nostri interni (BTCUSDT, ETHUSDT, ecc.)
-                        let localSym = alpacaSym;
-                        if (isCrypto) {
-                            // Se finisce con /USD, lo trasformiamo in USDT (es. BTC/USD -> BTCUSDT)
-                            if (alpacaSym.includes('/')) {
-                                localSym = alpacaSym.replace('/', '').replace('USD', 'USDT');
-                            } else if (alpacaSym.endsWith('USD')) {
-                                // Se finisce con USD senza slash (es. BTCUSD -> BTCUSDT)
-                                localSym = alpacaSym.replace('USD', 'USDT');
-                            }
-                        }
-
-                        if (alpacaSym.includes('/') && !isCrypto) {
-                            localSym = `OANDA:${alpacaSym.replace('/', '_')}`;
-                        }
-
-                        alpacaSyms.add(localSym);
-                        const posPnl = parseFloat(p.unrealized_intraday_pl != null ? p.unrealized_intraday_pl : (p.unrealized_pl || 0));
-
-                        if (!activePositions[localSym]) {
-                            // La liquidazione broker non è istantanea: per 30s ignoriamo il
-                            // simbolo appena chiuso, altrimenti il sync lo "resuscita" e il
-                            // TP/SL lo richiude in loop (chiusure multiple della stessa posizione).
-                            if (Date.now() - (recentlyClosed[localSym] || 0) < 30000) continue;
-                            console.log(`[SYNC] Nuova posizione rilevata su Alpaca: ${localSym} (${side})`);
-                            activePositions[localSym] = {
-                                type: side === 'LONG' ? 'LONG' : 'SHORT',
-                                entryPrice: avgPrice,
-                                amount: qty,
-                                invested: avgPrice * qty,
-                                brokerAssetId: p.asset_id,
-                                openTime: Date.now(),
-                                brokerPnl: posPnl
-                            };
-                            if (typeof syncAlpacaDataSubscriptions === 'function') syncAlpacaDataSubscriptions();
-                        } else {
-                            const pos = activePositions[localSym];
-                            pos.brokerAssetId = p.asset_id; // Sincronizziamo l'ID univoco per la chiusura
-                            pos.brokerPnl = posPnl; // Aggiorna costantemente il PNL del broker
-                            if (Math.abs(pos.amount - qty) > 0.000001) {
-                                pos.amount = qty;
-                                pos.invested = pos.entryPrice * qty;
-                            }
-                        }
+                    if (!activePositions[sym]) {
+                        activePositions[sym] = {
+                            type: isLong ? 'buy' : 'sell',
+                            entryPrice: entryPrice,
+                            quantity: qty,
+                            dynTP: null,
+                            dynSL: null,
+                            highestPrice: entryPrice,
+                            lowestPrice: entryPrice,
+                            isBot: false,
+                            confidence: 50,
+                            openTime: Date.now()
+                        };
+                        anyChanges = true;
                     }
-
-                    // Rimozione locali non presenti su Alpaca (solo se non abbiamo appena fatto un ordine)
-                    const now = Date.now();
-                    for (let sym in activePositions) {
-                        const lastOrder = lastOrderTimes[sym] || 0;
-                        // In modalità broker (Paper o Reale) non devono esistere posizioni
-                        // simulate: le eventuali residue (forex, short crypto, vecchie
-                        // sessioni) vengono chiuse localmente, con voce in cronologia.
-                        if (activePositions[sym].simulated) {
-                            console.log(`[SYNC] Chiusura posizione simulata residua ${sym} (niente simulazioni in modalità broker).`);
-                            sessionBudgetUsed -= activePositions[sym].invested || 0;
-                            if (sessionBudgetUsed < 0) sessionBudgetUsed = 0;
-                            updateSessionBudgetUI();
-                            finalizeLocalClose(sym, globalPrices[sym] || activePositions[sym].entryPrice);
-                            continue;
-                        }
-
-                        if (brokerViewActive()) {
-                            if (!alpacaSyms.has(sym) && (now - lastOrder > 3000)) {
-                                console.warn(`[SYNC] Posizione chiusa esternamente rilevata: ${sym}`);
-                                const pos = activePositions[sym];
-                                // NON registriamo qui la voce in cronologia: la crea syncAlpacaHistory
-                                // dal FILL reale (prezzo esatto di esecuzione). Registrarla anche qui
-                                // produceva DUE voci per la stessa chiusura e PnL contato doppio.
-                                // Annotiamo solo l'entry per il calcolo PnL del FILL in arrivo.
-                                brokerEntryBasis[normFillSym(sym)] = { price: pos.entryPrice, time: pos.openTime, type: pos.type };
-                                sessionBudgetUsed -= pos.invested;
-                                if (sessionBudgetUsed < 0) sessionBudgetUsed = 0;
-                                updateSessionBudgetUI();
-                                delete activePositions[sym];
-                            }
-                        }
-                    }
-                    persistData();
-                    // Sync col broker: solo rendering, niente chiusure automatiche
-                    // (evita di liquidare le posizioni appena caricate al connect/
-                    // cambio-modalità). Il rischio è gestito dal ciclo dedicato a 500ms.
-                    renderOpenPositions(false);
                 }
-            } catch (e) {
-                // Silenziamo gli errori di rete temporanei per non sporcare la console
-            }
+                
+                if (anyChanges) {
+                    persistData();
+                    renderOpenPositions();
+                }
+            } catch (e) { console.error("[ALPACA] Errore sync posizioni:", e); }
         }
 
         let _historySyncInFlight = false;
@@ -5058,7 +4776,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentCandle = null;
             lastCandleTime = 0;
 
-            mainSeries.setData([]);
+            ChartManager.setSymbol(symbol);
             if (currentPriceEl) {
                 const count = priceHistory.length;
                 if (isBotActive) {
@@ -5105,7 +4823,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             // Reset della serie di confronto per evitare glitch visivi
-            if (mainAssetCompSeries) mainAssetCompSeries.setData([]);
+            
 
             updateDashboard();
 
@@ -6010,47 +5728,50 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     console.log(`[ALPACA] Avvio chiusura per: ${sym} (ID: ${identifier}, Qty: ${pos.amount})`);
 
-                    // Step 0: cancella eventuali ordini pendenti sul simbolo.
-                    // Alpaca non supporta DELETE /v2/orders?symbol=..., bisogna iterarli.
+                    // Step 0: cancella eventuali ordini pendenti sul simbolo usando il manager Alpaca
                     try {
                         const searchSym = alpacaSym.replace('OANDA:', '').replace('_', '/');
-                        const getOrdersUrl = `${ALPACA_BASE}/v2/orders?status=open&symbols=${encodeURIComponent(searchSym)}`;
-                        const getResp = await fetch(getOrdersUrl, {
-                            headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                        });
-                        if (getResp.ok) {
-                            const openOrders = await getResp.json();
+                        const tempMgr = getAlpacaManager();
+                        if (tempMgr) {
+                            const openOrders = await tempMgr.getOpenOrders(searchSym);
                             if (openOrders && openOrders.length > 0) {
                                 console.log(`[ALPACA] Cancellazione di ${openOrders.length} ordini pendenti per ${searchSym}...`);
                                 for (const order of openOrders) {
-                                    // Gli ordini già in cancellazione contano come "open" nella GET,
-                                    // ma un DELETE su di essi risponde 422: inutile inviarlo
                                     if (order.status === 'pending_cancel' || order.status === 'pending_replace') continue;
-                                    await fetch(`${ALPACA_BASE}/v2/orders/${order.id}`, {
-                                        method: 'DELETE',
-                                        headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                                    });
+                                    await tempMgr.cancelOrder(order.id);
                                 }
-                                // Breve attesa per permettere ad Alpaca di sbloccare le quantità "held"
                                 await new Promise(r => setTimeout(r, 800));
                             }
                         }
                     } catch (e) { console.warn('[ALPACA] Cancellazione ordini pendenti pre-chiusura fallita:', e); }
 
-                    // Metodo 1: Liquidazione Totale (DELETE)
-                    const liquidationUrl = `${ALPACA_BASE}/v2/positions/${encodeURIComponent(identifier)}`;
-                    const response = await fetch(liquidationUrl, {
-                        method: 'DELETE',
-                        headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                    });
+                    // Metodo 1: Liquidazione Totale (DELETE) tramite Manager
+                    let liquidationSuccess = false;
+                    let liquidationErr = '';
+                    try {
+                        const mgr = getAlpacaManager();
+                        if (mgr) {
+                            await mgr.closePosition(identifier);
+                            liquidationSuccess = true;
+                            console.log(`[ALPACA] Liquidazione ${identifier} confermata.`);
+                        } else {
+                            throw new Error("Alpaca Manager non trovato.");
+                        }
+                    } catch (err) {
+                        liquidationErr = err.message || String(err);
+                        if (liquidationErr.includes('404')) {
+                            console.warn(`[ALPACA] Posizione ${identifier} non trovata sul broker. Procedo con chiusura locale.`);
+                            liquidationSuccess = true; // Permetti la chiusura locale
+                        } else {
+                            console.warn(`[ALPACA] Liquidazione fallita, provo Fallback LIMIT...`, liquidationErr);
+                        }
+                    }
 
-                    if (response.ok) {
-                        console.log(`[ALPACA] Liquidazione ${identifier} confermata.`);
-                    } else if (response.status === 404) {
-                        console.warn(`[ALPACA] Posizione ${identifier} non trovata sul broker. Procedo con chiusura locale.`);
+                    if (liquidationSuccess) {
+                        // Success block, continue
                     } else {
-                        const rawErr = await response.text();
-                        console.warn(`[ALPACA] Liquidazione fallita (${response.status}), provo Fallback LIMIT...`, rawErr);
+                        const rawErr = liquidationErr;
+                        console.warn(`[ALPACA] Liquidazione fallita, provo Fallback LIMIT...`, rawErr);
 
                         // Metodo 2: Fallback con Ordine LIMIT
                         const side = pos.type === 'LONG' ? 'sell' : 'buy';
@@ -6810,18 +6531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setInterval(() => { if (!useAlpacaBroker) persistTestData(); }, 30000);
 
         let chartUpdatePending = false;
-        function pushCandleToChart() {
-            if (!currentCandle || chartUpdatePending) return;
-            chartUpdatePending = true;
-            requestAnimationFrame(() => {
-                chartUpdatePending = false;
-                try {
-                    mainSeries.update(currentCandle);
-                } catch (e) {
-                    console.error("Chart update error:", e);
-                }
-            });
-        }
+        
 
         // --- Market Connections ---
         function connectToMarket(symbol) {
@@ -6844,7 +6554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentPriceEl.textContent = 'Mercato chiuso — riapre a orario di borsa';
                 return;
             }
-            currentPriceEl.textContent = 'In attesa del primo dato...';
+            
         }
 
         // --- BACKGROUND ENGINE (RADAR & MULTI-ASSET TRACKING) ---
@@ -7360,7 +7070,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 updatePriceUI();
-                pushCandleToChart();
+                ChartManager.pushPrice(price, time);
 
                 // Gestione ordini pendenti dalla UI
                 if (autoBuyPending && autoBuyPending.symbol === sym) {
@@ -7386,53 +7096,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (isNaN(pctChange) || !isFinite(pctChange)) pctChange = 0;
             const isCurrent = (assetPairSelect && sym === assetPairSelect.value);
 
-            if (isCurrent && mainAssetCompSeries) {
-                const shortName = sym.replace('USDT', '').replace('OANDA:', '').replace('_', '/');
-                const newTitle = `★ ${shortName}`;
-                if (mainAssetCompSeries._title !== newTitle || !mainAssetCompSeries._visible) {
-                    mainAssetCompSeries.applyOptions({ title: newTitle, visible: true });
-                    mainAssetCompSeries._title = newTitle;
-                    mainAssetCompSeries._visible = true;
-                }
-                mainAssetCompSeries.update({ time: nowTime, value: pctChange });
-            }
-
-            // Disegna sul grafico l'andamento di tutti gli asset attivi (in background)
-            // Utilizziamo il batching (pendingRadarUpdates) per le performance
-            if (isSymbolEnabled(sym)) {
-                if (!compSeries[sym]) {
-                    let color = 'rgba(255, 255, 255, 0.2)';
-                    if (CAT_COLORS[type]) {
-                        color = CAT_COLORS[type][colorIndices[type] % CAT_COLORS[type].length];
-                        colorIndices[type]++;
-                    }
-                    const shortName = sym.replace('USDT', '').replace('OANDA:', '').replace('_', '/');
-                    compSeries[sym] = chart.addLineSeries({
-                        title: shortName,
-                        color: color,
-                        lineWidth: 1,
-                        priceFormat: { type: 'percent' },
-                        priceScaleId: 'left',
-                        lastValueVisible: true,
-                        priceLineVisible: false,
-                        crosshairMarkerVisible: false
-                    });
-                    compSeries[sym]._visible = true;
-                }
-                // Aggiunge alla coda invece di renderizzare subito
-                pendingRadarUpdates.set(sym, { time: nowTime, value: pctChange });
-
-                // Make sure it's visible if it was previously hidden
-                if (!compSeries[sym]._visible) {
-                    compSeries[sym].applyOptions({ visible: true });
-                    compSeries[sym]._visible = true;
-                }
-            } else if (compSeries[sym]) {
-                if (compSeries[sym]._visible !== false) {
-                    compSeries[sym].applyOptions({ visible: false });
-                    compSeries[sym]._visible = false;
-                }
-            }
+            
 
             // Run strategy for this asset ONLY if category enabled (Universal Engine)
             if (!isManualMode && isBotActive && isSymbolEnabled(sym)) {
@@ -7614,7 +7278,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (historicalData.length > 0) {
                     // 1. Aggiorna candele se è l'asset corrente
                     if (assetPairSelect && assetPairSelect.value === symbol) {
-                        mainSeries.setData(historicalData);
+                        ChartManager.setHistoricalData(historicalData);
                         const lastPrice = historicalData[historicalData.length - 1].close;
                         currentPrice = lastPrice;
                         updatePriceUI();
@@ -7630,16 +7294,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }));
 
                     const isCurrent = (assetPairSelect && symbol === assetPairSelect.value);
-                    if (isCurrent && mainAssetCompSeries) {
-                        const shortName = symbol.replace('USDT', '').replace('OANDA:', '').replace('_', '/');
-                        const newTitle = `★ ${shortName}`;
-                        if (mainAssetCompSeries._title !== newTitle || !mainAssetCompSeries._visible) {
-                            mainAssetCompSeries.applyOptions({ title: newTitle, visible: true });
-                            mainAssetCompSeries._title = newTitle;
-                            mainAssetCompSeries._visible = true;
-                        }
-                        mainAssetCompSeries.setData(lineData);
-                    }
+                    
                 }
 
             } catch (err) {
@@ -7826,180 +7481,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
         async function alpacaCreateOrder(side, symbol, qty) {
-            // Instrada l'ordine sul broker ATTIVO (Paper o REALE/ALrt) con la STESSA
-            // logica: getBrokerHttp() fornisce base+chiavi corrette (live in ALrt).
-            const _bk = getBrokerHttp();
-            const ALPACA_BASE = _bk.base, alpacaKeyId = _bk.key, alpacaSecretKey = _bk.secret;
-            if (!brokerViewActive() || !alpacaKeyId || !alpacaSecretKey) return false;
-
-            // Pulisce il simbolo per Alpaca (es. USD/JPY invece di OANDA:USD_JPY)
-            let alpacaSym = symbol.replace('.OANDA', '').trim();
-            if (alpacaSym.includes(':')) {
-                alpacaSym = alpacaSym.split(':')[1]; // Rimuove "OANDA:"
-            }
-            // Per il Forex, Alpaca vuole "BASE/QUOTE" (es. EUR/USD)
-            if (alpacaSym.includes('_')) {
-                alpacaSym = alpacaSym.replace('_', '/');
-            } else if (alpacaSym.length === 6 && !alpacaSym.includes('/')) {
-                // Se è un simbolo da 6 caratteri senza slash (es. USDJPY), prova ad aggiungere lo slash
-                alpacaSym = alpacaSym.substring(0, 3) + '/' + alpacaSym.substring(3);
-            }
-            // 0. Prevenzione Wash Trade: Cancella ordini pendenti per questo simbolo
+            const mgr = getAlpacaManager();
+            if (!mgr) return false;
             try {
-                const getOrdersUrl = `${ALPACA_BASE}/v2/orders?status=open&symbols=${encodeURIComponent(alpacaSym)}`;
-                const getResp = await fetch(getOrdersUrl, {
-                    headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                });
-                if (getResp.ok) {
-                    const openOrders = await getResp.json();
-                    if (openOrders && openOrders.length > 0) {
-                        for (const order of openOrders) {
-                            // Ordini già in cancellazione: un DELETE risponderebbe 422
-                            if (order.status === 'pending_cancel' || order.status === 'pending_replace') continue;
-                            await fetch(`${ALPACA_BASE}/v2/orders/${order.id}`, {
-                                method: 'DELETE',
-                                headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                            });
-                        }
-                        // Piccolo ritardo per permettere ad Alpaca di sbloccare le quantità "held"
-                        await new Promise(resolve => setTimeout(resolve, 600));
-                    }
-                }
-            } catch (e) { console.warn("[ALPACA] Errore cancellazione ordini preventivi:", e); }
-
-            lastOrderTimes[symbol] = Date.now(); // Traccia il tempo dell'ordine per il sync
-
-            const url = `${ALPACA_BASE}/v2/orders`;
-            const body = {
-                symbol: symbol,
-                qty: qty.toString(),
-                side: side.toLowerCase(), // 'buy' or 'sell'
-                type: 'market',
-                time_in_force: (symbol.includes('/') || symbol.includes('USD')) ? 'gtc' : 'day'
-            };
-
-            try {
-                let response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'apca-api-key-id': alpacaKeyId,
-                        'apca-api-secret-key': alpacaSecretKey,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(body)
-                });
-
-                // Se errore 422, potrebbe essere "not found" o "extended hours"
-                if (response.status === 422) {
-                    const errData = await response.clone().json();
-
-                    // Caso A: Asset non trovato (riprova senza slash)
-                    if (errData.message && errData.message.includes('not found') && alpacaSym.includes('/')) {
-                        console.warn(`[ALPACA] Asset ${alpacaSym} non trovato. Riprovo senza slash...`);
-                        const altBody = { ...body, symbol: alpacaSym.replace('/', '') };
-                        response = await fetch(url, {
-                            method: 'POST',
-                            headers: {
-                                'apca-api-key-id': alpacaKeyId,
-                                'apca-api-secret-key': alpacaSecretKey,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(altBody)
-                        });
-                    }
-                    // Caso B: Mercato chiuso / Extended Hours (richiede LIMIT order)
-                    else if (errData.message && errData.message.toLowerCase().includes('extended hours')) {
-                        console.warn(`[ALPACA] Mercato chiuso per ${symbol}. Riprovo con ordine LIMIT (Extended Hours)...`);
-                        const livePrice = globalPrices[symbol] || 0;
-                        if (livePrice > 0) {
-                            // Offset dello 0.1% per favorire l'esecuzione (buy leggermente sopra, sell leggermente sotto)
-                            const sideFactor = side.toLowerCase() === 'buy' ? 1.001 : 0.999;
-                            const limitPrice = livePrice * sideFactor;
-
-                            const extBody = {
-                                ...body,
-                                type: 'limit',
-                                limit_price: limitPrice.toFixed(symbol.includes('USDT') || symbol.includes('OANDA') ? 4 : 2),
-                                time_in_force: 'day',
-                                extended_hours: true
-                            };
-
-                            response = await fetch(url, {
-                                method: 'POST',
-                                headers: {
-                                    'apca-api-key-id': alpacaKeyId,
-                                    'apca-api-secret-key': alpacaSecretKey,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(extBody)
-                            });
-                        } else {
-                            console.error("[ALPACA] Impossibile inviare ordine LIMIT: prezzo live non disponibile.");
-                        }
-                    }
-                }
-
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log(`[ALPACA DEBUG] Risposta Completa:`, data);
-                    if (data.status === 'accepted' || data.status === 'pending_new') {
-                        console.log(`[ALPACA] Ordine ${side} in attesa (non ancora eseguito). ID: ${data.id}`);
-                        showNotification(`Alpaca: Ordine ricevuto. In attesa di esecuzione sul mercato...`, "info");
-                    } else {
-                        console.log(`[ALPACA] Ordine ${side} ESEGUITO:`, data.id);
-                        showNotification(`Alpaca: Ordine ${side} eseguito con successo!`, "success");
-                    }
-                    return true;
+                const livePrice = globalPrices[symbol] || 0;
+                const data = await mgr.createOrder(symbol, qty, side, 'market', 'day', livePrice);
+                if (data.status === 'accepted' || data.status === 'pending_new') {
+                    showNotification(`Alpaca: Ordine in attesa. ID: ${data.id}`, "info");
                 } else {
-                    const errData = await response.json();
-                    // Stringify: prima il log mostrava solo "Object" e la causa (es. PDT,
-                    // buying power) restava invisibile in console
-                    console.error(`[ALPACA DEBUG] Errore Dettagliato (HTTP ${response.status}):`, JSON.stringify(errData));
-
-                    const errMsg = (errData.message || '').toLowerCase();
-
-                    // Protezione PDT (Pattern Day Trading, conto margin < $25k): il broker
-                    // blocca i day-trade sulle AZIONI oltre il limite → 403. Cooldown lungo
-                    // per non martellare di ordini condannati.
-                    if (errMsg.includes('pattern day trading') || errMsg.includes('day trade') || errMsg.includes('pdt')) {
-                        console.warn('[ALPACA] Protezione PDT attiva (conto < $25k): day-trade azioni bloccati dal broker. Cooldown 30 minuti su ' + symbol + '.');
-                        orderRejectCooldown[symbol] = Date.now() + 30 * 60000;
-                        if (isBotActive && typeof botNotify === 'function') botNotify('pdt', 'Alpaca ha bloccato i day-trade sulle azioni (regola PDT, conto sotto $25k): ordini azioni in pausa.', 'warning', 60000);
-                    }
-
-                    // Fondi insufficienti sul broker: bot in ATTESA, niente retry a raffica
-                    if (errData.code === 40310000 && (errMsg.includes('insufficient balance') || errMsg.includes('insufficient buying power'))) {
-                        console.warn("[ALPACA] Fondi insufficienti sul broker. Bot in ATTESA fino al rientro di fondi.");
-                        if (errData.available !== undefined) availableCash = parseFloat(errData.available) || 0;
-                        isCapitalExhausted = true;
-                        updateBotStatusLabel();
-                        checkAlpacaConnection(); // riallinea buying power / cash reali
-                    }
-                    // Gestione discrepanza quantità o divieto di Short Selling
-                    else if (errData.code === 40310000 && errMsg.includes('insufficient qty')) {
-                        const heldQty = parseFloat(errData.existing_qty || 0);
-                        if (heldQty > 0) {
-                            console.warn(`[ALPACA] Ordine rifiutato: il broker detiene già ${heldQty} unità di ${symbol} non tracciate localmente (Alpaca non inverte una posizione con un solo ordine). Sincronizzo le posizioni per importarla.`);
-                        } else {
-                            console.warn(`[ALPACA] Il broker ha rifiutato l'ordine per quantità insufficiente. Se era un'operazione SHORT, probabilmente il tuo conto Alpaca è di tipo CASH (non supporta lo short selling). Usa la modalità 'Solo LONG'.`);
-                        }
-                        syncAlpacaPositions();
-                    }
-                    else if (errData.code === 42210000) {
-                        console.warn("[ALPACA] Discrepanza posizione rilevata. Forzo sincronizzazione...");
-                        syncAlpacaPositions();
-                    }
-
-                    let msg = errData.message || 'Errore ordine';
-                    if (msg.includes('not found')) {
-                        msg += " (Verifica se il trading per questo asset è attivo sul tuo account Alpaca)";
-                        restrictedAssets.add(symbol);
-                    }
-                    showNotification(`Alpaca: ${msg}`, "error");
-                    return false;
+                    showNotification(`Alpaca: Ordine eseguito con successo!`, "success");
                 }
-            } catch (err) {
-                console.error("[ALPACA] Eccezione ordine:", err);
+                return true;
+            } catch (e) {
+                console.error("[ALPACA] Errore ordine:", e);
+                showNotification(`Alpaca Errore: ${e.message}`, "error");
                 return false;
             }
         }
@@ -8147,43 +7642,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // --- Pending Orders Sync & Management ---
         async function syncAlpacaOrders() {
-            const src = getBrokerHttp(); // Paper o conto REALE (ALrt, sola lettura)
-            if (!brokerViewActive() || !src.key || !src.secret) {
+            const mgr = getAlpacaManager();
+            if (!mgr) {
                 if (typeof renderPendingOrders === 'function') renderPendingOrders([]);
                 return;
             }
             try {
-                const url = `${src.base}/v2/orders?status=open`;
-                const response = await fetch(url, {
-                    headers: { 'apca-api-key-id': src.key, 'apca-api-secret-key': src.secret }
-                });
-                if (response.ok) {
-                    const orders = await response.json();
-                    if (!brokerViewActive() || getBrokerHttp().live !== src.live) return;
-                    renderPendingOrders(orders);
-                }
+                const orders = await mgr.getOpenOrders();
+                if (!brokerViewActive()) return;
+                renderPendingOrders(orders);
             } catch (e) { console.error("[ALPACA] Errore sync ordini:", e); }
         }
 
         async function cancelAlpacaOrder(orderId) {
-            // Broker attivo (Paper o REALE/ALrt): stessa logica, endpoint+chiavi corretti.
-            const _bk = getBrokerHttp();
-            const ALPACA_BASE = _bk.base, alpacaKeyId = _bk.key, alpacaSecretKey = _bk.secret;
+            const mgr = getAlpacaManager();
+            if (!mgr) return;
             if (!confirm("Sei sicuro di voler annullare questo ordine?")) return;
             try {
-                const url = `${ALPACA_BASE}/v2/orders/${orderId}`;
-                const res = await fetch(url, {
-                    method: 'DELETE',
-                    headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
-                });
-                if (res.ok) {
-                    showNotification("Ordine annullato con successo", "success");
-                    syncAlpacaOrders();
-                } else {
-                    const err = await res.json();
-                    showNotification(`Errore: ${err.message}`, "error");
-                }
-            } catch (e) { console.error(e); }
+                await mgr.cancelOrder(orderId);
+                showNotification("Ordine annullato con successo", "success");
+                syncAlpacaOrders();
+            } catch(e) {
+                showNotification(`Errore: ${e.message}`, "error");
+            }
         }
         window.cancelAlpacaOrder = cancelAlpacaOrder;
 
