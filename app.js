@@ -1128,12 +1128,13 @@ function isMarketOpenForCategory(type) {
         if (day === 5 && h >= 17) return false;   // Ven sera
         if (day === 6) return false;              // Sab
         if (day === 0 && h < 17) return false;    // Dom fino a riapertura
+        if (day >= 1 && day <= 4 && h === 17) return false; // Pausa giornaliera (17:00-18:00 EST)
         return true;
     }
     if (type === 'STOCK') {
         if (day === 0 || day === 6) return false; // weekend
         const t = h * 60 + m;
-        return t >= 9 * 60 + 30 && t < 16 * 60;   // 09:30–16:00 ET
+        return t >= 4 * 60 && t < 20 * 60;   // Extended Hours: 04:00-20:00 EST
     }
     return true;
 }
@@ -1659,10 +1660,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         let lastUpdateTracker = {};
         const ALPACA_SUPPORTED_CRYPTO = ['BTCUSDT', 'ETHUSDT', 'LTCUSDT', 'SOLUSDT', 'AVAXUSDT', 'DOTUSDT', 'LINKUSDT', 'UNIUSDT', 'DOGEUSDT', 'ADAUSDT', 'MATICUSDT'];
 
-        let radarTracker = {};
+        // radarTracker moved to radar.js
         let activeFinnhubSubs = new Set();
         let activeAlpacaSubs = new Set();
-        let radarActiveElements = {}; // Per aggiornamenti live dei segnali
+        // radarActiveElements moved to radar.js
 
         // --- Motore Tecnico & Radar State ---
         const stratCooldown = {};
@@ -7048,13 +7049,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (day === 5 && hours >= 17) return false;
                 if (day === 6) return false;
                 if (day === 0 && hours < 17) return false;
+                if (day >= 1 && day <= 4 && hours === 17) return false; // Pausa giornaliera (17:00-18:00 EST)
                 return true;
             }
 
             if (type === 'STOCK') {
                 if (day === 0 || day === 6) return false;
                 const timeVal = hours * 60 + minutes;
-                if (timeVal >= 9 * 60 + 30 && timeVal < 16 * 60) return true;
+                if (timeVal >= 4 * 60 && timeVal < 20 * 60) return true; // Extended Hours: 04:00-20:00 EST
                 return false;
             }
 
@@ -7380,113 +7382,38 @@ document.addEventListener('DOMContentLoaded', async () => {
             return null;
         }
 
-        function updateMarketRadarTarget(symbol) {
-            // Radar is now global and universal. 
-            // We no longer switch or clear it based on the chart.
-            return;
-        }
 
-        function processRadarTick(symbol, price, now, type) {
-            // Monitor everything simultaneously for the global radar list
-            if (!isMarketOpen(type)) return;
-            // FASE C: il radar mostra TUTTE le categorie in ogni modalità (multi-dashboard)
-
-
-            if (!radarTracker[symbol]) {
-                radarTracker[symbol] = { startPrice: price, startTime: now };
-            } else {
-                const elapsed = now - radarTracker[symbol].startTime;
-                if (elapsed > 30000) {
-                    radarTracker[symbol] = { startPrice: price, startTime: now };
-                } else {
-                    const growth = (price / radarTracker[symbol].startPrice) - 1;
-
-                    let threshold = 0.002; // 0.2% for crypto (was 1.5%)
-                    if (type === 'STOCK') threshold = 0.001; // 0.1% (was 0.5%)
-                    if (type === 'FOREX') threshold = 0.0001; // 0.01% (was 0.05%)
-                    if (type === 'COMMODITY') threshold = 0.0005; // 0.05% (was 0.1%)
-
-                    if (Math.abs(growth) > threshold) {
-                        triggerRadarSignal(symbol, growth * 100);
-                        radarTracker[symbol] = { startPrice: price, startTime: now };
+        // IL RADAR MULTI-ASSET È ORA ESTERNO IN radar.js
+        if (window.RadarManager) {
+            window.RadarManager.init({
+                isMarketOpen,
+                getAssetType,
+                VALID_SYMBOLS,
+                radarListEl,
+                playSignalSound,
+                onRadarClick: (symbol) => {
+                    const option = Array.from(assetPairSelect.options).find(o => o.value === symbol);
+                    if (option) {
+                        assetPairSelect.value = symbol;
                     }
-                }
-            }
-        }
-
-        function triggerRadarSignal(symbol, percentage) {
-            // Only allow validated symbols to prevent garbage trades
-            const cat = getAssetType(symbol);
-            const whitelist = VALID_SYMBOLS[cat] || [];
-            if (!whitelist.includes(symbol)) return;
-
-            const catIcon = { 'CRYPTO': '🔥', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '🥇' }[cat] || '🔥';
-
-            // Se esiste già un segnale live per questo simbolo, lo aggiorniamo
-            if (radarActiveElements[symbol]) {
-                const el = radarActiveElements[symbol];
-                const pctSpan = el.querySelector('.radar-pct');
-                if (pctSpan) {
-                    pctSpan.textContent = `${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%`;
-                    pctSpan.style.color = percentage >= 0 ? '#10b981' : '#ef4444';
-                }
-                // Resetta il timer di rimozione
-                clearTimeout(el.removeTimeout);
-                el.removeTimeout = setTimeout(() => {
-                    el.classList.add('fade-out');
-                    setTimeout(() => { el.remove(); delete radarActiveElements[symbol]; }, 500);
-                }, 15000);
-                return;
-            }
-
-            const el = document.createElement('div');
-            el.className = 'radar-signal';
-            el.innerHTML = `
-            <span style="font-weight: bold; font-size: 0.9rem;">${catIcon} ${symbol}</span>
-            <span style="font-weight: bold; color: ${percentage >= 0 ? '#10b981' : '#ef4444'};">
-                <span class="radar-pct">${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%</span>
-                <span style="font-size: 0.68rem; font-weight: normal; color: var(--text-secondary);">(30s)</span>
-            </span>
-        `;
-
-            el.addEventListener('click', () => {
-                // Symbol already exists in the hardcoded select, just switch to it
-                const option = Array.from(assetPairSelect.options).find(o => o.value === symbol);
-                if (option) {
-                    assetPairSelect.value = symbol;
-                }
-                checkApiRequirement(symbol);
+                    checkApiRequirement(symbol);
+                },
+                getIsManualMode: () => isManualMode,
+                getIsBotActive: () => isBotActive,
+                isSymbolEnabled,
+                hasActivePosition: (sym) => !!activePositions[sym],
+                getGlobalPrice: (sym) => globalPrices[sym],
+                getBgPriceHistory: (sym) => bgPriceHistories[sym],
+                evaluateStrategy
             });
-
-            radarListEl.prepend(el);
-            radarActiveElements[symbol] = el;
-
-            // Suono notifica soft
-            playSignalSound();
-
-            // Rimuovi dopo 15 secondi di inattività
-            el.removeTimeout = setTimeout(() => {
-                el.classList.add('fade-out');
-                setTimeout(() => { el.remove(); delete radarActiveElements[symbol]; }, 500);
-            }, 15000);
-
-            // AUTO-TRADING: chiediamo alla strategia di validare il segnale del radar.
-            // Usa il dispatcher evaluateStrategy così RISPETTA il toggle "Modalità AI
-            // Avanzata": strategia AI se attivo, logica standard EMA se disattivato
-            // (coerente con l'Universal Engine e valido per tutti i broker).
-            if (!isManualMode && isBotActive && isSymbolEnabled(symbol) && !activePositions[symbol]) {
-                const radarPrice = globalPrices[symbol];
-                if (radarPrice && radarPrice > 0) {
-                    // Invece di aprire subito, chiediamo alla strategia di analizzare il contesto
-                    const history = bgPriceHistories[symbol] || [];
-                    if (history.length > 5) {
-                        evaluateStrategy(symbol, history, radarPrice);
-                    }
-                }
-            }
         }
-
+        
+        function updateMarketRadarTarget(symbol) { return; }
+        const processRadarTick = window.RadarManager ? window.RadarManager.processRadarTick : () => {};
+        // triggerRadarSignal is encapsulated inside radar.js
+        
         let sharedAudioCtx = null;
+
         function initAudio() {
             if (!window.userHasInteracted) return;
             // Non tentiamo di creare l'AudioContext se non c'è stata interazione
