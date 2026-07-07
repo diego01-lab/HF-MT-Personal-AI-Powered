@@ -87,11 +87,11 @@ window.StatusBarManager = (function() {
         // Simulazione CPU
         const cpuSim = Math.floor(Math.random() * 5) + (currentFPS < 30 ? 10 : 2);
 
-        engineStatusEl.innerHTML = \`
-            API: <span style="color: \${pingColor}; font-family: monospace;">\${pingText}</span> |
-            UI: <span style="color: \${fpsColor}; font-family: monospace;">\${currentFPS}fps</span> |
-            SYS: <span style="color: var(--text-secondary); font-family: monospace;">\${cpuSim}%</span>
-        \`;
+        engineStatusEl.innerHTML = `
+            API: <span style="color: ${pingColor}; font-family: monospace;">${pingText}</span> |
+            UI: <span style="color: ${fpsColor}; font-family: monospace;">${currentFPS}fps</span> |
+            SYS: <span style="color: var(--text-secondary); font-family: monospace;">${cpuSim}%</span>
+        `;
     }
 
     return {
