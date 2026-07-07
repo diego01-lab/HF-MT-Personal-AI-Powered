@@ -749,6 +749,7 @@ let finnhubApiKey = localStorage.getItem('finnhub_api_key') || '';
 window.finnhubForbidden = localStorage.getItem('finnhub_candles_forbidden') === 'true';
 let useFinnhubData = localStorage.getItem('sim_use_finnhub') !== 'false';
 let bgFinnhubWs = null;
+        const wsThrottleMap = {};
 let bgAlpacaWs = null;
 let bgAlpacaCryptoWs = null;
 let alpacaCryptoAuthenticated = false;
@@ -6698,6 +6699,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (sym.startsWith('BINANCE:')) sym = sym.replace('BINANCE:', '');
                             const price = trade.p;
                             globalPrices[sym] = price;
+
+                            if (now - (wsThrottleMap[sym] || 0) < 500) return;
+                            wsThrottleMap[sym] = now;
 
                             updateBackgroundHistoryAndStrategy(sym, price, now, getAssetType(sym), 'fh');
                             processRadarTick(sym, price, now, getAssetType(sym));

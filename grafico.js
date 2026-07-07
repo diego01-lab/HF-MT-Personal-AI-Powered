@@ -184,13 +184,16 @@ window.ChartManager = (function() {
         
         if (!chartUpdatePending) {
             chartUpdatePending = true;
-            requestAnimationFrame(() => {
-                chartUpdatePending = false;
-                if (!candleSeries || !currentCandle) return;
-                try {
-                    candleSeries.update(currentCandle);
-                } catch(e) {}
-            });
+            // Throttle rendering at 250ms (4 FPS) to prevent requestAnimationFrame violations
+            setTimeout(() => {
+                requestAnimationFrame(() => {
+                    chartUpdatePending = false;
+                    if (!candleSeries || !currentCandle) return;
+                    try {
+                        candleSeries.update(currentCandle);
+                    } catch(e) {}
+                });
+            }, 250);
         }
     }
 
