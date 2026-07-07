@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "public": true,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "buildCommand": "npm run build",
+  "outputDirectory": "www",
+  "framework": null,
+  "rewrites": [
+    { "source": "/proxy/alpaca/(.*)", "destination": "https://paper-api.alpaca.markets/$1" },
+    { "source": "/proxy/alpaca-data/(.*)", "destination": "https://data.alpaca.markets/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

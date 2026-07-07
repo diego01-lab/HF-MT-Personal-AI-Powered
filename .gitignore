@@ -1,0 +1,27 @@
+# Dipendenze
+node_modules/
+
+# Chiavi e segreti — MAI committare
+keys.json
+alpaca_acc.json
+*.pem
+.env
+.env.local
+
+# Build / artefatti
+dist/
+build/
+www/
+*.zip
+
+# Log e cache
+*.log
+npm-debug.log*
+.cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

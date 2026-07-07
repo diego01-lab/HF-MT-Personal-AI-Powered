@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Content-Security-Policy: difesa XSS. Allowlist minima per i servizi usati:
+         unpkg (grafico), Google Identity (login), Google Fonts, Alpaca/Finnhub
+         (REST + WebSocket). 'unsafe-inline' negli script è richiesto dagli
+         handler onclick inline generati dinamicamente dall'app. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+        script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com;
+        font-src 'self' https://fonts.gstatic.com;
+        img-src 'self' data: https:;
+        connect-src 'self' https://paper-api.alpaca.markets https://api.alpaca.markets https://data.alpaca.markets wss://stream.data.alpaca.markets wss://ws.finnhub.io https://finnhub.io https://accounts.google.com;
+        frame-src https://accounts.google.com;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self'">
+    <title>HF MT Personal AI Powered — Multi-Asset Trading</title>
+    <meta name="description"
+        content="Simulatore di trading ad alta frequenza multi-asset con dati in tempo reale su Crypto, Azioni, Forex e Materie Prime.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"
+        integrity="sha384-2Yiz1jBuc53MdRCA3ojcpk7cAoW2uFfKcetY6JKbqUetb537Hq2uPJrqM1Mj2AKx" crossorigin="anonymous"
+        defer></script>
+    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <meta name="theme-color" content="#0f172a">
+    <!-- Google Sign-In: sul web la libreria GSI viene caricata SOLO al click sul
+         pulsante "Accedi con Google" (initGoogleLoginButton in app.js), così la sola
+         apertura della schermata di login non contatta Google e non genera l'errore
+         "origin not allowed". In Capacitor (app nativa) il pulsante resta VISIBILE e
+         usa il plugin nativo @capgo/capacitor-social-login. La classe 'no-gsi' serve
+         solo a nascondere il widget GSI web ufficiale (contenitore vuoto), NON il
+         pulsante custom. -->
+    <script>
+        (function () {
+            if (window.Capacitor) document.documentElement.classList.add('no-gsi');
+        })();
+    </script>
+
+    <script>
+        // Funzione di callback globale per Google Login (definita subito)
+        window.handleCredentialResponse = function (response) {
+            console.log("Google Auth: Ricevuta risposta da Google...");
+            if (typeof window.processGoogleLogin === 'function') {
+                window.processGoogleLogin(response);
+            } else {
+                // Fallback se app.js non è ancora caricato
+                localStorage.setItem('pending_google_login', response.credential);
+                if (window.useAlpacaBroker) {
+                    // Alpaca is active, no other broker state to reset
+                }
+            };
+        };
+    </script>
+</head>
+
+<body>
+    <!-- Il disclaimer bloccante "App Educativa" al primo avvio è stato rimosso:
+         l'app opera anche in trading REALE (ALrt), quindi quella dicitura era
+         errata. Il consenso legale (18+, ToS/EULA/Privacy) resta obbligatorio ed
+         è raccolto dalla checkbox nella schermata di login qui sotto. -->
+
+    <!-- Google Login Overlay -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-card glass-panel">
+            <div class="login-header">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="url(#gradient-login)"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <defs>
+                        <linearGradient id="gradient-login" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#8b5cf6" />
+                        </linearGradient>
+                    </defs>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <h1>HF MT Personal AI Powered</h1>
+                <p>Multi-asset algorithmic trading platform · Adaptive, self-learning AI</p>
+                <div class="login-divider"></div>
+                <p class="login-instruction">Trading multi-asset (Crypto, Azioni, Forex, Materie Prime) su conti Test,
+                    Alpaca Paper e Reale. Accedi con Google per aprire la dashboard e avviare la sessione.</p>
+            </div>
+
+            <!-- Consenso legale OBBLIGATORIO: finché la checkbox non è spuntata i
+                 pulsanti Google e Ospite restano bloccati (classe .consent-required
+                 su #loginActions). Il consenso viene registrato e mantenuto nel DB
+                 locale (localStorage 'sim_legal_accepted'). Il testo con i 3 link è
+                 rigenerato da renderLegalTexts() nella lingua corrente. -->
+            <label class="login-consent-row" for="loginConsentCheck">
+                <input type="checkbox" id="loginConsentCheck">
+                <p id="legalConsent" class="legal-consent">Dichiaro di avere almeno 18 anni
+                    (o l'età legale) e accetto i
+                    <a href="#" onclick="event.stopPropagation(); window.openLegalDoc('tos'); return false;">Termini di
+                        Servizio</a>,
+                    l'<a href="#" onclick="event.stopPropagation(); window.openLegalDoc('eula'); return false;">EULA</a>
+                    e la
+                    <a href="#" onclick="event.stopPropagation(); window.openLegalDoc('privacy'); return false;">Privacy
+                        Policy</a>.
+                </p>
+            </label>
+
+            <div id="loginActions" class="login-actions consent-required">
+                <!-- Pulsante Google custom: la libreria GSI (e quindi la chiamata a
+                     Google) parte SOLO al click, gestita da initGoogleLoginButton in
+                     app.js. Niente auto-render all'avvio => niente errore in console. -->
+                <button id="googleLoginBtn" class="google-login-btn" type="button">
+                    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                        <path fill="#EA4335"
+                            d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                        <path fill="#4285F4"
+                            d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                        <path fill="#FBBC05"
+                            d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                        <path fill="#34A853"
+                            d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                    </svg>
+                    <span id="googleLoginBtnLabel">Accedi con Google</span>
+                </button>
+
+                <div style="margin-top: 15px;">
+                    <button id="guestBtn" onclick="window.enterAsGuest()"
+                        style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; width: 100%; transition: all 0.2s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                        Enter as Guest (No saving)
+                    </button>
+                </div>
+            </div>
+
+            <p class="login-footer">Secure. Professional. Real-time.</p>
+            <!-- Etichetta build: serve a confermare a colpo d'occhio quale APK è
+                 installato (l'artifact GitHub ha lo stesso nome a ogni build). -->
+            <p class="login-build" id="loginBuildTag"
+                style="margin-top:6px; font-size:0.62rem; letter-spacing:0.08em; color:rgba(148,163,184,0.45); text-align:center;">
+                v.1.0.01a</p>
+        </div>
+    </div>
+
+    <!-- Onboarding broker OBBLIGATORIO: mostrato al primo accesso (dopo consenso +
+         login Google/Ospite) se non è configurata NESSUNA chiave broker. Serve almeno
+         un broker per ricevere dati di mercato (radar + grafico) e poter operare.
+         z-index sotto le modali (10000) così le schermate chiavi appaiono sopra. -->
+    <div id="onboardingOverlay" class="login-overlay hidden" style="z-index: 9990;">
+        <div class="login-card glass-panel" style="max-width: 480px; text-align: center;">
+            <h1 style="font-size: 1.4rem; margin: 0 0 6px;">Collega un broker per iniziare</h1>
+            <p class="login-instruction" style="margin-bottom: 18px !important;">Per ricevere i dati di mercato
+                (Radar e grafico) e per operare serve <b>almeno un broker</b>. Configurali in ordine — puoi anche
+                collegarne uno solo.</p>
+
+            <div class="onb-step">
+                <div class="onb-step-info">
+                    <div class="onb-step-title">1 · Finnhub <span class="onb-badge" id="onbStatusFinnhub">Da
+                            configurare</span></div>
+                    <div class="onb-step-cats">Azioni USA · Forex · Materie Prime — dati reali, denaro virtuale</div>
+                </div>
+                <button type="button" class="btn btn-secondary onb-btn" id="onbBtnFinnhub">Configura</button>
+            </div>
+            <div class="onb-step">
+                <div class="onb-step-info">
+                    <div class="onb-step-title">2 · Alpaca Paper <span class="onb-badge" id="onbStatusAlpacaPaper">Da
+                            configurare</span></div>
+                    <div class="onb-step-cats">Crypto · Azioni USA — paper, denaro virtuale</div>
+                </div>
+                <button type="button" class="btn btn-secondary onb-btn" id="onbBtnAlpacaPaper">Configura</button>
+            </div>
+            <div class="onb-step">
+                <div class="onb-step-info">
+                    <div class="onb-step-title">3 · Alpaca (reale) <span class="onb-badge" id="onbStatusAlpacaLive">Da
+                            configurare</span></div>
+                    <div class="onb-step-cats">Crypto · Azioni USA — <b>DENARO REALE</b></div>
+                </div>
+                <button type="button" class="btn btn-secondary onb-btn" id="onbBtnAlpacaLive">Configura</button>
+            </div>
+
+            <button type="button" class="google-login-btn" id="onbEnterBtn" disabled
+                style="margin-top: 16px; opacity: 0.5; cursor: not-allowed; justify-content: center;">
+                Configura almeno un broker per continuare</button>
+        </div>
+    </div>
+
+    <div class="app-container blurred" id="appMain">
+
+
+        <!-- Header -->
+        <header class="app-header glass-panel">
+            <div class="logo">
+                <!-- Versione app: riga propria SOPRA il nome dell'app. Valorizzata da APP_VERSION (app.js). -->
+                <span id="appVersion"
+                    style="flex-basis:100%; margin:0 0 1px; font-size:0.68rem; font-weight:700; color:#60a5fa; letter-spacing:0.04em;">v.1.0.01a</span>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#gradient)" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#8b5cf6" />
+                        </linearGradient>
+                    </defs>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <h1><span id="lblAppTitle">Simulatore HFT</span> <span class="badge">LIVE</span> <span
+                        id="testModeBadge"
+                        style="display:none; font-size:0.65rem; background:#f59e0b22; color:#f59e0b; border:1px solid #f59e0b66; border-radius:4px; padding:2px 7px; font-weight:700; letter-spacing:0.05em;">Virtual</span>
+                </h1>
+                <!-- Impostazioni: ingranaggio grigio + pannello (volume, audio on/off, info app) -->
+                <div class="settings-wrap" style="position:relative; display:inline-flex;">
+                    <button id="btnAppSettings" class="btn-info-circle" data-tooltip="Impostazioni applicazione"
+                        style="color:#9ca3af; border-color:rgba(156,163,175,0.4);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                    <div id="appSettingsPanel" class="app-settings-panel hidden">
+                        <h4 id="lblSettingsTitle" class="settings-title">Impostazioni</h4>
+                        <div class="settings-row">
+                            <span id="lblAppVolume">Volume audio</span>
+                            <input type="range" id="appVolumeSlider" min="0" max="100" step="1" value="100"
+                                style="flex:1; min-width:90px; accent-color:#3b82f6;">
+                            <span id="appVolumeValue" class="settings-vol-val">100%</span>
+                        </div>
+                        <div class="settings-row">
+                            <span id="lblSoundOnOff">Attiva/disattiva audio</span>
+                            <button id="btnToggleSound" class="btn-logout"
+                                data-tooltip="Attiva/Disattiva suoni di sistema">
+                                <span id="soundIcon">🔊</span>
+                            </button>
+                        </div>
+                        <div class="settings-row">
+                            <span id="lblAppInfoRow">Informazioni sull'app</span>
+                            <button id="btnAppInfo" class="btn-info-circle" data-tooltip="App Information">?</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Language Selector -->
+                <select id="langSelector"
+                    style="margin-left: 15px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; cursor: pointer; outline: none;">
+                    <option value="IT">🇮🇹 IT</option>
+                    <option value="EN">🇺🇸 EN</option>
+                    <option value="ES">🇪🇸 ES</option>
+                    <option value="FR">🇫🇷 FR</option>
+                    <option value="DE">🇩🇪 DE</option>
+                </select>
+
+                <!-- Top Clock: data e ora correnti, sotto il titolo (aggiornato da updateTopClock in app.js) -->
+                <div id="topClock" class="top-clock"
+                    style="flex-basis: 100%; margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span id="topClockText">--/--/---- --:--:--</span>
+                </div>
+            </div>
+
+            <div class="header-portfolio">
+                <div class="header-portfolio-label" id="lblPortfolio">Equity Account</div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <div class="header-portfolio-balance" id="walletBalance">$0.00</div>
+                </div>
+            </div>
+            <div class="broker-controls"
+                style="display: flex; flex-direction: column; align-items: center; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 8px;">
+                <!-- Label top -->
+                <span id="lblBrokerConnections"
+                    style="font-size:0.6rem; font-weight:600; color:var(--text-secondary); letter-spacing:0.08em; text-transform:uppercase;">Connessioni
+                    Broker</span>
+                <!-- Icons row -->
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <!-- Finnhub btn -->
+                    <button id="apiSettingsBtn" class="api-btn"
+                        data-tooltip="Configura Finnhub (Stocks/Forex) — denaro virtuale"
+                        style="width:32px; height:32px; min-width:32px; display:flex; align-items:center; justify-content:center; padding:0;">
+                        <span
+                            style="font-weight:900; color:#00aff0; font-family:'Inter',sans-serif; font-size:1.1rem;">F</span>
+                    </button>
+
+                    <!-- Alpaca Paper btn -->
+                    <button id="alpacaSettingsBtn" class="api-btn" data-tooltip="Alpaca Paper — denaro virtuale"
+                        style="width:32px; height:32px; min-width:32px; display:flex; align-items:center; justify-content:center; padding:0; color:#60a5fa; border-color:rgba(96,165,250,0.3);">
+                        <img src="https://alpaca.markets/static/alpaca-logo.png" alt="Alpaca"
+                            style="width:18px; height:18px; filter:brightness(0) invert(1);">
+                    </button>
+
+                    <!-- Alpaca Trading API (REALE) btn -->
+                    <button id="alpacaLiveSettingsBtn" class="api-btn"
+                        data-tooltip="ALrt (Alpaca Trading API) — trading REALE (denaro reale)"
+                        style="width:32px; height:32px; min-width:32px; display:flex; align-items:center; justify-content:center; padding:0; color:#f87171; border-color:rgba(248,113,113,0.4);">
+                        <img src="https://alpaca.markets/static/alpaca-logo.png" alt="Alpaca Live"
+                            style="width:18px; height:18px; filter:brightness(0) invert(0.6) sepia(1) saturate(5) hue-rotate(-25deg);">
+                    </button>
+
+                    <!-- Capital.com Demo btn -->
+                    <button id="capitalSettingsBtn" class="api-btn"
+                        data-tooltip="Capital.com Demo — Forex/Materie Prime, denaro virtuale"
+                        style="width:32px; height:32px; min-width:32px; display:flex; align-items:center; justify-content:center; padding:0; border-color:rgba(52,211,153,0.35);">
+                        <span
+                            style="font-weight:900; color:#34d399; font-family:'Inter',sans-serif; font-size:1.0rem;">C</span>
+                    </button>
+
+                    <!-- Capital.com Trading (REALE) btn -->
+                    <button id="capitalLiveSettingsBtn" class="api-btn"
+                        data-tooltip="Capital.com Trading — REALE (denaro reale)"
+                        style="width:32px; height:32px; min-width:32px; display:flex; align-items:center; justify-content:center; padding:0; border-color:rgba(248,113,113,0.4);">
+                        <span
+                            style="font-weight:900; color:#f87171; font-family:'Inter',sans-serif; font-size:1.0rem;">C</span>
+                    </button>
+
+                    <!-- Status LED + leva bot: OGNI LEVA STA SOTTO IL SUO LED.
+                         La leva arma/disarma il motore di quel broker (più broker
+                         attivi contemporaneamente — Fase D2). -->
+                    <div class="broker-status-container">
+                        <div class="broker-status-col">
+                            <div class="broker-status" id="statusFH" data-tooltip="Stato Finnhub (Dati)">
+                                <span class="status-dot"></span>
+                                <span class="status-text">FH</span>
+                            </div>
+                            <label class="arm-switch"
+                                data-tooltip="Bot su Finnhub (Test): ON = trada anche in background"><input
+                                    type="checkbox" id="armFH"><span class="arm-slider"></span></label>
+                        </div>
+                        <div class="broker-status-col">
+                            <div class="broker-status" id="statusAL"
+                                data-tooltip="Stato Alpaca Paper (Broker) — denaro virtuale">
+                                <span class="status-dot"></span>
+                                <span class="status-text">ALP</span>
+                            </div>
+                            <label class="arm-switch"
+                                data-tooltip="Bot su Alpaca Paper: ON = armato (opera quando la sua scheda è attiva)"><input
+                                    type="checkbox" id="armALP"><span class="arm-slider"></span></label>
+                        </div>
+                        <div class="broker-status-col">
+                            <div class="broker-status" id="statusALrt"
+                                data-tooltip="Stato ALrt (Alpaca Trading API) — trading REALE">
+                                <span class="status-dot"></span>
+                                <span class="status-text">ALrt</span>
+                            </div>
+                            <label class="arm-switch"
+                                data-tooltip="Bot su Alpaca REALE: ON = armato (opera quando la sua scheda è attiva)"><input
+                                    type="checkbox" id="armALrt"><span class="arm-slider"></span></label>
+                        </div>
+                        <div class="broker-status-col">
+                            <div class="broker-status" id="statusCAP" data-tooltip="Stato Capital.com Demo (feed dati)">
+                                <span class="status-dot"></span>
+                                <span class="status-text">CAP</span>
+                            </div>
+                            <label class="arm-switch"
+                                data-tooltip="Bot su Capital.com Demo: ON = trada anche in background"><input
+                                    type="checkbox" id="armCAPD"><span class="arm-slider"></span></label>
+                        </div>
+                        <div class="broker-status-col">
+                            <div class="broker-status" id="statusCAPL"
+                                data-tooltip="Stato Capital.com Trading (conto REALE)">
+                                <span class="status-dot"></span>
+                                <span class="status-text">CAPrt</span>
+                            </div>
+                            <label class="arm-switch"
+                                data-tooltip="Bot su Capital.com Trading (REALE): ON = armato"><input type="checkbox"
+                                    id="armCAPL"><span class="arm-slider"></span></label>
+                        </div>
+                    </div>
+
+                    <!-- Elementi nascosti mantenuti per compatibilità con la logica esistente -->
+                    <div id="testModeToggleBox" style="display:none;">
+                        <input type="checkbox" id="testModeToggle">
+                        <input type="range" id="brokerTriSwitch" min="0" max="4" step="1" value="0" aria-hidden="true">
+                        <span id="testModeLabel"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Orari di Mercato (compatto, stile in styles.css) -->
+            <div class="market-hours-card">
+                <h2 id="lblMarketHours">Orari di Mercato</h2>
+                <ul class="market-list">
+                    <li id="lblCryptoTooltip" data-tooltip="Criptovalute — Mercato attivo 24/7. Dati via WebSocket.">
+                        <span class="market-name">₿</span>
+                        <span class="market-time status-open" id="cryptoStatus">L-D · 24/7</span>
+                    </li>
+                    <li id="lblStockTooltip"
+                        data-tooltip="Azioni USA (NYSE/NASDAQ): Lun-Ven 15:30 - 22:00 ora italiana.">
+                        <span class="market-name">📈</span>
+                        <span class="market-time" id="stockStatus">L-V · 15:30-22:00</span>
+                    </li>
+                    <li id="lblForexTooltip"
+                        data-tooltip="Forex — aperto Lun-Ven 24h. Dati via Finnhub (API Key richiesta).">
+                        <span class="market-name">💱</span>
+                        <span class="market-time" id="forexStatus">L-V · 24h</span>
+                    </li>
+                    <li id="lblCommodityTooltip"
+                        data-tooltip="Materie Prime (Oro, Argento, Petrolio) — aperte Lun-Ven 24h. Dati via Finnhub.">
+                        <span class="market-name">🥇</span>
+                        <span class="market-time" id="commodityStatus">L-V · 24h</span>
+                    </li>
+                </ul>
+            </div>
+
+
+            <!-- User Profile (New) -->
+            <div id="userProfile" class="user-profile hidden">
+                <div class="user-info">
+                    <span id="userName" class="user-name">Utente</span>
+                    <img id="userPicture" class="user-picture" src="" alt="Avatar">
+                </div>
+                <!-- Il toggle audio è stato spostato nel pannello Impostazioni (ingranaggio) -->
+                <button id="btnLogout" class="btn-logout" data-tooltip="Esci dall'account Google">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- ═══ Schede Broker: una dashboard per ogni broker service ═══
+             Cliccando una scheda l'intera dashboard passa al contesto di quel
+             broker (dati, capitale, posizioni). Sincronizzata col selettore a
+             5 stadi (stessa logica applyBrokerSwitch). Su mobile scorre in
+             orizzontale. Fase attuale: un motore attivo alla volta; il trading
+             simultaneo multi-broker è la fase successiva (stato per-broker). -->
+        <nav id="brokerTabs" class="broker-tabs" aria-label="Selezione dashboard broker">
+            <button type="button" class="broker-tab active" data-stage="0" id="tabFH">
+                <span class="bt-ico" style="color:#00aff0;">Ⓕ</span> Finnhub</button>
+            <button type="button" class="broker-tab" data-stage="1" id="tabALP">
+                <span class="bt-ico" style="color:#60a5fa;">🦙</span> Alpaca Paper</button>
+            <button type="button" class="broker-tab" data-stage="2" id="tabALrt">
+                <span class="bt-ico" style="color:#f87171;">🦙</span> Alpaca real Trading</button>
+            <button type="button" class="broker-tab" data-stage="3" id="tabCAPD">
+                <span class="bt-ico" style="color:#34d399;">Ⓒ</span> Capital.com Demo</button>
+            <button type="button" class="broker-tab" data-stage="4" id="tabCAPL">
+                <span class="bt-ico" style="color:#f59e0b;">Ⓒ</span> Capital.com trading</button>
+        </nav>
+
+        <!-- Main Content Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Sidebar -->
+            <aside class="left-sidebar">
+                <!-- Market Radar -->
+                <div class="radar-card glass-panel glow panel-cell">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 id="radarHeading"
+                            data-tooltip="Scansione in tempo reale di TUTTI i mercati (Crypto, Stocks, Forex, Commodities).">
+                            <span id="lblRadarTitle">Market Radar</span> <span class="pulse"
+                                style="display:inline-block; margin-left: 8px;"></span>
+                        </h2>
+                        <span id="radarCategory" class="radar-cat-badge cat-all"
+                            data-tooltip="Il radar monitora contemporaneamente tutti i mercati globali">LIVE
+                            GLOBALE</span>
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 8px 0 12px;" id="radarDesc">
+                        Monitoraggio globale multi-asset attivo...</p>
+                    <div id="engineStatus"
+                        style="font-size: 0.7rem; color: var(--text-secondary); margin: -6px 0 10px; min-height: 14px;">
+                    </div>
+                    <div id="radarList" class="radar-scroll-list"></div>
+                </div>
+
+
+            </aside>
+
+            <section class="middle-column-section">
+                <!-- ROW: Gestione Capitale + Pannello Prestazioni affiancati -->
+                <div class="capital-perf-row">
+                    <!-- GESTIONE CAPITALE (COMPLIANT ALPACA) -->
+                    <div class="wallet-card glass-panel glow panel-cell"
+                        style="border-color: #3b82f6; margin-bottom: 0;">
+
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="panel-icon"
+                                    style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; padding: 8px; border-radius: 8px;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="2" y1="10" x2="22" y2="10"></line>
+                                    </svg>
+                                </div>
+                                <h2 id="lblCapitalManagement"
+                                    style="font-size: 1.1rem; color: #fff; margin: 0; font-weight: 700;">Gestione
+                                    Capitale</h2>
+                            </div>
+                            <div style="text-align: right;">
+                                <div id="sessionROI"
+                                    data-tooltip="Rendimento percentuale della sessione corrente rispetto alla chiusura precedente."
+                                    style="font-size: 1.1rem; font-weight: 800; color: #10b981;">+0.00%</div>
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;"
+                                    id="lblRoiDaily">ROI Giornaliero</div>
+                            </div>
+                        </div>
+
+                        <div class="capital-main-display" id="boxEquity"
+                            data-tooltip="Valore totale del conto (Liquidità + Valore di Mercato delle posizioni). Questo è il valore reale del tuo portafoglio."
+                            style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.05) 100%); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 10px 14px; text-align: center; margin-bottom: 10px; position: relative; overflow: hidden; cursor: help;">
+                            <div style="position: absolute; top: -10px; right: -10px; opacity: 0.05;">
+                                <svg width="100" height="100" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.21 1.87 1.15 0 1.94-.51 1.94-1.54 0-.95-.66-1.41-2.47-1.87-2.02-.53-3.46-1.34-3.46-3.32 0-1.54 1.07-2.83 2.73-3.26V5h2.67v1.89c1.37.26 2.58 1.15 2.76 2.71h-1.92c-.16-.94-.77-1.44-1.75-1.44-1 0-1.75.46-1.75 1.34 0 .91.79 1.25 2.56 1.7 1.87.47 3.37 1.29 3.37 3.4 0 1.87-1.32 3.12-3.1 3.49z" />
+                                </svg>
+                            </div>
+                            <div class="cap-label"
+                                style="font-size: 0.7rem; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px;"
+                                id="lblEquityTotal">Equity Totale (Net Value)</div>
+                            <div id="tradingCapital" class="cap-val"
+                                style="font-size: 1.6rem; font-weight: 800; color: #fff; text-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                                $0.00</div>
+                        </div>
+
+                        <div class="capital-grid"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                            <div class="capital-item glass-panel" id="boxInitialCap"
+                                data-tooltip="Valore del portafoglio all'inizio della sessione o alla chiusura del giorno precedente."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblInitialCapTitle">Capitale Iniziale</div>
+                                <div id="initialCapital" style="font-size: 1rem; font-weight: 700; color: #94a3b8;">
+                                    $0.00</div>
+                            </div>
+                            <div class="capital-item glass-panel" id="boxCash"
+                                data-tooltip="Liquidità disponibile nel conto per nuovi ordini o prelievi (Cash)."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblCashBalance">Saldo Cash</div>
+                                <div id="walletBalanceSide" style="font-size: 1rem; font-weight: 700; color: #f8fafc;">
+                                    $0.00</div>
+                            </div>
+                            <div class="capital-item glass-panel" id="boxBuyingPower"
+                                data-tooltip="Capitale totale disponibile per il trading, inclusa l'eventuale leva finanziaria (Buying Power)."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblBuyingPower">Potere Acquisto</div>
+                                <div id="availableMargin" style="font-size: 1rem; font-weight: 700; color: #3b82f6;">
+                                    $0.00</div>
+                            </div>
+                            <div class="capital-item glass-panel" id="boxMarketValue"
+                                data-tooltip="Valore attuale totale di tutte le posizioni aperte (Long + Short)."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblMarketValue">Valore Mercato</div>
+                                <div id="totalInvested" style="font-size: 1rem; font-weight: 700; color: #f59e0b;">$0.00
+                                </div>
+                            </div>
+                            <div class="capital-item glass-panel" id="boxDepositedTotal"
+                                data-tooltip="Totale dei capitali caricati nel portafoglio di QUESTO broker dal momento dell'apertura (versamenti cumulativi)."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblDepositedTotal">Capitale Versato Tot.</div>
+                                <div id="depositedTotal" style="font-size: 1rem; font-weight: 700; color: #a78bfa;">
+                                    $0.00</div>
+                            </div>
+                            <div class="capital-item glass-panel" id="boxCurrentCapital"
+                                data-tooltip="Capitale attuale = capitali versati − perdite + profitti di TUTTO lo storico del broker selezionato."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblCurrentCapital">Capitale Attuale</div>
+                                <div id="currentCapitalHist" style="font-size: 1rem; font-weight: 700; color: #f8fafc;">
+                                    <span id="currentCapitalVal">$0.00</span> <span id="currentCapitalDelta"
+                                        style="font-size:0.7rem; font-weight:600;"></span>
+                                </div>
+                            </div>
+                            <div class="capital-item glass-panel" id="boxPnlDaily"
+                                data-tooltip="Guadagno o perdita totale generata nella sessione corrente (Realized + Unrealized)."
+                                style="grid-column: span 2; padding: 12px; border-radius: 10px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.1); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblPnlDaily">PnL Giornaliero</div>
+                                <div id="sessionRevenue" style="font-size: 1.1rem; font-weight: 800; color: #10b981;">
+                                    $0.00</div>
+                            </div>
+                        </div>
+
+                        <div id="syncBadgeContainer"
+                            style="text-align: center; flex: 0 0 auto; margin-bottom: 0; padding: 2px 10px; border-radius: 8px;">
+                            <span id="syncBadgeBroker"
+                                style="display:none; font-size: 0.7rem; color: #3b82f6; text-transform: uppercase; font-weight: bold;">Sincronizzato
+                                con Alpaca</span>
+                            <span id="syncBadgeTest"
+                                style="display:none; font-size: 0.7rem; color: #f59e0b; text-transform: uppercase; font-weight: bold;">Modalità
+                                Test Locale — DB Locale</span>
+                        </div>
+
+                        <div style="height: 1px; background: rgba(255,255,255,0.05); margin-bottom: 20px;"></div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;"
+                            id="boxTradeQty"
+                            data-tooltip="Percentuale del capitale operativo da destinare a ogni singola operazione.">
+                            <h2 id="lblTradeQty" class="sidebar-section-title"
+                                style="margin: 0; font-size: 0.9rem; cursor: help;">Dimensione Ordine</h2>
+                            <span id="investPctLabel"
+                                style="font-size: 1rem; font-weight: 800; color: #3b82f6;">25%</span>
+                        </div>
+
+                        <div class="invest-chips" style="margin-bottom: 16px;">
+                            <button class="invest-chip" data-pct="10">10%</button>
+                            <button class="invest-chip active" data-pct="25">25%</button>
+                            <button class="invest-chip" data-pct="50">50%</button>
+                            <button class="invest-chip" data-pct="100">MAX</button>
+                        </div>
+
+                        <!-- Hidden Input for compatibility -->
+                        <input type="hidden" id="investAmount" value="25" />
+
+                        <div class="invest-slider-wrap" style="margin-bottom: 20px;">
+                            <input type="range" id="investSlider" min="1" max="100" value="10" step="1"
+                                class="invest-slider" style="width: 100%; height: 6px; accent-color: #3b82f6;" />
+                        </div>
+
+                        <div class="invest-preview-big"
+                            style="background: rgba(0,0,0,0.3); border-radius: 10px; padding: 15px; margin-bottom: 24px;">
+                            <span id="lblStimaBuyingPower"
+                                style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 4px;">Stima
+                                Ordine (Buying Power)</span>
+                            <div id="investPreviewAmt" style="font-size: 1.5rem; font-weight: 800; color: #fff;">$0.00
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div id="boxTakeProfit"
+                                data-tooltip="Percentuale di guadagno al raggiungimento della quale la posizione viene chiusa automaticamente.">
+                                <label id="lblTargetProfitLabel"
+                                    style="font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px; display: block; cursor: help;">Take
+                                    Profit (%)</label>
+                                <input type="number" id="botTargetProfit" value="1.5" step="0.10"
+                                    style="width: 100%; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); color: #10b981; padding: 8px; border-radius: 6px; font-weight: bold; text-align: center;" />
+                            </div>
+                            <div id="boxStopLoss"
+                                data-tooltip="Percentuale massima di perdita accettata prima della chiusura automatica. Imposta 0 per disattivare (Modalità No-Loss).">
+                                <label id="lblStopLossLabel"
+                                    style="font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px; display: block; cursor: help;">Stop
+                                    Loss (%)</label>
+                                <input type="number" id="botStopLoss" value="1" step="0.10"
+                                    style="width: 100%; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; padding: 8px; border-radius: 6px; font-weight: bold; text-align: center;" />
+                            </div>
+                        </div>
+
+                        <!-- Session Budget Cap (test mode only) -->
+                        <div id="sessionBudgetContainer" style="margin-top: 14px;"
+                            data-tooltip="Limita il capitale totale che il bot può impiegare in questa sessione. Solo in modalità Test.">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label id="lblSessionBudget"
+                                    style="font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; cursor: help;">💼
+                                    Budget Sessione ($)</label>
+                                <span id="sessionBudgetStatus"
+                                    style="font-size: 0.65rem; color: #f59e0b; font-weight: 600;"></span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="number" id="sessionBudgetInput" value="500" min="0" step="100"
+                                    style="flex: 1; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.25); color: #f59e0b; padding: 8px; border-radius: 6px; font-weight: bold; text-align: center;"
+                                    placeholder="0 = illimitato" />
+                                <button id="btnResetBudget" title="Azzera il contatore sessione"
+                                    style="background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">↺</button>
+                            </div>
+                            <div id="sessionBudgetBar"
+                                style="margin-top: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; height: 4px; overflow: hidden; display: none;">
+                                <div id="sessionBudgetBarFill"
+                                    style="height: 100%; background: linear-gradient(90deg, #10b981, #f59e0b); border-radius: 4px; transition: width 0.4s ease; width: 0%;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    <!-- PANNELLO PRESTAZIONI (COMPLIANT ALPACA) -->
+                    <div class="stats-card glass-panel glow panel-cell" style="border-color: #8b5cf6;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <div style="display: flex; align-items: center; gap: 10px;" id="boxPerfPanel"
+                                data-tooltip="Analisi delle performance operative e finanziarie in tempo reale per la sessione corrente.">
+                                <div class="panel-icon"
+                                    style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6; padding: 8px; border-radius: 8px;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                                    </svg>
+                                </div>
+                                <h2 id="perfPanelTitle"
+                                    style="font-size: 1.1rem; color: #fff; margin: 0; font-weight: 700; cursor: help;">
+                                    Analisi Prestazioni</h2>
+                            </div>
+                            <div id="botStatus" class="status-badge"
+                                style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 0.65rem; padding: 4px 10px; border-radius: 20px; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3);">
+                                AI ATTIVA</div>
+                        </div>
+
+                        <div class="stats-grid-modern"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                            <div class="stat-card-mini glass-panel" id="boxTradesToday"
+                                data-tooltip="Numero totale di esecuzioni (buy/sell) completate nella giornata."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblTradesToday">Operazioni Oggi</span>
+                                <div id="totalTrades" style="font-size: 1.4rem; font-weight: 800; color: #fff;">0</div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxWinRate"
+                                data-tooltip="Percentuale di operazioni chiuse in profitto rispetto al totale."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblWinRateTitle">Win Rate</span>
+                                <div id="winRate" style="font-size: 1.4rem; font-weight: 800; color: #8b5cf6;">0%</div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxGrossProfit"
+                                data-tooltip="Somma totale dei guadagni derivanti dalle sole operazioni chiuse in attivo."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblGrossProfitTitle">Profitto Lordo</span>
+                                <div id="grossProfit" style="font-size: 1.1rem; font-weight: 700; color: #10b981;">$0.00
+                                </div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxGrossLoss"
+                                data-tooltip="Somma totale delle perdite derivanti dalle sole operazioni chiuse in passivo."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblGrossLossTitle">Perdita Lorda</span>
+                                <div id="grossLoss" style="font-size: 1.1rem; font-weight: 700; color: #ef4444;">$0.00
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pnl-summary-card glass-panel"
+                            style="background: rgba(0,0,0,0.3); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 24px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);"
+                                id="boxPnlRealized"
+                                data-tooltip="Profitto o perdita netta derivante dalle posizioni già chiuse oggi.">
+                                <span style="font-size: 0.75rem; color: var(--text-secondary); cursor: help;"
+                                    id="lblPnlRealized">PnL Realizzato (Oggi)</span>
+                                <span id="totalPnL"
+                                    style="font-size: 0.9rem; font-weight: 800; color: #fff;">$0.00</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;" id="boxPnlUnrealized"
+                                data-tooltip="Guadagno o perdita latente delle posizioni attualmente aperte in portafoglio.">
+                                <span style="font-size: 0.75rem; color: var(--text-secondary); cursor: help;"
+                                    id="lblPnlUnrealized">PnL Non Realizzato</span>
+                                <span id="unrealizedPnL"
+                                    style="font-size: 0.9rem; font-weight: 800; color: #60a5fa;">$0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Live Prezzi (spostato dalla sidebar sinistra) -->
+                        <div class="market-overview" style="margin-top: 0;">
+                            <h2 id="lblLivePrices" style="font-size: 0.85rem; margin-bottom: 10px;">Live Prezzi</h2>
+                            <div class="overview-list" id="overviewList">
+                                <div class="overview-item" id="ov-CRYPTO">
+                                    <span class="ov-name">🪙 CRYPTO</span>
+                                    <span class="ov-price">Avg Performance</span>
+                                    <span class="ov-change">0.00%</span>
+                                </div>
+                                <div class="overview-item" id="ov-STOCK">
+                                    <span class="ov-name">📈 AZIONI USA</span>
+                                    <span class="ov-price">Avg Performance</span>
+                                    <span class="ov-change">0.00%</span>
+                                </div>
+                                <div class="overview-item" id="ov-FOREX">
+                                    <span class="ov-name">💱 FOREX</span>
+                                    <span class="ov-price">Avg Performance</span>
+                                    <span class="ov-change">0.00%</span>
+                                </div>
+                                <div class="overview-item" id="ov-COMMODITY">
+                                    <span class="ov-name">🥇 MATERIE PRIME</span>
+                                    <span class="ov-price">Avg Performance</span>
+                                    <span class="ov-change">0.00%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div> <!-- End of stats-card (which now only contains performance stats) -->
+
+                </div> <!-- End of 2-col row: Gestione Capitale + Pannello Prestazioni -->
+
+            </section>
+
+
+            <aside class="sidebar sidebar-right">
+                <!-- TOP GRID START -->
+                <div class="top-duo-grid">
+                    <!-- LEFT COLUMN -->
+                    <div class="auto-col panel-cell">
+                        <!-- Hidden toggles mantenuti per compatibilità logica JS -->
+                        <input type="checkbox" id="sidebarFinnhubToggle" style="display:none;">
+                        <input type="checkbox" id="sidebarAlpacaToggle" style="display:none;">
+                        <!-- Elementi status key box nascosti per aggiornamento label JS -->
+                        <span id="finnhubKeyStatus" style="display:none;"></span>
+                        <span id="alpacaKeyStatus" style="display:none;"></span>
+                        <!-- Trading Controls -->
+
+                        <div class="control-card glass-panel glow">
+                            <div class="mode-toggle-header">
+                                <div style="display: flex; flex-direction: column;">
+                                    <h2 id="lblAutoTrading" style="margin-bottom: 2px;">
+                                        Stato Sessione</h2>
+                                    <span id="sessionTimer"
+                                        style="font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 0.75rem; color: #3b82f6; margin-top: 4px; font-weight: bold;">00:00:00</span>
+                                </div>
+                                <!-- Bot Play/Pause Button: compatto, a destra dell'etichetta Trading Automatico -->
+                                <div id="botControlWrapper" style="margin-top: 0;">
+                                    <button id="btnStartBot" class="btn-bot-start btn-bot-compact"
+                                        data-tooltip="Avvia o metti in pausa l'algoritmo di trading automatico">
+                                        <span class="bot-icon">▶</span> AVVIA BOT AUTOMATICO
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Open Positions Limit -->
+                            <div
+                                style="margin-top: 10px; padding: 6px 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span id="lblMaxPos"
+                                        style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Limite
+                                        Posizioni Aperte</span>
+                                    <span id="maxPosValue" style="color: #3b82f6; font-weight: 700;">3</span>
+                                </div>
+                                <input type="range" id="maxPosSlider" min="1" max="30" value="3"
+                                    style="width: 100%; height: 4px; border-radius: 2px; cursor: pointer; accent-color: #3b82f6;">
+                            </div>
+
+                            <!-- Category Selection for Trading Bot -->
+                            <div style="margin-top: 10px;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <h3 id="lblBotCategories" class="sidebar-section-title"
+                                        style="font-size: 0.8rem; margin-bottom: 0; display: block;">Categorie Asset
+                                    </h3>
+                                </div>
+                                <div id="categorySelectionContainer"
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <!-- Category checkboxes injected by JS -->
+                                </div>
+                            </div>
+
+                            <!-- AI Mode Toggle (sotto le Categorie Trading Bot) -->
+                            <div id="aiModeWrapper"
+                                style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding: 4px 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px;">
+                                <span id="lblAiMode"
+                                    data-tooltip="Se disattivato usa incroci EMA. Se attivato usa analisi AI (RSI, MACD, BB) per i segnali."
+                                    style="font-size: 0.85rem; color: #60a5fa; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 1rem;">🤖</span> Modalità AI Avanzata
+                                </span>
+                                <label class="switch switch-ai" id="aiModeToggleLabel"
+                                    data-tooltip="Attiva/Disattiva intelligenza artificiale per il trading automatico">
+                                    <input type="checkbox" id="aiModeToggle" checked>
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+
+                            <div class="strategy-info-card"
+                                style="margin-top: 16px; background: rgba(0,0,0,0.15); border-radius: 10px;">
+                                <h2 style="font-size: 0.9rem; margin-bottom: 12px;"><span id="lblAlgoLogic">Logica
+                                        Algoritmo</span> <span id="algoTitle"
+                                        style="font-size: 0.65rem; color: #8b5cf6; font-weight: bold; float: right; margin-top: 4px;">AI
+                                        Avanzata</span></h2>
+                                <div class="strategy-content">
+                                    <!-- EMA LOGIC -->
+                                    <div id="logicEMA" style="display: none;">
+                                        <p style="font-size: 0.8rem; margin-bottom: 8px;" id="lblLogicEMA_desc">Il bot
+                                            utilizza due <strong>Medie Mobili Esponenziali (EMA)</strong>:</p>
+                                        <ul style="list-style: none; padding: 0; margin-bottom: 10px;">
+                                            <li
+                                                style="font-size: 0.75rem; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                                <span
+                                                    style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;"></span>
+                                                <strong id="lblEmaFast">EMA Veloce (5)</strong>
+                                            </li>
+                                            <li
+                                                style="font-size: 0.75rem; display: flex; align-items: center; gap: 6px;">
+                                                <span
+                                                    style="width: 8px; height: 8px; border-radius: 50%; background: #94a3b8;"></span>
+                                                <strong id="lblEmaSlow">EMA Lenta (15)</strong>
+                                            </li>
+                                        </ul>
+                                        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px;">
+                                            <div id="lblBuyRule"
+                                                style="font-size: 0.75rem; color: #10b981; font-weight: bold; margin-bottom: 6px;">
+                                                ▲ BUY: EMA 5 supera EMA 15
+                                            </div>
+                                            <div id="lblSellRule"
+                                                style="font-size: 0.75rem; color: #ef4444; font-weight: bold;">
+                                                ▼ SELL: EMA 5 scende sotto EMA 15
+                                            </div>
+                                        </div>
+                                        <p id="lblOppositeSignal"
+                                            style="font-size: 0.7rem; margin-top: 10px; color: var(--text-secondary); line-height: 1.3; font-style: italic;">
+                                            In caso di segnale opposto, il bot inverte automaticamente la posizione.
+                                        </p>
+                                    </div>
+                                    <!-- AI LOGIC -->
+                                    <div id="logicAI">
+                                        <p style="font-size: 0.8rem; margin-bottom: 8px;" id="lblLogicAI_desc">
+                                            Valutazione
+                                            multi-fattoriale basata su:</p>
+                                        <div
+                                            style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; margin-top: 10px;">
+                                            <label
+                                                style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="aiModeSentiment" checked
+                                                    style="margin-top: 3px; accent-color: #8b5cf6;">
+                                                <div>
+                                                    <strong style="color: #c4b5fd; font-size: 0.85rem;">NLP Sentiment
+                                                        Analysis</strong>
+                                                    <p id="aiDescSentiment"
+                                                        style="font-size: 0.65rem; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.3;">
+                                                        Simula la lettura di news globali. Penalizza pesantemente le
+                                                        operazioni se rileva "panico" di mercato.</p>
+                                                </div>
+                                            </label>
+                                            <label
+                                                style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="aiModeLSTM" checked
+                                                    style="margin-top: 3px; accent-color: #3b82f6;">
+                                                <div>
+                                                    <strong style="color: #93c5fd; font-size: 0.85rem;">LSTM Neural
+                                                        Network</strong>
+                                                    <p id="aiDescLSTM"
+                                                        style="font-size: 0.65rem; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.3;">
+                                                        Simula un modello predittivo stocastico a breve termine che fa
+                                                        da
+                                                        filtro finale al trend.</p>
+                                                </div>
+                                            </label>
+                                            <label
+                                                style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="aiModeRisk" checked
+                                                    style="margin-top: 3px; accent-color: #10b981;">
+                                                <div>
+                                                    <strong style="color: #6ee7b7; font-size: 0.85rem;">Risk Management
+                                                        Adattivo</strong>
+                                                    <p id="aiDescRisk"
+                                                        style="font-size: 0.65rem; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.3;">
+                                                        Usa il Criterio di Kelly per calibrare l'importo e l'ATR per un
+                                                        Trailing Stop dinamico "insegui-prezzo".</p>
+                                                </div>
+                                            </label>
+                                            <label
+                                                style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="aiModeRL" checked
+                                                    style="margin-top: 3px; accent-color: #10b981;">
+                                                <div>
+                                                    <strong style="color: #34d399; font-size: 0.85rem;">Reinforcement
+                                                        Learning</strong>
+                                                    <p id="aiDescRL"
+                                                        style="font-size: 0.65rem; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.3;">
+                                                        Il bot memorizza i fallimenti recenti su specifici asset per
+                                                        diventarne temporaneamente avverso.</p>
+                                                </div>
+                                            </label>
+                                            <label
+                                                style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="aiModeHedging" checked
+                                                    style="margin-top: 3px; accent-color: #f59e0b;">
+                                                <div>
+                                                    <strong style="color: #fcd34d; font-size: 0.85rem;">Hedging
+                                                        Strategico</strong>
+                                                    <p id="aiDescHedging"
+                                                        style="font-size: 0.65rem; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.3;">
+                                                        Se una posizione crolla bruscamente, simula l'apertura di una
+                                                        posizione short di emergenza per frenare le perdite.</p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Posizioni Aperte & Ordini in Attesa (colonna destra del Trading Automatico) -->
+                    <div class="positions-card glass-panel glow panel-cell"
+                        style="padding: 16px; border-color: #8b5cf6;">
+
+                        <!-- Posizioni Aperte con Tabs per Asset Class -->
+                        <div class="open-position-container" style="flex: 1;">
+                            <div class="pos-tabs-header">
+                                <h3 id="openPosTitle"
+                                    data-tooltip="Asset attualmente in portafoglio con guadagno/perdita calcolato in tempo reale (Unrealized PnL)."
+                                    style="font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap: 10px;">
+                                    Posizioni Aperte
+                                    <span id="openDailyNet"
+                                        style="font-size: 1.1rem; font-weight: 800; padding: 2px 8px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff;">$0.00</span>
+                                </h3>
+                                <!-- Contatore posizioni SALTATE dal bot (e perché): mostra a colpo d'occhio
+                                     quante mosse la strategia ha voluto ma il broker non ha eseguito
+                                     (es. SHORT crypto non consentito su Alpaca, cash, rifiuti, qty). -->
+                                <div id="skippedCounter" class="skipped-counter"
+                                    data-tooltip="Segnali che il bot ha generato ma NON ha potuto eseguire, con il motivo"
+                                    style="display:none; font-size:0.66rem; font-weight:600; color:#f59e0b; margin-bottom:8px; padding:4px 8px; background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.25); border-radius:6px;">
+                                    ⏭️ <span id="skippedLabel">Saltate</span>: <b id="skippedTotal">0</b>
+                                    <span id="skippedBreakdown"
+                                        style="color:var(--text-secondary); font-weight:500;"></span>
+                                </div>
+                                <div class="pos-tabs">
+                                    <button class="pos-tab" data-cat="CRYPTO" id="posTabCrypto"
+                                        data-tooltip="Filtra solo Crypto">₿ <span class="pos-count"
+                                            id="cnt-CRYPTO">0</span></button>
+                                    <button class="pos-tab" data-cat="STOCK" id="posTabStock"
+                                        data-tooltip="Filtra solo Azioni">📈 <span class="pos-count"
+                                            id="cnt-STOCK">0</span></button>
+                                    <button class="pos-tab" data-cat="FOREX" id="posTabForex"
+                                        data-tooltip="Filtra solo Forex">💱 <span class="pos-count"
+                                            id="cnt-FOREX">0</span></button>
+                                    <button class="pos-tab" data-cat="COMMODITY" id="posTabCommodity"
+                                        data-tooltip="Filtra solo materie prime">🥇 <span class="pos-count"
+                                            id="cnt-COMMODITY">0</span></button>
+                                </div>
+                            </div>
+                            <div id="openPositionsList" class="open-positions-list">
+                                <div class="open-position empty" id="lblNoOpenPositions">Nessuna posizione aperta</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ordini in Attesa Alpaca (colonna tra Posizioni Aperte e Cronologia) -->
+                    <div class="pending-card glass-panel glow panel-cell" id="pendingOrdersContainer"
+                        style="padding: 16px; border-color: #f59e0b; display: none;">
+                        <div class="pos-tabs-header">
+                            <h3 id="pendingOrdersTitle"
+                                style="color: #f59e0b; display: flex; align-items: center; gap: 8px; font-size: 0.9rem;">
+                                <span class="dot"
+                                    style="background: #f59e0b; width: 8px; height: 8px; border-radius: 50%;"></span>
+                                <span id="lblPendingOrdersText">Ordini (Alpaca)</span>
+                            </h3>
+                            <span class="pos-count" id="cnt-PENDING"
+                                style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">0</span>
+                        </div>
+                        <div id="pendingOrdersList" class="open-positions-list" style="flex: 1; max-height: none;">
+                            <div class="open-position empty" id="lblNoPendingOrders">Nessun ordine in attesa</div>
+                        </div>
+                    </div>
+
+                    <!-- Order History (SINISTRA) -->
+                    <div class="history-card glass-panel glow panel-cell" style="margin: 0;">
+
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <h2 id="lblHistoryTitle"
+                                data-tooltip="Storico di tutte le operazioni chiuse in questa sessione"
+                                style="margin:0; display:flex; align-items:center;">
+                                Cronologia
+                            </h2>
+                            <!-- Colonna a destra: tasto Cancella SOPRA il valore totale delle operazioni -->
+                            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                                <button id="btnClearHistory"
+                                    data-tooltip="Resetta statistiche e cronologia della sessione"
+                                    style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:#ef4444; border-radius:6px; padding:4px 10px; font-size:0.72rem; cursor:pointer; white-space:nowrap;">🗑️
+                                    Reset</button>
+                                <span id="historyDailyNet"
+                                    style="font-size: 1.1rem; font-weight: 800; padding: 2px 8px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff;">$0.00</span>
+                            </div>
+                        </div>
+                        <div class="history-header">
+                            <span id="lblTradeSide" data-tooltip="Direzione dell'operazione">Lato</span>
+                            <span id="lblTradePrice" data-tooltip="Prezzo di entrata e uscita">Prezzo</span>
+                            <span id="lblTradePnL" data-tooltip="Profitto o perdita realizzata">Prof./Perd.</span>
+                        </div>
+                        <div id="tradeList" class="trade-list">
+                            <div class="empty-state" id="lblWaitingSignals">In attesa di segnali...</div>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- TOP GRID END -->
+
+
+
+
+
+            </aside>
+
+
+            <section class="chart-section glass-panel"
+                style="grid-column: 1 / -1; height: 500px; min-height: 500px; margin-top: -14px;">
+                <!-- Chart Legend Overlay -->
+                <div class="chart-legend-overlay glass-panel">
+                    <!-- Le voci si mostrano/nascondono in base alle categorie supportate
+                         dal broker della scheda visualizzata (updateChartLegendVisibility) -->
+                    <div class="legend-item" id="legCRYPTO"><span class="dot" style="background: #f7931a;"></span>
+                        CRYPTO</div>
+                    <div class="legend-item" id="legCOMMODITY"><span class="dot" style="background: #eab308;"></span>
+                        METALLI</div>
+                    <div class="legend-item" id="legFOREX"><span class="dot" style="background: #10b981;"></span> FOREX
+                    </div>
+                    <div class="legend-item" id="legSTOCK"><span class="dot" style="background: #3b82f6;"></span> AZIONI
+                    </div>
+                    <!-- Controlli manuali BUY/SELL: a destra delle etichette della legenda.
+                         Restano nascosti quando il Trading Automatico (bot) è attivo. -->
+                    <div id="manualControls" class="manual-controls hidden">
+                        <div class="action-buttons" id="openActions">
+                            <button id="btnBuy" class="btn-trade buy"
+                                data-tooltip="Apre la posizione selezionata nella box LONG (guadagni se il prezzo sale). Disponibile solo con Trading Automatico OFF.">BUY
+                                (LONG)</button>
+                            <button id="btnSell" class="btn-trade sell"
+                                data-tooltip="Apre la posizione selezionata nella box SHORT (guadagni se il prezzo scende). Disattivato se il broker non consente lo short su questo asset.">SELL
+                                (SHORT)</button>
+                            <!-- Quantità di asset per l'ordine manuale: vuoto = importo
+                                 automatico dal cursore "Quantità per Trade" -->
+                            <input type="number" id="manualQty" min="0" step="any" placeholder="Qtà (auto)"
+                                data-tooltip="Quantità di unità dell'asset per l'ordine manuale. Vuoto = usa l'importo automatico."
+                                style="width:86px; background:rgba(0,0,0,0.4); border:1px solid var(--border-color); color:#fff; border-radius:8px; padding:8px 10px; font-size:0.78rem; outline:none;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+
+                        <div class="pair-selector"
+                            style="margin: 0; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);">
+                            <span id="assetIcon" class="asset-icon"
+                                data-tooltip="Asset attualmente visualizzato nel grafico">₿</span>
+                            <select id="assetPair" data-tooltip="Seleziona l'asset da analizzare e tradare">
+
+                                <optgroup label="₿ Criptovalute (Alpaca)">
+                                    <option value="BTCUSDT">Bitcoin (BTC)</option>
+                                    <option value="ETHUSDT">Ethereum (ETH)</option>
+                                    <option value="LTCUSDT">Litecoin (LTC)</option>
+                                    <option value="SOLUSDT">Solana (SOL)</option>
+                                    <option value="AVAXUSDT">Avalanche (AVAX)</option>
+                                    <option value="DOTUSDT">Polkadot (DOT)</option>
+                                    <option value="LINKUSDT">Chainlink (LINK)</option>
+                                    <option value="UNIUSDT">Uniswap (UNI)</option>
+                                    <option value="DOGEUSDT">Dogecoin (DOGE)</option>
+                                    <option value="ADAUSDT">Cardano (ADA)</option>
+                                    <option value="MATICUSDT">Polygon (MATIC)</option>
+                                </optgroup>
+
+                                <optgroup label="📈 Azioni USA (Finnhub)">
+                                    <option value="AAPL">Apple (AAPL)</option>
+                                    <option value="TSLA">Tesla (TSLA)</option>
+                                    <option value="NVDA">Nvidia (NVDA)</option>
+                                    <option value="MSFT">Microsoft (MSFT)</option>
+                                    <option value="AMZN">Amazon (AMZN)</option>
+                                    <option value="GOOGL">Alphabet (GOOGL)</option>
+                                    <option value="META">Meta (META)</option>
+                                    <option value="NFLX">Netflix (NFLX)</option>
+                                    <option value="AMD">AMD (AMD)</option>
+                                    <option value="COIN">Coinbase (COIN)</option>
+                                    <option value="DIS">Disney (DIS)</option>
+                                    <option value="PYPL">PayPal (PYPL)</option>
+                                    <option value="BABA">Alibaba (BABA)</option>
+                                    <option value="NIO">NIO Inc (NIO)</option>
+                                    <option value="INTC">Intel (INTC)</option>
+                                </optgroup>
+                                <optgroup label="💱 Forex (Oanda via Finnhub)">
+                                    <option value="OANDA:EUR_USD">EUR / USD</option>
+                                    <option value="OANDA:GBP_USD">GBP / USD</option>
+                                    <option value="OANDA:USD_JPY">USD / JPY</option>
+                                    <option value="OANDA:AUD_USD">AUD / USD</option>
+                                    <option value="OANDA:USD_CAD">USD / CAD</option>
+                                    <option value="OANDA:NZD_USD">NZD / USD</option>
+                                    <option value="OANDA:USD_CHF">USD / CHF</option>
+                                    <option value="OANDA:EUR_GBP">EUR / GBP</option>
+                                    <option value="OANDA:EUR_JPY">EUR / JPY</option>
+                                    <option value="OANDA:GBP_JPY">GBP / JPY</option>
+                                </optgroup>
+                                <optgroup label="⛽ Materie Prime (Oanda via Finnhub)">
+                                    <option value="OANDA:XAU_USD">Oro (Gold)</option>
+                                    <option value="OANDA:XAG_USD">Argento (Silver)</option>
+                                    <option value="OANDA:BRENT_USD">Brent Oil</option>
+                                    <option value="OANDA:WTI_USD">WTI Oil</option>
+                                    <option value="OANDA:NATGAS_USD">Natural Gas</option>
+                                    <option value="OANDA:COPPER_USD">Rame (Copper)</option>
+                                    <option value="LIT">Litio (LIT ETF)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <span id="assetDisplayName"
+                            style="display: none; font-weight: 800; color: #fff; font-size: 1.2rem; background: rgba(59, 130, 246, 0.1); padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.2);">---</span>
+                        <h2 id="lblRealTimePrice"
+                            style="margin: 0; font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
+                            Prezzo in Tempo Reale</h2>
+                    </div>
+                    <span id="assetCategoryLabel" class="category-badge">Crypto</span>
+                    <div class="current-price-display">
+                        <span id="currentPrice" class="price">Caricamento...</span>
+                        <span id="priceChange" class="change">--</span>
+                    </div>
+                </div>
+                <div class="chart-container" style="position: relative;">
+                    <div id="tvchart" style="width: 100%; height: 100%;"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- API Key Modal -->
+    <div id="apiModal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel glow">
+            <h2 id="lblApiModalTitle">Configura Finnhub API</h2>
+            <p id="lblApiModalDesc">Per ricevere dati in tempo reale su Azioni, Forex e Materie Prime, inserisci una
+                chiave API gratuita di Finnhub.</p>
+            <p id="lblApiModalAssets" style="font-size:0.82rem; font-weight:600; color:#3b82f6; margin-bottom:10px;">
+                📊 Asset disponibili con Finnhub: <b>Azioni USA · Forex · Materie Prime</b> (denaro virtuale).</p>
+            <p id="lblApiModalNote" style="font-size: 0.8rem; color: #f59e0b; margin-bottom: 12px;">ℹ️ Finnhub è
+                un'API su mercati azionari REALI: i prezzi sono quelli di borsa, ma qui il denaro resta
+                VIRTUALE. Il portafoglio di default è impostato a 1.000 $.</p>
+            <ol>
+                <li id="lblApiStep1">Vai su <a href="https://finnhub.io/register" target="_blank"
+                        style="color: #3b82f6;">finnhub.io/register</a> e crea un account gratuito.</li>
+                <li id="lblApiStep2">Copia la tua <b>API Key</b> dalla dashboard.</li>
+                <li id="lblApiStep3">Incollala qui sotto:</li>
+            </ol>
+            <input type="text" id="apiKeyInput" placeholder="Inserisci la tua API Key (es. cxyz123...)"
+                class="api-input" />
+            <div class="modal-actions">
+                <button id="testFinnhubBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test
+                    Connessione</button>
+                <button id="cancelApiBtn" class="btn btn-secondary">Annulla</button>
+                <button id="saveApiBtn" class="btn btn-primary">Salva e Connetti</button>
+            </div>
+            <p id="apiErrorMsg" class="error-msg"></p>
+        </div>
+    </div>
+
+    <!-- PayPal Deposit Modal -->
+    <div id="paypalModal" class="modal-overlay hidden">
+        <div class="paypal-modal">
+            <!-- PayPal Header -->
+            <div class="paypal-header">
+                <svg viewBox="0 0 101 32" xmlns="http://www.w3.org/2000/svg" class="paypal-logo">
+                    <path
+                        d="M 12.237 2.8 L 4.437 2.8 C 3.937 2.8 3.437 3.2 3.337 3.7 L 0.237 23.7 C 0.137 24.1 0.437 24.4 0.837 24.4 L 4.537 24.4 C 5.037 24.4 5.537 24 5.637 23.5 L 6.437 18.1 C 6.537 17.6 6.937 17.2 7.537 17.2 L 10.037 17.2 C 15.137 17.2 18.137 14.7 18.937 9.8 C 19.237 7.7 18.937 6 17.937 4.8 C 16.837 3.5 14.837 2.8 12.237 2.8 Z M 13.137 10.1 C 12.737 12.9 10.537 12.9 8.537 12.9 L 7.337 12.9 L 8.137 7.7 C 8.137 7.4 8.437 7.2 8.737 7.2 L 9.237 7.2 C 10.637 7.2 11.937 7.2 12.637 8 C 13.137 8.4 13.337 9.1 13.137 10.1 Z"
+                        fill="#003087" />
+                    <path
+                        d="M 35.437 10 L 31.737 10 C 31.437 10 31.137 10.2 31.137 10.5 L 30.937 11.5 L 30.637 11.1 C 29.737 9.8 27.837 9.4 25.937 9.4 C 21.537 9.4 17.837 12.7 17.137 17.3 C 16.737 19.6 17.337 21.8 18.637 23.3 C 19.837 24.7 21.637 25.3 23.637 25.3 C 27.237 25.3 29.237 23 29.237 23 L 29.037 24 C 28.937 24.4 29.237 24.8 29.637 24.8 L 33.037 24.8 C 33.537 24.8 34.037 24.4 34.137 23.9 L 36.137 10.8 C 36.237 10.4 35.837 10 35.437 10 Z M 30.337 17.4 C 29.937 19.6 28.237 21.2 25.937 21.2 C 24.837 21.2 23.937 20.8 23.337 20.1 C 22.737 19.4 22.537 18.4 22.737 17.3 C 23.137 15.1 24.937 13.5 27.137 13.5 C 28.237 13.5 29.137 13.9 29.737 14.6 C 30.337 15.4 30.537 16.3 30.337 17.4 Z"
+                        fill="#003087" />
+                    <path
+                        d="M 55.337 10 L 51.637 10 C 51.237 10 50.937 10.2 50.737 10.5 L 45.537 18.1 L 43.337 10.8 C 43.237 10.3 42.737 10 42.337 10 L 38.637 10 C 38.237 10 37.837 10.4 38.037 10.9 L 42.137 23.1 L 38.237 28.6 C 37.937 29 38.237 29.6 38.737 29.6 L 42.437 29.6 C 42.837 29.6 43.137 29.4 43.337 29.1 L 55.837 10.9 C 56.137 10.6 55.837 10 55.337 10 Z"
+                        fill="#003087" />
+                    <path
+                        d="M 67.737 2.8 L 59.937 2.8 C 59.437 2.8 58.937 3.2 58.837 3.7 L 55.737 23.6 C 55.637 24 55.937 24.3 56.337 24.3 L 60.337 24.3 C 60.737 24.3 61.037 24 61.037 23.7 L 61.937 18 C 62.037 17.5 62.437 17.1 63.037 17.1 L 65.537 17.1 C 70.637 17.1 73.637 14.6 74.437 9.7 C 74.737 7.6 74.437 5.9 73.437 4.7 C 72.237 3.5 70.337 2.8 67.737 2.8 Z M 68.637 10.1 C 68.237 12.9 66.037 12.9 64.037 12.9 L 62.837 12.9 L 63.637 7.7 C 63.637 7.4 63.937 7.2 64.237 7.2 L 64.737 7.2 C 66.137 7.2 67.437 7.2 68.137 8 C 68.737 8.4 68.837 9.1 68.637 10.1 Z"
+                        fill="#009cde" />
+                    <path
+                        d="M 90.937 10 L 87.237 10 C 86.937 10 86.637 10.2 86.637 10.5 L 86.437 11.5 L 86.137 11.1 C 85.237 9.8 83.337 9.4 81.437 9.4 C 77.037 9.4 73.337 12.7 72.637 17.3 C 72.237 19.6 72.837 21.8 74.137 23.3 C 75.337 24.7 77.137 25.3 79.137 25.3 C 82.737 25.3 84.737 23 84.737 23 L 84.537 24 C 84.437 24.4 84.737 24.8 85.137 24.8 L 88.537 24.8 C 89.037 24.8 89.537 24.4 89.637 23.9 L 91.637 10.8 C 91.737 10.4 91.437 10 90.937 10 Z M 85.737 17.4 C 85.337 19.6 83.637 21.2 81.337 21.2 C 80.237 21.2 79.337 20.8 78.737 20.1 C 78.137 19.4 77.937 18.4 78.137 17.3 C 78.537 15.1 80.337 13.5 82.537 13.5 C 83.637 13.5 84.537 13.9 85.137 14.6 C 85.837 15.4 85.937 16.3 85.737 17.4 Z"
+                        fill="#009cde" />
+                    <path
+                        d="M 95.337 3.3 L 92.137 23.6 C 92.037 24 92.337 24.3 92.737 24.3 L 95.937 24.3 C 96.437 24.3 96.937 23.9 97.037 23.4 L 100.237 3.5 C 100.337 3.1 100.037 2.8 99.637 2.8 L 96.037 2.8 C 95.637 2.8 95.437 3 95.337 3.3 Z"
+                        fill="#009cde" />
+                </svg>
+                <p class="paypal-subtitle">Ricarica il tuo conto HF MT Personal AI Powered</p>
+            </div>
+
+            <!-- Presets -->
+            <div class="paypal-presets">
+                <button class="paypal-preset" data-amount="1000">$1,000</button>
+                <button class="paypal-preset" data-amount="5000">$5,000</button>
+                <button class="paypal-preset active" data-amount="10000">$10,000</button>
+                <button class="paypal-preset" data-amount="25000">$25,000</button>
+            </div>
+
+            <!-- Custom amount -->
+            <div class="paypal-amount-row">
+                <span class="paypal-currency">USD</span>
+                <input type="number" id="depositAmount" value="10000" min="100" max="1000000"
+                    class="paypal-amount-input" placeholder="0.00" />
+            </div>
+            <p class="paypal-note">✦ Fondi virtuali per simulazione — nessuna transazione reale</p>
+
+            <!-- PayPal Smart Button Container -->
+            <div id="paypal-button-container" style="margin-top: 20px; min-height: 150px;"></div>
+
+            <button id="btnSimulatePaypal" class="btn btn-primary"
+                style="width: 100%; margin-bottom: 10px; background: #0070ba; border: none;">Simula Pagamento (Senza
+                Login)</button>
+            <button id="cancelDepositBtn" class="paypal-cancel-btn">Annulla e torna al simulatore</button>
+
+            <!-- Security badge -->
+            <div class="paypal-security">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                Transazione sicura e crittografata
+            </div>
+        </div>
+    </div>
+    <!-- PayPal Withdraw Modal -->
+    <div id="paypalWithdrawModal" class="modal-overlay hidden">
+        <div class="paypal-modal">
+            <!-- PayPal Header -->
+            <div class="paypal-header">
+                <svg viewBox="0 0 101 32" xmlns="http://www.w3.org/2000/svg" class="paypal-logo">
+                    <path
+                        d="M 12.237 2.8 L 4.437 2.8 C 3.937 2.8 3.437 3.2 3.337 3.7 L 0.237 23.7 C 0.137 24.1 0.437 24.4 0.837 24.4 L 4.537 24.4 C 5.037 24.4 5.537 24 5.637 23.5 L 6.437 18.1 C 6.537 17.6 6.937 17.2 7.537 17.2 L 10.037 17.2 C 15.137 17.2 18.137 14.7 18.937 9.8 C 19.237 7.7 18.937 6 17.937 4.8 C 16.837 3.5 14.837 2.8 12.237 2.8 Z M 13.137 10.1 C 12.737 12.9 10.537 12.9 8.537 12.9 L 7.337 12.9 L 8.137 7.7 C 8.137 7.4 8.437 7.2 8.737 7.2 L 9.237 7.2 C 10.637 7.2 11.937 7.2 12.637 8 C 13.137 8.4 13.337 9.1 13.137 10.1 Z"
+                        fill="#003087" />
+                    <path
+                        d="M 35.437 10 L 31.737 10 C 31.437 10 31.137 10.2 31.137 10.5 L 30.937 11.5 L 30.637 11.1 C 29.737 9.8 27.837 9.4 25.937 9.4 C 21.537 9.4 17.837 12.7 17.137 17.3 C 16.737 19.6 17.337 21.8 18.637 23.3 C 19.837 24.7 21.637 25.3 23.637 25.3 C 27.237 25.3 29.237 23 29.237 23 L 29.037 24 C 28.937 24.4 29.237 24.8 29.637 24.8 L 33.037 24.8 C 33.537 24.8 34.037 24.4 34.137 23.9 L 36.137 10.8 C 36.237 10.4 35.837 10 35.437 10 Z M 30.337 17.4 C 29.937 19.6 28.237 21.2 25.937 21.2 C 24.837 21.2 23.937 20.8 23.337 20.1 C 22.737 19.4 22.537 18.4 22.737 17.3 C 23.137 15.1 24.937 13.5 27.137 13.5 C 28.237 13.5 29.137 13.9 29.737 14.6 C 30.337 15.4 30.537 16.3 30.337 17.4 Z"
+                        fill="#003087" />
+                    <path
+                        d="M 55.337 10 L 51.637 10 C 51.237 10 50.937 10.2 50.737 10.5 L 45.537 18.1 L 43.337 10.8 C 43.237 10.3 42.737 10 42.337 10 L 38.637 10 C 38.237 10 37.837 10.4 38.037 10.9 L 42.137 23.1 L 38.237 28.6 C 37.937 29 38.237 29.6 38.737 29.6 L 42.437 29.6 C 42.837 29.6 43.137 29.4 43.337 29.1 L 55.837 10.9 C 56.137 10.6 55.837 10 55.337 10 Z"
+                        fill="#003087" />
+                    <path
+                        d="M 67.737 2.8 L 59.937 2.8 C 59.437 2.8 58.937 3.2 58.837 3.7 L 55.737 23.6 C 55.637 24 55.937 24.3 56.337 24.3 L 60.337 24.3 C 60.737 24.3 61.037 24 61.037 23.7 L 61.937 18 C 62.037 17.5 62.437 17.1 63.037 17.1 L 65.537 17.1 C 70.637 17.1 73.637 14.6 74.437 9.7 C 74.737 7.6 74.437 5.9 73.437 4.7 C 72.237 3.5 70.337 2.8 67.737 2.8 Z M 68.637 10.1 C 68.237 12.9 66.037 12.9 64.037 12.9 L 62.837 12.9 L 63.637 7.7 C 63.637 7.4 63.937 7.2 64.237 7.2 L 64.737 7.2 C 66.137 7.2 67.437 7.2 68.137 8 C 68.737 8.4 68.837 9.1 68.637 10.1 Z"
+                        fill="#009cde" />
+                    <path
+                        d="M 90.937 10 L 87.237 10 C 86.937 10 86.637 10.2 86.637 10.5 L 86.437 11.5 L 86.137 11.1 C 85.237 9.8 83.337 9.4 81.437 9.4 C 77.037 9.4 73.337 12.7 72.637 17.3 C 72.237 19.6 72.837 21.8 74.137 23.3 C 75.337 24.7 77.137 25.3 79.137 25.3 C 82.737 25.3 84.737 23 84.737 23 L 84.537 24 C 84.437 24.4 84.737 24.8 85.137 24.8 L 88.537 24.8 C 89.037 24.8 89.537 24.4 89.637 23.9 L 91.637 10.8 C 91.737 10.4 91.437 10 90.937 10 Z M 85.737 17.4 C 85.337 19.6 83.637 21.2 81.337 21.2 C 80.237 21.2 79.337 20.8 78.737 20.1 C 78.137 19.4 77.937 18.4 78.137 17.3 C 78.537 15.1 80.337 13.5 82.537 13.5 C 83.637 13.5 84.537 13.9 85.137 14.6 C 85.837 15.4 85.937 16.3 85.737 17.4 Z"
+                        fill="#009cde" />
+                    <path
+                        d="M 95.337 3.3 L 92.137 23.6 C 92.037 24 92.337 24.3 92.737 24.3 L 95.937 24.3 C 96.437 24.3 96.937 23.9 97.037 23.4 L 100.237 3.5 C 100.337 3.1 100.037 2.8 99.637 2.8 L 96.037 2.8 C 95.637 2.8 95.437 3 95.337 3.3 Z"
+                        fill="#009cde" />
+                </svg>
+                <p class="paypal-subtitle">Preleva fondi verso PayPal</p>
+            </div>
+
+            <div style="margin-bottom: 15px; text-align: center;">
+                <p style="font-size: 0.8rem; color: var(--text-secondary);">Disponibile per il prelievo: <strong
+                        id="withdrawMaxLabel" style="color: #fff;">$0.00</strong></p>
+            </div>
+
+            <!-- Custom amount -->
+            <div class="paypal-amount-row">
+                <span class="paypal-currency">USD</span>
+                <input type="number" id="withdrawAmount" value="1000" min="10" class="paypal-amount-input"
+                    placeholder="0.00" />
+            </div>
+
+            <button id="btnSimulateWithdraw" class="btn btn-primary"
+                style="width: 100%; margin-top: 20px; margin-bottom: 10px; background: #0070ba; border: none;">Conferma
+                Prelievo</button>
+            <button id="cancelWithdrawBtn" class="paypal-cancel-btn">Annulla</button>
+
+            <!-- Security badge -->
+            <div class="paypal-security">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                Trasferimento rapido e sicuro
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+    <!-- App Info Modal -->
+    <div id="infoModal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel glow info-panel">
+            <div class="info-header">
+                <div class="info-logo">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="url(#gradient-info)"
+                        stroke-width="2.5">
+                        <defs>
+                            <linearGradient id="gradient-info" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#3b82f6" />
+                                <stop offset="100%" stop-color="#8b5cf6" />
+                            </linearGradient>
+                        </defs>
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                </div>
+                <h2>HF MT Personal AI Powered</h2>
+                <span class="version-tag" id="appVersionTag">v.1.0.01a</span>
+            </div>
+
+            <div class="info-body">
+                <p id="lblAppDesc">Piattaforma di trading algoritmico multi-asset (Crypto, Azioni, Forex, Materie Prime)
+                    con AI adattiva e autoapprendimento. Modalità Test, Alpaca Paper e conto Alpaca Reale.</p>
+
+                <div class="info-specs">
+                    <div class="spec-item"><strong>Engine:</strong> <span>Vanilla JavaScript (ES6+)</span></div>
+                    <div class="spec-item"><strong>Real-time:</strong> <span>Alpaca & Finnhub WebSockets</span></div>
+                    <div class="spec-item"><strong>Auth:</strong> <span>Google Identity Services</span></div>
+                    <div class="spec-item"><strong>Styling:</strong> <span>CSS3 Glassmorphism Architecture</span></div>
+                </div>
+
+                <div class="info-legal">
+                    <p id="lblEduOnly">✦ In modalità conto reale (ALrt) le operazioni usano denaro reale. Il trading
+                        comporta rischi di perdita del capitale.</p>
+                </div>
+
+                <!-- Note Legali: rilettura dei documenti in qualsiasi momento -->
+                <div class="info-legal-links">
+                    <h3 id="lblLegalNotes">Note Legali</h3>
+                    <div class="legal-links-row">
+                        <a href="#" onclick="window.openLegalDoc('tos'); return false;" id="infoLinkTos">Termini di
+                            Servizio</a>
+                        <a href="#" onclick="window.openLegalDoc('eula'); return false;" id="infoLinkEula">EULA</a>
+                        <a href="#" onclick="window.openLegalDoc('privacy'); return false;" id="infoLinkPrivacy">Privacy
+                            Policy</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="flex-direction: column; gap: 10px;">
+                <button id="closeInfoBtn" class="btn btn-primary" style="width: 100%;">Ho capito</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Modale documenti legali (ToS / EULA / Privacy) ═══ -->
+    <div id="legalModal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel glow legal-modal">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                <h2 id="legalModalTitle" style="margin: 0; font-size: 1.05rem;">Documenti Legali</h2>
+                <button id="closeLegalBtn" class="btn-logout" aria-label="Chiudi">✕</button>
+            </div>
+            <div class="legal-tabs">
+                <button class="legal-tab" data-doc="tos" id="legalTabTos">Termini</button>
+                <button class="legal-tab" data-doc="eula" id="legalTabEula">EULA</button>
+                <button class="legal-tab" data-doc="privacy" id="legalTabPrivacy">Privacy</button>
+            </div>
+            <div id="legalModalContent" class="legal-content"></div>
+        </div>
+    </div>
+
+    <!-- Alpaca Settings Modal -->
+    <div id="alpacaModal" class="modal hidden">
+        <div class="modal-content glass-panel glow">
+            <div class="modal-header">
+                <h2 id="lblAlpacaModalTitle" style="color: #60a5fa;">🚀 Configurazione Alpaca Broker</h2>
+                <button class="close-modal"
+                    onclick="document.getElementById('alpacaModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                    <span id="lblAlpacaModalDesc">Collega il tuo account Alpaca Paper (denaro virtuale, mercati
+                        reali).</span>
+                    <br><span id="lblAlpacaModalAssets"
+                        style="display:block; margin:6px 0; color:#3b82f6; font-size:0.82rem; font-weight:600;">📊 Asset
+                        disponibili con Alpaca Paper: <b>Crypto · Azioni USA</b> (denaro virtuale).</span>
+                    <br><span id="lblAlpacaModalNote" style="color: #f59e0b; font-size: 0.78rem;">ℹ️ API su mercato
+                        azionario REALE con denaro VIRTUALE. Il portafoglio virtuale di default è impostato dal
+                        broker Alpaca Paper.</span>
+                    <br><span id="lblAlpacaModalWarn" style="color: #f59e0b; font-size: 0.75rem;">* Le operazioni
+                        verranno eseguite sul mercato reale (o sandbox) di Alpaca.</span>
+                    <br><span id="lblAlpacaModalRegister" style="font-size: 0.78rem;">Non hai le chiavi? Registrati su
+                        <a href="https://alpaca.markets/" target="_blank" rel="noopener noreferrer"
+                            style="color: #60a5fa;">alpaca.markets</a> e genera le API Key nella sezione Paper
+                        Trading.</span>
+                </p>
+
+                <!-- I campi sono in un <form> (con submit disabilitato) per soddisfare
+                     la best-practice del browser sui campi password e silenziare il
+                     warning "[DOM] Password field is not contained in a form". -->
+                <form onsubmit="return false;" autocomplete="off">
+                    <div class="input-group">
+                        <label>Alpaca API Key ID</label>
+                        <input type="text" id="alpacaKeyId" autocomplete="username"
+                            placeholder="Inserisci la tua API Key ID..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label>Alpaca Secret Key</label>
+                        <input type="password" id="alpacaSecretKey" autocomplete="current-password"
+                            placeholder="Inserisci la tua Secret Key..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                </form>
+
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button id="saveAlpacaBtn" class="btn-primary" style="flex: 2; background: #60a5fa;">Salva</button>
+                    <button id="testAlpacaBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test
+                        Connessione</button>
+                    <button id="btnAlpacaClose" class="btn-trade"
+                        style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);"
+                        onclick="document.getElementById('alpacaModal').classList.add('hidden')">Annulla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alpaca Trading API (REALE) Settings Modal -->
+    <div id="alpacaLiveModal" class="modal hidden">
+        <div class="modal-content glass-panel glow" style="border-color: rgba(248,113,113,0.45);">
+            <div class="modal-header">
+                <h2 id="lblAlpacaLiveModalTitle" style="color: #f87171;">⚠️ Alpaca Trading API (Reale)</h2>
+                <button class="close-modal"
+                    onclick="document.getElementById('alpacaLiveModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                    <span id="lblAlpacaLiveModalDesc">API di trading REALE — "For individual traders using Alpaca's
+                        trading platform" — con portafoglio di investimento reale.</span>
+                    <br><span id="lblAlpacaLiveModalAssets"
+                        style="display:block; margin:6px 0; color:#f87171; font-size:0.82rem; font-weight:700;">📊 Asset
+                        disponibili con Alpaca (reale): <b>Crypto · Azioni USA</b> — DENARO REALE.</span>
+                    <br><span id="lblAlpacaLiveModalWarn"
+                        style="color: #f87171; font-size: 0.78rem; font-weight: 700;">⚠️
+                        ATTENZIONE: su questo conto si opera con DENARO REALE. Ogni operazione può generare
+                        perdite effettive.</span>
+                    <br><span id="lblAlpacaLiveModalCosts" style="font-size: 0.75rem;">Per la descrizione dei costi dei
+                        dati di mercato consulta la documentazione ufficiale:</span>
+                    <a href="https://docs.alpaca.markets/us/docs/about-market-data-api" target="_blank"
+                        rel="noopener noreferrer"
+                        style="color: #60a5fa; font-size: 0.75rem;">docs.alpaca.markets/us/docs/about-market-data-api</a>
+                    <br><span id="lblAlpacaLiveModalLiability" style="color: #f59e0b; font-size: 0.75rem;">Il
+                        produttore di HF MT Personal AI Powered non si assume alcuna responsabilità per eventuali
+                        perdite subite utilizzando l'app.</span>
+                    <br><span id="lblAlpacaLiveModalRegister" style="font-size: 0.78rem;">Non hai le chiavi? Registrati
+                        su <a href="https://alpaca.markets/" target="_blank" rel="noopener noreferrer"
+                            style="color: #60a5fa;">alpaca.markets</a> e genera le API Key del conto reale (Live
+                        Trading).</span>
+                </p>
+
+                <form onsubmit="return false;" autocomplete="off">
+                    <div class="input-group">
+                        <label>Alpaca API Key ID</label>
+                        <input type="text" id="alpacaLiveKeyId" autocomplete="username"
+                            placeholder="Inserisci la tua API Key ID..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label>Alpaca Secret Key</label>
+                        <input type="password" id="alpacaLiveSecretKey" autocomplete="current-password"
+                            placeholder="Inserisci la tua Secret Key..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                </form>
+
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button id="saveAlpacaLiveBtn" class="btn-primary"
+                        style="flex: 2; background: #f87171;">Salva</button>
+                    <button id="testAlpacaLiveBtn" class="btn-trade btn-test-conn"
+                        style="flex: 1; font-size: 0.7rem;">Test
+                        Connessione</button>
+                    <button id="btnAlpacaLiveClose" class="btn-trade"
+                        style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);"
+                        onclick="document.getElementById('alpacaLiveModal').classList.add('hidden')">Annulla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Capital.com Demo Settings Modal — API: X-CAP-API-KEY + sessione (CST / X-SECURITY-TOKEN) -->
+    <div id="capitalModal" class="modal hidden">
+        <div class="modal-content glass-panel glow" style="border-color: rgba(52,211,153,0.45);">
+            <div class="modal-header">
+                <h2 id="lblCapitalModalTitle" style="color: #34d399;">🟢 Configurazione Capital.com Demo</h2>
+                <button class="close-modal"
+                    onclick="document.getElementById('capitalModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                    <span id="lblCapitalModalDesc">Collega il tuo conto Capital.com Demo (denaro virtuale, prezzi
+                        reali). Autenticazione come da documentazione ufficiale (open-api.capital.com): API Key +
+                        email + password della API Key; la sessione usa i token CST / X-SECURITY-TOKEN.</span>
+                    <br><span id="lblCapitalModalAssets"
+                        style="display:block; margin:6px 0; color:#34d399; font-size:0.82rem; font-weight:600;">📊 Asset
+                        disponibili con Capital.com: <b>Forex · Materie Prime (CFD: Oro, Argento, Petrolio…)</b> —
+                        denaro virtuale. SHORT consentito. Regolamentato UE: funziona dall'Italia.</span>
+                    <br><span id="lblCapitalModalRegister" style="font-size: 0.78rem;">Non hai la chiave? Crea un conto
+                        demo su <a href="https://capital.com/" target="_blank" rel="noopener noreferrer"
+                            style="color: #34d399;">capital.com</a>, attiva la <b>2FA</b> (obbligatoria per l'API), poi
+                        nella piattaforma: <b>Impostazioni → Integrazioni API → Genera nuova chiave</b>. Imposta una
+                        <b>password della API Key</b> (diversa da quella del conto) e copia la chiave.</span>
+                </p>
+
+                <form onsubmit="return false;" autocomplete="off">
+                    <div class="input-group">
+                        <label>Email del conto (identifier)</label>
+                        <input type="text" id="capitalDemoIdent" autocomplete="username"
+                            placeholder="La email con cui accedi a Capital.com..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label>API Key (Demo)</label>
+                        <input type="password" id="capitalDemoKey" autocomplete="off"
+                            placeholder="Incolla la API Key generata..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label>Password della API Key</label>
+                        <input type="password" id="capitalDemoPass" autocomplete="current-password"
+                            placeholder="La password impostata alla creazione della chiave..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                </form>
+
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button id="saveCapitalBtn" class="btn-primary" style="flex: 2; background: #34d399;">Salva</button>
+                    <button id="testCapitalBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test
+                        Connessione</button>
+                    <button id="btnCapitalClose" class="btn-trade"
+                        style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);"
+                        onclick="document.getElementById('capitalModal').classList.add('hidden')">Annulla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Capital.com Trading (REALE) Settings Modal -->
+    <div id="capitalLiveModal" class="modal hidden">
+        <div class="modal-content glass-panel glow" style="border-color: rgba(248,113,113,0.45);">
+            <div class="modal-header">
+                <h2 id="lblCapitalLiveModalTitle" style="color: #f87171;">⚠️ Capital.com Trading (Reale)</h2>
+                <button class="close-modal"
+                    onclick="document.getElementById('capitalLiveModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                    <span id="lblCapitalLiveModalDesc">Conto Capital.com REALE. Autenticazione: API Key + email +
+                        password della API Key (sessione CST / X-SECURITY-TOKEN).</span>
+                    <br><span id="lblCapitalLiveModalAssets"
+                        style="display:block; margin:6px 0; color:#f87171; font-size:0.82rem; font-weight:700;">📊 Asset
+                        disponibili con Capital.com (reale): <b>Forex · Materie Prime (CFD)</b> — DENARO REALE. SHORT
+                        consentito.</span>
+                    <br><span id="lblCapitalLiveModalWarn"
+                        style="color: #f87171; font-size: 0.78rem; font-weight: 700;">⚠️
+                        ATTENZIONE: su questo conto si opera con DENARO REALE su CFD con leva: le perdite possono
+                        accumularsi rapidamente. Ogni operazione può generare perdite effettive.</span>
+                    <br><span id="lblCapitalLiveModalLiability" style="color: #f59e0b; font-size: 0.75rem;">Il
+                        produttore di HF MT Personal AI Powered non si assume alcuna responsabilità per eventuali
+                        perdite subite utilizzando l'app.</span>
+                    <br><span id="lblCapitalLiveModalRegister" style="font-size: 0.78rem;">Genera la chiave del conto
+                        reale dalla piattaforma: <b>Impostazioni → Integrazioni API → Genera nuova chiave</b> (richiede
+                        2FA attiva). Documentazione ufficiale: <a href="https://open-api.capital.com/" target="_blank"
+                            rel="noopener noreferrer" style="color: #60a5fa;">open-api.capital.com</a></span>
+                </p>
+
+                <form onsubmit="return false;" autocomplete="off">
+                    <div class="input-group">
+                        <label>Email del conto (identifier)</label>
+                        <input type="text" id="capitalLiveIdent" autocomplete="username"
+                            placeholder="La email con cui accedi a Capital.com..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label>API Key (Reale)</label>
+                        <input type="password" id="capitalLiveKey" autocomplete="off"
+                            placeholder="Incolla la API Key del conto reale..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label>Password della API Key</label>
+                        <input type="password" id="capitalLivePass" autocomplete="current-password"
+                            placeholder="La password impostata alla creazione della chiave..."
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                    </div>
+                </form>
+
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button id="saveCapitalLiveBtn" class="btn-primary"
+                        style="flex: 2; background: #f87171;">Salva</button>
+                    <button id="testCapitalLiveBtn" class="btn-trade btn-test-conn"
+                        style="flex: 1; font-size: 0.7rem;">Test
+                        Connessione</button>
+                    <button id="btnCapitalLiveClose" class="btn-trade"
+                        style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);"
+                        onclick="document.getElementById('capitalLiveModal').classList.add('hidden')">Annulla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="legal.js" defer></script>
+    <script src="app.js" defer></script>
+</body>
+
+</html>

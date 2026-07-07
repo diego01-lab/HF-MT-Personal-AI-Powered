@@ -1,0 +1,23 @@
+{
+  "name": "hf-mt-personal-ai-powered",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "build": "node -e \"const fs=require('fs'); if(!fs.existsSync('www'))fs.mkdirSync('www'); ['index.html','app.js','legal.js','styles.css','manifest.json','icon.svg','languages.it.json','languages.en.json','languages.es.json','languages.fr.json','languages.de.json'].forEach(f=>fs.copyFileSync(f, 'www/'+f))\"",
+    "sync": "cap sync android"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.3.3",
+    "@capacitor/cli": "^8.3.3",
+    "@capacitor/core": "^8.3.3",
+    "@capacitor/ios": "^8.3.3",
+    "@capgo/capacitor-social-login": "^8.3.33"
+  }
+}

@@ -1,0 +1,4223 @@
+:root {
+    --bg-dark: #0f172a;
+    --bg-panel: rgba(30, 41, 59, 0.7);
+    --border-color: rgba(255, 255, 255, 0.14);
+    --text-primary: #f8fafc;
+    --text-secondary: #a6b4c8;
+
+    --color-buy: #10b981;
+    /* Emerald */
+    --color-sell: #ef4444;
+    /* Red */
+    --color-buy-glow: rgba(16, 185, 129, 0.2);
+    --color-sell-glow: rgba(239, 68, 68, 0.2);
+
+    --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image:
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08) 0%, transparent 25%);
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.glow {
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.1), inset 0 0 15px rgba(255, 255, 255, 0.015);
+}
+
+/* Layout */
+.app-container {
+    max-width: 100%;
+    width: 100%;
+    margin: 0 auto;
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    /* Spazio minimo tra header e griglia: i pannelli si allungano verso l'alto
+       fino quasi al bordo inferiore della barra di stato (era 20px). */
+    gap: 6px;
+    height: 100vh;
+}
+
+/* Header */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    padding: 16px 24px;
+    gap: 16px;
+    /* L'header (glass-panel con backdrop-filter) è uno stacking context: senza
+       questo z-index i suoi dropdown/tooltip (pannello Impostazioni, tooltip dei
+       broker aperti verso il basso) finiscono SOTTO i pannelli del contenuto, che
+       nel DOM vengono dopo. Resta sotto le modali (z-index 10000+). */
+    position: relative;
+    z-index: 200;
+}
+
+/* Portfolio mini widget in header */
+.header-portfolio {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 12px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.header-portfolio:hover {
+    background: rgba(16, 185, 129, 0.14);
+}
+
+.header-portfolio-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.header-portfolio-balance {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #10b981;
+    font-variant-numeric: tabular-nums;
+}
+
+.header-portfolio-pnl {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    border-left: 1px solid var(--border-color);
+    padding-left: 12px;
+}
+
+.btn-deposit-mini {
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #10b981;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-deposit-mini:hover {
+    background: #10b981;
+    color: #0f172a;
+}
+
+/* Investment controls */
+.invest-mode-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.invest-mode-btn {
+    flex: 1;
+    padding: 7px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    font-weight: 500;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.invest-mode-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+.invest-mode-btn.active {
+    background: var(--gradient-primary);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+}
+
+.invest-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+}
+
+.invest-input-row:focus-within {
+    border-color: #3b82f6;
+}
+
+.invest-prefix {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #3b82f6;
+    min-width: 16px;
+}
+
+.invest-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    width: 0;
+}
+
+.invest-suffix {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.invest-preview {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 7px;
+    padding: 7px 12px;
+    text-align: center;
+}
+
+.invest-preview span {
+    color: #3b82f6;
+    font-weight: 700;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap; /* permette all'orologio (flex-basis:100%) di andare sotto il titolo */
+}
+
+.logo h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge {
+    background: var(--gradient-primary);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.pair-selector {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.asset-icon {
+    color: #f59e0b;
+    /* Bitcoin Gold */
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+select {
+    background: transparent;
+    border: none;
+    color: white;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+}
+
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.pulse {
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-buy);
+    border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+/* Dashboard Grid: radar snello | capitale+prestazioni | trading+posizioni+cronologia */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Left Sidebar: contenitore trasparente, il radar è cella diretta della griglia */
+.left-sidebar {
+    display: contents;
+}
+
+/* Chart Section */
+.chart-section {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    position: relative; /* contesto per i controlli manuali centrati nel grafico */
+}
+
+/* Bottoni BUY (LONG) / SELL (SHORT): nella legenda del grafico, a DESTRA delle
+   etichette (CRYPTO/METALLI/FOREX/AZIONI). Nascosti (.hidden) quando il Trading
+   Automatico è attivo → acquisto manuale possibile solo con il bot OFF. */
+.chart-legend-overlay {
+    align-items: center;
+    flex-wrap: nowrap;
+}
+.chart-legend-overlay #manualControls {
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+.chart-legend-overlay #manualControls .action-buttons {
+    gap: 6px;
+}
+.chart-legend-overlay #manualControls .btn-trade {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 0.62rem;
+    min-width: auto;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Tooltip dei bottoni BUY/SELL nella legenda: verso il BASSO (sopra ci sono i
+   pannelli e il bordo, che lo taglierebbero), dentro l'area del grafico. */
+.chart-legend-overlay [data-tooltip]::after {
+    bottom: auto;
+    top: calc(100% + 10px);
+    transform: translateX(-50%) translateY(-4px);
+    z-index: 99999;
+}
+.chart-legend-overlay [data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(0);
+}
+.chart-legend-overlay [data-tooltip]::before {
+    bottom: auto;
+    top: calc(100% + 4px);
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.13);
+    transform: translateX(-50%) translateY(-4px);
+    z-index: 99999;
+}
+.chart-legend-overlay [data-tooltip]:hover::before {
+    transform: translateX(-50%) translateY(0);
+}
+
+.section-header h2 {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.current-price-display {
+    text-align: right;
+}
+
+.price {
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.3s ease;
+}
+
+.change {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-left: 8px;
+}
+
+.price.up {
+    color: var(--color-buy);
+}
+
+.price.down {
+    color: var(--color-sell);
+}
+
+.change.up {
+    color: var(--color-buy);
+}
+
+.change.down {
+    color: var(--color-sell);
+}
+
+.chart-container {
+    flex: 1;
+    width: 100%;
+    min-height: 350px;
+    max-height: calc(100vh - 250px);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px;
+    /* Spazio per la scrollbar */
+}
+
+/* Stile scrollbar per le sidebar */
+.sidebar::-webkit-scrollbar,
+.left-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.left-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.left-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+}
+
+.stats-card {
+    padding: 20px;
+}
+
+.stats-card h2,
+.sidebar-section-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-item {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.pnl-positive {
+    color: var(--color-buy);
+    text-shadow: 0 0 12px var(--color-buy-glow);
+}
+
+.pnl-negative {
+    color: var(--color-sell);
+    text-shadow: 0 0 12px var(--color-sell-glow);
+}
+
+.pnl-neutral {
+    color: var(--text-primary);
+}
+
+.status-active {
+    color: #3b82f6;
+}
+
+.open-position-container h3 {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.open-positions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 850px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+/* Scrollbar styling - same as history */
+.open-positions-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.open-positions-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+}
+
+.open-positions-list::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.3);
+    border-radius: 10px;
+}
+
+.open-positions-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(59, 130, 246, 0.5);
+}
+
+
+.radar-scroll-list {
+    max-height: 750px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 8px;
+}
+
+/* Scrollbar styling - same as history */
+.radar-scroll-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.radar-scroll-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+}
+
+.radar-scroll-list::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.3);
+    border-radius: 10px;
+}
+
+.radar-scroll-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(59, 130, 246, 0.5);
+}
+
+.open-position {
+    background: rgba(16, 185, 129, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.open-position:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    filter: brightness(1.1);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.open-position-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.open-position-pnl {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-close-pos {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-close-pos:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.open-position.empty {
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-secondary);
+    border: 1px dashed var(--border-color);
+    justify-content: center;
+}
+
+.open-position.LONG,
+.open-position.BUY {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid var(--color-buy);
+    color: var(--color-buy);
+}
+
+.open-position.SHORT,
+.open-position.SELL {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--color-sell);
+    color: var(--color-sell);
+}
+
+/* History Card */
+.history-card {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 250px;
+    /* Assicura che non si schiacci sparendo */
+    flex-shrink: 0;
+}
+
+.history-card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.history-header {
+    display: flex;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 8px;
+}
+
+.history-header span:nth-child(1) {
+    flex: 1.2;
+}
+
+.history-header span:nth-child(2) {
+    flex: 2;
+}
+
+.history-header span:nth-child(3) {
+    flex: 1;
+    text-align: right;
+}
+
+.trade-list {
+    max-height: 850px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 4px;
+}
+
+/* Scrollbar styling */
+.trade-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.trade-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+}
+
+.trade-list::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.3);
+    border-radius: 10px;
+}
+
+.trade-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(59, 130, 246, 0.5);
+}
+
+
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 24px;
+    font-style: italic;
+}
+
+.trade-row {
+    display: flex;
+    font-size: 0.9rem;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border-left: 4px solid transparent;
+    margin-bottom: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.3s ease-out;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s;
+}
+
+.trade-row:hover {
+    transform: translateX(4px);
+    box-shadow: -4px 4px 12px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.trade-row.LONG,
+.trade-row.BUY {
+    border-left-color: var(--color-buy);
+}
+
+.trade-row.SHORT,
+.trade-row.SELL {
+    border-left-color: var(--color-sell);
+}
+
+.trade-side {
+    font-weight: 600;
+}
+
+.trade-row.LONG .trade-side,
+.trade-row.BUY .trade-side {
+    color: var(--color-buy);
+}
+
+.trade-row.SHORT .trade-side,
+.trade-row.SELL .trade-side {
+    color: var(--color-sell);
+}
+
+.active-pulse {
+    border-left-width: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    animation: activePulse 2s infinite;
+}
+
+@keyframes activePulse {
+    0% {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    50% {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    100% {
+        background: rgba(255, 255, 255, 0.05);
+    }
+}
+
+.trade-price {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+
+.trade-pnl {
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.trade-pnl.positive {
+    color: var(--color-buy);
+}
+
+.trade-pnl.negative {
+    color: var(--color-sell);
+}
+
+/* Responsive */
+.market-hours-card {
+    margin-bottom: 20px;
+}
+
+.market-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.market-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    transition: background 0.2s;
+}
+
+.market-list li:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.market-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.market-time {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.status-open {
+    color: #10b981;
+}
+
+/* Wallet & Radar */
+.wallet-card {
+    margin-bottom: 20px;
+    padding: 20px;
+}
+
+.radar-card {
+    margin-top: 0; /* primo (e unico) pannello della sidebar: allineato in alto agli altri */
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.radar-cat-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.cat-all {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    color: white;
+}
+
+.cat-crypto {
+    background: rgba(247, 147, 26, 0.2);
+    color: #f7931a;
+}
+
+.cat-stock {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+.cat-forex {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.cat-commodity {
+    background: rgba(234, 179, 8, 0.2);
+    color: #eab308;
+}
+
+.radar-signal {
+    padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.15);
+    border-left: 3px solid #10b981;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    animation: flashGreen 1s ease-out;
+}
+
+.radar-signal:hover {
+    background: rgba(16, 185, 129, 0.3);
+    transform: translateX(4px);
+}
+
+@keyframes flashGreen {
+    0% {
+        background: rgba(16, 185, 129, 0.8);
+    }
+
+    100% {
+        background: rgba(16, 185, 129, 0.15);
+    }
+}
+
+/* Manual Trading Controls */
+.control-card {
+    margin-bottom: 20px;
+    margin-top: 0;
+    padding: 20px;
+}
+
+.mode-toggle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    /* In un contenitore flex (es. #aiModeWrapper) lo switch non deve
+       restringersi: se scende sotto i 50px il knob (translateX 26px)
+       sborda a destra dalla sua sede. */
+    flex-shrink: 0;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: .4s;
+    border: 1px solid var(--border-color);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--text-secondary);
+    transition: .4s;
+}
+
+input:checked+.slider {
+    background-color: #3b82f6;
+    /* Blue for active manual mode */
+    border-color: #3b82f6;
+}
+
+input:checked+.slider:before {
+    transform: translateX(26px);
+    background-color: #fff;
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Custom Switch Colors */
+.switch-auto input:checked+.slider,
+.switch-ai input:checked+.slider {
+    background-color: #3b82f6;
+    /* Blue for Active Auto/AI */
+    border-color: #3b82f6;
+}
+
+.switch-auto input:not(:checked)+.slider,
+.switch-ai input:not(:checked)+.slider {
+    background-color: #64748b;
+    /* Gray for Inactive/Manual */
+    border-color: #64748b;
+}
+
+/* Trading Buttons */
+.manual-controls {
+    margin-top: 16px;
+    animation: fadeIn 0.3s ease;
+}
+
+.manual-controls.hidden {
+    display: none;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.action-buttons.hidden {
+    display: none;
+}
+
+.btn-trade {
+    flex: 1;
+    padding: 14px;
+    font-weight: 700;
+    font-size: 1rem;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Bottoni BUY (LONG) / SELL (SHORT) più bassi (padding e font ridotti),
+   senza toccare gli altri .btn-trade (es. test connessione broker) */
+#btnBuy,
+#btnSell {
+    padding: 8px;
+    font-size: 0.85rem;
+}
+
+.btn-trade.buy {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-trade.buy:hover {
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.6);
+    transform: translateY(-2px);
+}
+
+.btn-trade.sell {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+}
+
+.btn-trade.sell:hover {
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.6);
+    transform: translateY(-2px);
+}
+
+/* BUY/SELL manuali disabilitati quando il Bot Automatico è attivo:
+   restano visibili ma appaiono spenti e non cliccabili. */
+.btn-trade:disabled,
+.btn-trade:disabled:hover {
+    /* transition:none → gli stili disabilitati si applicano ISTANTANEAMENTE (senza
+       la transizione "all" del bottone che altrimenti resta bloccata sul valore
+       iniziale). !important per battere le transizioni CSS nella cascade. */
+    transition: none !important;
+    opacity: 0.4 !important;
+    cursor: not-allowed;
+    filter: grayscale(0.6) !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.btn-trade.close {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+.btn-trade.close:hover {
+    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.6);
+    transform: translateY(-2px);
+}
+
+@media (max-width: 1024px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-section {
+        height: 500px;
+    }
+}
+
+/* ---- PayPal Modal ---- */
+.paypal-modal {
+    background: #ffffff;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 420px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.paypal-header {
+    background: linear-gradient(135deg, #003087 0%, #009cde 100%);
+    padding: 28px 30px 22px;
+    text-align: center;
+}
+
+.paypal-logo {
+    width: 110px;
+    height: auto;
+    filter: brightness(0) invert(1);
+    margin-bottom: 10px;
+}
+
+.paypal-subtitle {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.88rem;
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+}
+
+.paypal-presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 20px 24px 0;
+}
+
+.paypal-preset {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+    color: #374151;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    padding: 9px 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.paypal-preset:hover {
+    border-color: #009cde;
+    color: #009cde;
+    background: #eff9ff;
+}
+
+.paypal-preset.active {
+    border-color: #003087;
+    background: #003087;
+    color: #fff;
+}
+
+.paypal-amount-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 24px 0;
+    border: 2px solid #d1d5db;
+    border-radius: 12px;
+    padding: 12px 16px;
+    transition: border-color 0.2s;
+}
+
+.paypal-amount-row:focus-within {
+    border-color: #003087;
+}
+
+.paypal-currency {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #6b7280;
+    letter-spacing: 0.05em;
+}
+
+.paypal-amount-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    font-variant-numeric: tabular-nums;
+    color: #111827;
+    background: transparent;
+    width: 0;
+}
+
+.paypal-note {
+    font-size: 0.73rem;
+    color: #9ca3af;
+    text-align: center;
+    margin: 10px 24px 0;
+    font-family: 'Inter', sans-serif;
+}
+
+.paypal-confirm-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: calc(100% - 48px);
+    margin: 20px 24px 10px;
+    padding: 15px;
+    background: linear-gradient(135deg, #009cde 0%, #003087 100%);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(0, 144, 206, 0.4);
+}
+
+.paypal-confirm-btn:hover {
+    box-shadow: 0 6px 28px rgba(0, 144, 206, 0.6);
+    transform: translateY(-1px);
+}
+
+.paypal-cancel-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    font-size: 0.88rem;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: color 0.15s;
+    margin-bottom: 4px;
+}
+
+.paypal-cancel-btn:hover {
+    color: #111827;
+}
+
+.paypal-security {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 24px 20px;
+    font-size: 0.72rem;
+    color: #9ca3af;
+    font-family: 'Inter', sans-serif;
+    border-top: 1px solid #f3f4f6;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    /* Spostato in alto */
+    padding-top: 5vh;
+    /* Distanza dall'alto */
+    z-index: 10000;
+}
+
+/* Consistenza con la classe .modal usata per Alpaca */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 5vh;
+    z-index: 10000;
+}
+
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-overlay.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 500px;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.modal-content h2 {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.modal-content p,
+.modal-content ol {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.modal-content ol {
+    margin-left: 20px;
+}
+
+.api-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 1rem;
+    margin-top: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.api-input:focus {
+    border-color: #3b82f6;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.error-msg {
+    color: var(--color-sell) !important;
+    font-size: 0.85rem !important;
+    text-align: center;
+    min-height: 20px;
+}
+
+/* Broker Status Container */
+.broker-status-container {
+    display: flex;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.broker-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: help;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4b5563;
+    /* Grigio (Offline) */
+    transition: all 0.3s;
+}
+
+.status-dot.active {
+    background: #10b981;
+    /* Verde (Connesso) */
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    animation: statusPulseGreen 2s infinite;
+}
+
+.status-dot.warning {
+    background: #f59e0b;
+    /* Giallo (Connessione/Attesa) */
+}
+
+.status-dot.error {
+    background: #ef4444;
+    /* Rosso (Errore) */
+}
+
+.status-dot.off {
+    background: #475569;
+    /* Blu-grigio (Disattivato volontariamente, es. Finnhub in modalità Alpaca) */
+    border: 1px solid #64748b;
+    opacity: 0.7;
+}
+
+.status-text {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+@keyframes statusPulseGreen {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 0.7;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.api-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.api-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+select {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+select:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+select option,
+select optgroup {
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+}
+
+/* ---- Position Tabs ---- */
+.pos-tabs-header {
+    margin-bottom: 12px;
+}
+
+.pos-tabs-header h3 {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.pos-tabs {
+    display: flex;
+    gap: 4px;
+    /* Tutte le tab (inclusa Materie Prime) restano su una sola riga */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.pos-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.pos-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pos-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.pos-tab.active {
+    background: var(--gradient-primary);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+}
+
+.pos-count {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 1px 5px;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+
+.pos-tab.active .pos-count {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* ---- Radar Category Badge ---- */
+.radar-cat-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.radar-cat-badge.cat-stock {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.radar-cat-badge.cat-forex {
+    background: rgba(139, 92, 246, 0.2);
+    color: #8b5cf6;
+    border-color: rgba(139, 92, 246, 0.4);
+}
+
+.radar-cat-badge.cat-commodity {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.radar-cat-badge.cat-crypto {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+/* ---- Market Overview Mini Cards (Left Sidebar) ---- */
+.market-overview {
+    padding: 16px;
+}
+
+.market-overview h2 {
+    margin-bottom: 14px;
+}
+
+.overview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.overview-item {
+    /* Griglia a 3 colonne: nome | performance (flessibile) | valore.
+       Prima era flex con min-width sui figli, quindi su spazi stretti il valore
+       (% o OFFLINE) veniva spinto FUORI dal box. Con la colonna centrale 1fr e
+       min-width:0 il valore resta sempre dentro e tutti i box hanno pari larghezza. */
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    transition: background 0.2s;
+}
+
+.overview-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.ov-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.ov-price {
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    font-weight: 500;
+    min-width: 0;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ov-change {
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    min-width: 0;
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* ---- Custom Tooltips ---- */
+[data-tooltip] {
+    position: relative;
+    cursor: default;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: rgba(15, 23, 42, 0.97);
+    color: #e2e8f0;
+    font-size: 0.74rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    line-height: 1.55;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    white-space: normal;
+    max-width: 230px;
+    width: max-content;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 9999;
+    backdrop-filter: blur(10px);
+}
+
+[data-tooltip]::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    border: 6px solid transparent;
+    border-top-color: rgba(255, 255, 255, 0.13);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 9999;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:hover::before {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Tasto ON/OFF del bot: è in cima a .control-card, che ora è uno scroll
+   container (overflow) e ne ritaglierebbe il tooltip verso l'alto. Lo apriamo
+   verso il BASSO e allineato a DESTRA così resta dentro l'area visibile del
+   pannello (né tagliato in alto, né oltre il bordo destro). */
+#botControlWrapper [data-tooltip]::after {
+    bottom: auto;
+    top: calc(100% + 10px);
+    left: auto;
+    right: 0;
+    transform: translateX(0) translateY(-4px);
+    /* il bottone è text-transform:uppercase: il tooltip deve restare normale */
+    text-transform: none;
+    letter-spacing: normal;
+}
+#botControlWrapper [data-tooltip]::before {
+    bottom: auto;
+    top: calc(100% + 4px);
+    left: auto;
+    right: 22px;
+    transform: translateX(0) translateY(-4px);
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.13);
+}
+#botControlWrapper [data-tooltip]:hover::after,
+#botControlWrapper [data-tooltip]:hover::before {
+    transform: translateX(0) translateY(0);
+}
+
+/* Left sidebar — tooltip apre verso destra */
+.left-sidebar [data-tooltip]::after {
+    left: 0;
+    right: auto;
+    transform: translateX(0) translateY(4px);
+}
+
+.left-sidebar [data-tooltip]:hover::after {
+    transform: translateX(0) translateY(0);
+}
+
+.left-sidebar [data-tooltip]::before {
+    left: 16px;
+    transform: translateY(4px);
+}
+
+.left-sidebar [data-tooltip]:hover::before {
+    transform: translateY(0);
+}
+
+/* Right sidebar — tooltip apre verso sinistra */
+.sidebar [data-tooltip]::after {
+    left: auto;
+    right: 0;
+    transform: translateX(0) translateY(4px);
+}
+
+.sidebar [data-tooltip]:hover::after {
+    transform: translateX(0) translateY(0);
+}
+
+.sidebar [data-tooltip]::before {
+    left: auto;
+    right: 16px;
+    transform: translateY(4px);
+}
+
+.sidebar [data-tooltip]:hover::before {
+    transform: translateY(0);
+}
+
+/* Header — tooltip centrato verso il basso */
+.pair-selector [data-tooltip]::after {
+    top: calc(100% + 10px);
+    bottom: auto;
+    transform: translateX(-50%) translateY(-4px);
+}
+
+.pair-selector [data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(0);
+}
+
+.pair-selector [data-tooltip]::before {
+    top: calc(100% + 4px);
+    bottom: auto;
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.13);
+    transform: translateX(-50%) translateY(-4px);
+}
+
+.pair-selector [data-tooltip]:hover::before {
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Broker controls in header — tooltip SOTTO: la barra di stato è in cima alla
+   finestra e verso l'alto verrebbe tagliato dalla barra dei preferiti del browser. */
+.broker-controls [data-tooltip]::after {
+    top: calc(100% + 10px);
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%) translateY(-4px);
+    white-space: nowrap;
+    font-size: 0.7rem;
+    z-index: 99999;
+}
+
+.broker-controls [data-tooltip]::before {
+    top: calc(100% + 4px);
+    bottom: auto;
+    left: 50%;
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.13);
+    transform: translateX(-50%) translateY(-4px);
+    z-index: 99999;
+}
+
+.broker-controls [data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    visibility: visible;
+}
+
+.broker-controls [data-tooltip]:hover::before {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Ingranaggio Impostazioni (in cima all'header): tooltip verso il basso, come
+   la barra broker, per non essere tagliato dal bordo/barra preferiti in alto. */
+.settings-wrap [data-tooltip]::after {
+    top: calc(100% + 10px);
+    bottom: auto;
+    transform: translateX(-50%) translateY(-4px);
+}
+
+.settings-wrap [data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(0);
+}
+
+.settings-wrap [data-tooltip]::before {
+    top: calc(100% + 4px);
+    bottom: auto;
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.13);
+    transform: translateX(-50%) translateY(-4px);
+}
+
+.settings-wrap [data-tooltip]:hover::before {
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Orari di Mercato (card in cima all'header, es. Criptovalute 24/7): tooltip
+   verso il basso, così non viene tagliato dal bordo superiore / barra preferiti
+   del browser. Stesso schema di broker e impostazioni. */
+.market-hours-card [data-tooltip]::after {
+    top: calc(100% + 10px);
+    bottom: auto;
+    transform: translateX(-50%) translateY(-4px);
+    z-index: 99999;
+}
+.market-hours-card [data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(0);
+}
+.market-hours-card [data-tooltip]::before {
+    top: calc(100% + 4px);
+    bottom: auto;
+    border-top-color: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.13);
+    transform: translateX(-50%) translateY(-4px);
+    z-index: 99999;
+}
+.market-hours-card [data-tooltip]:hover::before {
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Chart Legend Overlay */
+.chart-legend-overlay {
+    position: relative;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    padding: 8px 16px;
+    display: flex;
+    gap: 16px;
+    background: rgba(15, 23, 42, 0.4) !important;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    width: max-content;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+}
+
+.legend-item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+/* ---- Trading Capital & Transfers Redesign ---- */
+.wallet-card,
+.stats-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wallet-card:hover,
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* La box Equity non deve essere compressa dal layout flex del pannello (altezza
+   fissa): con overflow:hidden verrebbe schiacciata a pochi px e il valore, che
+   c'è, resterebbe tagliato fuori dal box. */
+.capital-main-display {
+    flex-shrink: 0;
+}
+
+.capital-main-display::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(to right,
+            transparent,
+            rgba(255, 255, 255, 0.1),
+            transparent);
+    transform: skewX(-25deg);
+    transition: 0.75s;
+    pointer-events: none;
+}
+
+.wallet-card:hover .capital-main-display::before {
+    left: 150%;
+}
+
+.capital-item {
+    transition: transform 0.2s, background 0.2s;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.capital-item:hover {
+    transform: scale(1.02);
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.stat-card-mini {
+    transition: all 0.2s;
+}
+
+.stat-card-mini:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+.status-badge {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+    letter-spacing: 0.05em;
+}
+
+.btn-deposit-mini {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-width: 1px;
+}
+
+.invest-chip {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.invest-chip.active {
+    background: #3b82f6 !important;
+    border-color: #60a5fa !important;
+    color: #fff !important;
+}
+
+/* Animations */
+@keyframes pulse-subtle {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.status-active {
+    animation: pulse-subtle 2s infinite ease-in-out;
+}
+
+/* Notifications */
+.notification {
+    background: #1e293b;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border-left: 4px solid #10b981;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    transform: translateX(120%);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    font-size: 0.85rem;
+    font-weight: 500;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification.error {
+    border-left-color: #ef4444;
+}
+
+.notification::before {
+    content: '🔔';
+    font-size: 1rem;
+}
+
+.notification.error::before {
+    content: '⚠️';
+}
+
+/* Bot Control Button */
+.btn-bot-start {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    font-weight: 700;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.btn-bot-start:hover {
+    background: rgba(16, 185, 129, 0.2);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+    transform: translateY(-1px);
+}
+
+.btn-bot-start:active {
+    transform: translateY(0);
+}
+
+.btn-bot-start.running {
+    border-color: rgba(245, 158, 11, 0.4);
+    /* Amber/Orange */
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+.btn-bot-start.running:hover {
+    background: rgba(245, 158, 11, 0.2);
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+}
+
+/* Variante compatta del pulsante bot: piccola e allineata a destra
+   dell'etichetta "Trading Automatico" nell'header del pannello. */
+.btn-bot-compact {
+    width: auto;
+    padding: 6px 12px;
+    font-size: 0.7rem;
+    gap: 5px;
+    border-radius: 8px;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.mode-toggle-header {
+    gap: 10px;
+}
+
+.bot-icon {
+    font-size: 1.1rem;
+}
+
+/* Strategy Info Card */
+.strategy-info-card {
+    margin-top: 0;
+    padding: 16px;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.strategy-info-card h2 {
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+
+/* Login Overlay */
+.login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    box-sizing: border-box;
+    /* il padding sta dentro al 100%, la card non tocca i bordi */
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(20px);
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.login-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.login-card {
+    width: calc(100vw - 40px);
+    /* ancorata al viewport REALE, non al contenitore */
+    max-width: 450px;
+    padding: 48px;
+    box-sizing: border-box;
+    /* il padding NON allarga oltre la larghezza: niente overflow/clip */
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin: 16px 0 4px;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.login-header p {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: 24px;
+}
+
+.login-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 24px 0;
+}
+
+.login-instruction {
+    font-size: 0.9rem !important;
+    line-height: 1.6;
+    margin-bottom: 32px !important;
+    color: var(--text-secondary);
+}
+
+.login-footer {
+    margin-top: 40px;
+    font-size: 0.75rem;
+    color: rgba(148, 163, 184, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+}
+
+/* In locale / WebView il pulsante Google non viene caricato: nascondiamo il
+   contenitore vuoto (largo) che altrimenti allargherebbe la card. */
+html.no-gsi .g_id_signin {
+    display: none !important;
+}
+
+/* Schermi piccoli (telefoni): riduce font e padding così tutto entra e nulla viene tagliato */
+@media (max-width: 480px) {
+    .login-card {
+        padding: 26px 18px;
+    }
+
+    .login-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .login-header p {
+        font-size: 0.9rem;
+    }
+
+    .login-instruction {
+        font-size: 0.82rem !important;
+    }
+
+    .login-footer {
+        letter-spacing: 0.06em;
+        font-size: 0.7rem;
+    }
+}
+
+.app-container.blurred {
+    filter: blur(20px);
+    pointer-events: none;
+}
+
+.app-container {
+    transition: filter 0.8s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* GSI Button Centering */
+.g_id_signin {
+    display: flex;
+    justify-content: center;
+}
+
+/* User Profile Widget */
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.user-profile.hidden {
+    display: none;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.user-picture {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+}
+
+.btn-logout {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.btn-logout:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+/* Info Button & Modal */
+.btn-info-circle {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: 8px;
+    font-weight: 700;
+}
+
+.btn-info-circle:hover {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.info-panel {
+    max-width: 400px !important;
+    text-align: center;
+}
+
+.info-header {
+    margin-bottom: 24px;
+}
+
+.info-logo {
+    background: rgba(59, 130, 246, 0.1);
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+}
+
+.version-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+}
+
+.info-body p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.info-specs {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 24px;
+    text-align: left;
+}
+
+.spec-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 8px;
+}
+
+.spec-item:last-child {
+    margin-bottom: 0;
+}
+
+.spec-item strong {
+    color: var(--text-primary);
+}
+
+.spec-item span {
+    color: var(--text-secondary);
+}
+
+.info-legal {
+    font-size: 0.75rem;
+    color: #f59e0b;
+    font-style: italic;
+    margin-bottom: 24px;
+}
+
+/* ---- Category Badges ---- */
+.category-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-right: auto;
+    /* Spinge il prezzo sulla destra */
+    margin-left: 10px;
+}
+
+.category-crypto {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.category-stocks {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.category-forex {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.category-commodity {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* ---- Invest Quantity Panel Redesign ---- */
+.invest-chips {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.invest-chip {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 8px 4px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.invest-chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.invest-chip.active {
+    background: var(--gradient-primary);
+    color: white;
+    border-color: transparent;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.invest-slider-wrap {
+    margin-bottom: 24px;
+    padding: 0 4px;
+}
+
+.invest-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    outline: none;
+}
+
+.invest-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    border: 2px solid #3b82f6;
+    transition: transform 0.1s;
+}
+
+.invest-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.invest-preview-big {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.invest-preview-sym {
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    margin-right: 4px;
+}
+
+.invest-preview-val {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.02em;
+}
+
+.invest-preview-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+}
+
+.invest-margin-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.invest-margin-val {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.btn-force-close {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-force-close:hover {
+    background: rgba(245, 158, 11, 0.25);
+    border-color: #f59e0b;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN — Mobile First
+   ============================================ */
+
+/* Safe Area for notch/punch-hole devices */
+@supports (padding: env(safe-area-inset-top)) {
+    .app-container {
+        padding-top: calc(12px + env(safe-area-inset-top));
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+        padding-left: calc(12px + env(safe-area-inset-left));
+        padding-right: calc(12px + env(safe-area-inset-right));
+    }
+}
+
+/* --- TABLET (≤ 1200px) --- */
+@media (max-width: 1200px) {
+    .app-container {
+        padding: 12px;
+        gap: 16px;
+    }
+
+    .app-header {
+        padding: 12px 16px;
+    }
+
+    .chart-container {
+        min-height: 280px;
+    }
+}
+
+/* --- MOBILE (≤ 768px) --- */
+@media (max-width: 768px) {
+    .app-container {
+        padding: 8px;
+        gap: 12px;
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .chart-section {
+        padding: 12px;
+    }
+
+    .sidebar {
+        order: 2;
+        padding-right: 0;
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    /* Header compatto */
+    .app-header {
+        padding: 8px 12px;
+        gap: 8px;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .logo h1 {
+        font-size: 1rem;
+    }
+
+    .pair-selector {
+        padding: 6px 12px;
+    }
+
+    .pair-selector select {
+        font-size: 0.85rem;
+    }
+
+    .live-indicator {
+        font-size: 0.7rem;
+    }
+
+    /* Portfolio header */
+    .header-portfolio {
+        padding: 6px 10px;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .header-portfolio-balance {
+        font-size: 1rem;
+    }
+
+    .header-portfolio-pnl {
+        font-size: 0.65rem;
+        border-left: none;
+        padding-left: 0;
+    }
+
+    /* Chart ridotto */
+    .chart-container {
+        min-height: 200px;
+        max-height: 250px;
+    }
+
+    .price {
+        font-size: 1.3rem;
+    }
+
+    .change {
+        font-size: 0.75rem;
+    }
+
+    .section-header {
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .section-header h2 {
+        font-size: 0.9rem;
+    }
+
+    /* Cards */
+    .glass-panel {
+        border-radius: 12px;
+    }
+
+    .stats-card {
+        padding: 14px;
+    }
+
+    .stats-grid {
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .stat-item {
+        padding: 10px;
+    }
+
+    .stat-label {
+        font-size: 0.65rem;
+    }
+
+    .stat-value {
+        font-size: 1.05rem;
+    }
+
+    /* Controls */
+    .control-card {
+        margin-bottom: 12px;
+    }
+
+    .btn-trade {
+        padding: 12px;
+        font-size: 0.9rem;
+        min-height: 44px;
+    }
+
+    .action-buttons {
+        gap: 8px;
+    }
+
+    /* Open Positions */
+    .open-positions-list {
+        max-height: 600px;
+    }
+
+    .open-position {
+        padding: 10px;
+        font-size: 0.8rem;
+    }
+
+    .open-position-header {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .btn-close-pos {
+        min-height: 36px;
+        padding: 6px 12px;
+        font-size: 0.7rem;
+    }
+
+    /* Trade History */
+    .trade-list {
+        max-height: 600px;
+    }
+
+    .trade-row {
+        padding: 10px;
+        font-size: 0.8rem;
+    }
+
+    .history-card {
+        padding: 14px;
+        min-height: 200px;
+    }
+
+    /* Radar */
+    .radar-card {
+        padding: 14px;
+    }
+
+    .radar-scroll-list {
+        max-height: 400px;
+    }
+
+    .radar-signal {
+        padding: 6px 10px;
+        font-size: 0.78rem;
+    }
+
+    /* Wallet */
+    .wallet-card {
+        padding: 14px;
+    }
+
+    /* Bot config inputs */
+    .invest-chips {
+        flex-wrap: wrap;
+    }
+
+    .invest-chip {
+        min-height: 36px;
+        font-size: 0.8rem;
+    }
+
+    /* Category tabs scroll */
+    .pos-tabs,
+    .radar-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .pos-tabs::-webkit-scrollbar,
+    .radar-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Switch toggles — larger touch target */
+    .switch {
+        width: 50px;
+        height: 28px;
+    }
+
+    .slider:before {
+        height: 20px;
+        width: 20px;
+    }
+
+    /* Modals fullscreen su mobile */
+    .modal-content,
+    .settings-content {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        max-height: 90vh;
+        margin: 5vh auto;
+        border-radius: 16px;
+    }
+
+    /* Notification toast */
+    .notification {
+        left: 8px !important;
+        right: 8px !important;
+        width: auto !important;
+        font-size: 0.8rem !important;
+    }
+}
+
+/* --- SMALL MOBILE (≤ 480px) --- */
+@media (max-width: 480px) {
+    .app-container {
+        padding: 4px;
+        gap: 8px;
+    }
+
+    .app-header {
+        padding: 6px 8px;
+    }
+
+    .logo h1 {
+        font-size: 0.85rem;
+    }
+
+    .badge {
+        font-size: 0.6rem;
+        padding: 1px 4px;
+    }
+
+    .header-portfolio-balance {
+        font-size: 0.9rem;
+    }
+
+    /* Grafico ancora più compatto */
+    .chart-container {
+        min-height: 160px;
+        max-height: 200px;
+    }
+
+    .price {
+        font-size: 1.1rem;
+    }
+
+    /* Stats in colonna singola */
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .stat-value {
+        font-size: 0.95rem;
+    }
+
+    /* Open positions ultra-compact */
+    .open-position-pnl {
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-start;
+    }
+
+    /* Invest preview */
+    .invest-preview-big {
+        padding: 10px;
+    }
+
+    #investPreviewAmt {
+        font-size: 1.2rem !important;
+    }
+
+    /* Sidebar config sections */
+    .sidebar-section-title,
+    .stats-card h2 {
+        font-size: 0.9rem;
+    }
+}
+
+/* --- Touch Improvements (tutti i dispositivi touch) --- */
+@media (hover: none) and (pointer: coarse) {
+
+    /* Pulsanti più grandi per touch */
+    .btn-trade {
+        min-height: 48px;
+    }
+
+    .btn-close-pos {
+        min-height: 40px;
+        padding: 8px 14px;
+    }
+
+    .invest-chip {
+        min-height: 40px;
+    }
+
+    .pos-tab {
+        min-height: 36px;
+        padding: 8px 12px;
+    }
+
+    /* Rimuovi hover effects */
+    .btn-trade.buy:hover,
+    .btn-trade.sell:hover,
+    .btn-trade.close:hover {
+        transform: none;
+    }
+
+    .radar-signal:hover {
+        transform: none;
+    }
+
+    /* Scrollbar nascosta su touch */
+    .trade-list,
+    .open-positions-list,
+    .radar-scroll-list,
+    .sidebar,
+    .left-sidebar {
+        scrollbar-width: none;
+    }
+
+    .trade-list::-webkit-scrollbar,
+    .open-positions-list::-webkit-scrollbar,
+    .radar-scroll-list::-webkit-scrollbar,
+    .sidebar::-webkit-scrollbar,
+    .left-sidebar::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* Landscape mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+    .chart-container {
+        min-height: 150px;
+        max-height: 180px;
+    }
+
+    .app-header {
+        flex-direction: row;
+        flex-wrap: nowrap;
+    }
+}
+
+
+/* Forza l'altezza uguale per TUTTI i box dell'header */
+.app-header .user-profile,
+.app-header .header-portfolio,
+.app-header .broker-controls,
+.app-header .market-hours-card {
+    height: 62px !important;
+    box-sizing: border-box;
+    margin: 0 !important;          /* niente margini ereditati (market-hours aveva margin-bottom:20px) */
+    border-radius: 10px !important; /* raggio identico per tutti i box */
+    align-self: center;             /* stessa linea verticale nell'header */
+}
+
+.app-header .user-profile,
+.app-header .header-portfolio {
+    display: flex;
+    align-items: center;
+}
+
+.app-header .broker-controls,
+.app-header .market-hours-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 12px;
+    gap: 2px;
+}
+
+/* ============================================================
+   GRIGLIA UNICA A 6 PANNELLI UNIFORMI
+   I contenitori intermedi spariscono dal layout (display: contents):
+   i 6 pannelli diventano celle dirette della dashboard-grid, tutte
+   con la stessa larghezza e la stessa altezza, ancorate alla pagina.
+   ============================================================ */
+.left-sidebar,
+.middle-column-section,
+.capital-perf-row,
+.sidebar-right,
+.top-duo-grid {
+    display: contents;
+}
+
+.dashboard-grid {
+    align-items: stretch !important;
+}
+
+/* Cella-pannello: altezza uniforme ancorata alla viewport,
+   contenuto che scorre all'interno senza deformare la griglia */
+.panel-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Altezza ancorata al viewport + ~2cm (76px a 96 DPI) + 14px recuperati
+       riducendo il gap header→griglia (allungamento verso l'alto)
+       + ~1cm (38px a 96 DPI) di allungamento verso il basso. */
+    height: calc(100vh - 155px + 76px + 14px + 38px);
+    min-height: 540px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin: 0 !important;
+}
+
+/* Scrollbar a livello di cella-pannello (Gestione Capitale) e della card
+   Trading Automatico: gutter di 14px con bordo trasparente di 4px + background-clip
+   padding-box, così la barra visibile (6px) resta RIENTRATA di ~4px dal bordo
+   arrotondato del pannello invece di stare a filo dell'angolo. */
+.panel-cell::-webkit-scrollbar,
+.auto-col .control-card::-webkit-scrollbar { width: 14px; }
+.panel-cell::-webkit-scrollbar-track,
+.auto-col .control-card::-webkit-scrollbar-track { background: transparent; }
+.panel-cell::-webkit-scrollbar-thumb,
+.auto-col .control-card::-webkit-scrollbar-thumb {
+    background-color: rgba(139, 92, 246, 0.45);
+    border-radius: 8px;
+    border: 4px solid transparent;
+    background-clip: padding-box;
+}
+.panel-cell::-webkit-scrollbar-thumb:hover,
+.auto-col .control-card::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(139, 92, 246, 0.65);
+}
+
+/* La card Trading Automatico riempie la sua colonna e scorre AL SUO INTERNO
+   (non sulla cella esterna), così la scrollbar resta dentro il box arrotondato */
+.auto-col .control-card {
+    flex: 1;
+    margin-bottom: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.auto-col.panel-cell { overflow-y: hidden; }
+
+/* Le liste interne si espandono e scorrono dentro il pannello */
+.history-card .trade-list { flex: 1; min-height: 120px; }
+.radar-card .radar-scroll-list { flex: 1; min-height: 0; }
+
+/* Posizioni Aperte / Ordini in attesa: contenitore a colonna che riempie la
+   cella e lista interna che scorre da sola (una sola scrollbar, rientrata),
+   evitando la doppia scrollbar cella + lista. */
+.positions-card .open-position-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.positions-card .open-positions-list,
+.pending-card .open-positions-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+
+/* I pannelli che hanno già una lista interna scorrevole NON devono scorrere
+   anche a livello di cella: una sola scrollbar, sempre rientrata nel pannello. */
+.radar-card.panel-cell,
+.history-card.panel-cell,
+.positions-card.panel-cell,
+.pending-card.panel-cell {
+    overflow-y: hidden;
+}
+
+/* Colonna Ordini in Attesa Alpaca (7ª cella, tra Posizioni e Cronologia):
+   visibile solo in modalità broker — il JS aggiunge .has-pending alla griglia
+   e le colonne si ridimensionano da 6 a 7 mantenendo larghezze identiche */
+.dashboard-grid.has-pending {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+/* Modalità broker (7 colonne desktop → pannelli più stretti): in Gestione
+   Capitale i riquadri (Capitale Iniziale / Saldo Cash / Potere Acquisto /
+   Valore Mercato / PnL) restano in 2×2 ma con valori ed etichette rimpiccioliti
+   e padding ridotto, così i valori a 6 cifre entrano nella larghezza ridotta
+   e non vengono più tagliati dal bordo del pannello. Solo ≥1501px: sotto, la
+   griglia è già a 3/2/1 colonne (pannelli larghi) e i box stanno comodi.
+   I valori hanno font-size inline, quindi serve !important. */
+@media (min-width: 1501px) {
+    .dashboard-grid.has-pending .wallet-card .capital-item {
+        padding: 8px 10px !important;
+    }
+    .dashboard-grid.has-pending .wallet-card .capital-item > div:last-child {
+        font-size: 0.8rem !important;
+    }
+    .dashboard-grid.has-pending .wallet-card .capital-item > div:first-child {
+        font-size: 0.6rem !important;
+    }
+}
+
+/* Responsive: 6/7 → 3 → 2 → 1 colonne, sempre a larghezza identica */
+@media (max-width: 1500px) {
+    .dashboard-grid,
+    .dashboard-grid.has-pending {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1100px) {
+    .dashboard-grid,
+    .dashboard-grid.has-pending {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-grid,
+    .dashboard-grid.has-pending {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    /* In colonna singola i pannelli tornano ad altezza naturale,
+       con un tetto per non dover scorrere all'infinito */
+    .panel-cell {
+        height: auto;
+        min-height: 0;
+        max-height: 85vh;
+    }
+}
+
+/* ============================================================
+   UNIFORMITÀ VISIVA DELLE COLONNE
+   Stesso padding, stesso raggio, stessi bordi, stessi titoli e
+   stessa scala tipografica per tutti i pannelli della dashboard.
+   ============================================================ */
+
+/* Box identico per tutti i pannelli (16px ovunque: prima era un
+   misto di 20px e 16px, da cui l'apparente differenza di larghezza) */
+.radar-card,
+.wallet-card,
+.stats-card,
+.history-card,
+.positions-card,
+.pending-card,
+.auto-col .control-card {
+    padding: 16px !important;
+    border-radius: 16px;
+}
+
+.auto-col {
+    padding: 0 !important;
+}
+
+/* Bordo ben visibile anche per i pannelli senza colore d'accento */
+.radar-card,
+.history-card,
+.auto-col .control-card {
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Titoli dei pannelli: stessa dimensione, peso e colore ovunque
+   (prima: h2 default del browser nel Radar/Trading, 1.1rem gradiente
+   nelle Prestazioni, 0.9rem nelle Posizioni/Ordini).
+   Selettori per ID: gli h2 di sezione interni (Dimensione Ordine,
+   Prezzi Live, ...) restano alla loro scala 0.85-0.9rem */
+.radar-card > div:first-child h2,
+#lblCapitalManagement,
+#perfPanelTitle,
+#lblAutoTrading,
+#lblHistoryTitle,
+#openPosTitle,
+#pendingOrdersTitle {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    color: var(--text-primary) !important;
+    background: none !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    letter-spacing: 0.01em;
+}
+
+/* Badge $ del giorno accanto ai titoli: stessa misura nei due pannelli */
+#openDailyNet,
+#historyDailyNet {
+    font-size: 0.85rem !important;
+}
+
+/* Scala tipografica di base comune a tutte le colonne */
+.panel-cell {
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   CRONOLOGIA OPERAZIONI: layout verticale compatto
+   Le righe si impilano (lato+PnL / IN / OUT / motivo+durata) così
+   il contenuto sta nella colonna senza scrollbar orizzontale.
+   ============================================================ */
+.trade-list {
+    overflow-x: hidden;
+}
+
+.history-header {
+    display: none !important; /* intestazione a 3 colonne: obsoleta col layout impilato */
+}
+
+.trade-row {
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px 12px;
+    margin-bottom: 0; /* la spaziatura la dà il gap della lista */
+}
+
+.trade-row:hover {
+    transform: none; /* lo slide orizzontale riporterebbe la scrollbar */
+}
+
+.trade-row-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.trade-row-top .trade-side {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trade-sym {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.trade-row-top .trade-pnl {
+    flex: none;
+    font-size: 0.92rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.trade-row-top .trade-pnl small {
+    font-size: 0.75rem;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.trade-leg {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.trade-leg-badge {
+    flex: none;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+.trade-leg-badge.in {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+.trade-leg-badge.out {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.trade-leg-price {
+    margin-left: auto;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.trade-row-mid {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.trade-reason {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.trade-duration {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.trade-duration strong {
+    color: var(--text-primary);
+}
+
+/* ============================================================
+   ORARI DI MERCATO (header): più leggibili nello stesso box 62px
+   ============================================================ */
+.app-header .market-hours-card {
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    padding: 5px 14px;
+    gap: 3px;
+}
+
+.app-header .market-hours-card h2 {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.app-header .market-hours-card .market-list {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 2px 20px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.app-header .market-hours-card .market-list li {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.app-header .market-hours-card .market-name {
+    /* Icona più piccola: così l'orario/i giorni stanno più a sinistra e compatti */
+    font-size: 0.7rem;
+    line-height: 1.2;
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.app-header .market-hours-card .market-time {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #cbd5e1;
+    white-space: nowrap;
+}
+
+.app-header .market-hours-card .market-time.status-open {
+    color: #10b981;
+}
+
+/* Header: sotto i 1400px i box vanno a capo invece di schiacciarsi */
+@media (max-width: 1400px) {
+    .app-header {
+        flex-wrap: wrap;
+        justify-content: center;
+        row-gap: 10px;
+    }
+}
+
+/* ============================================================
+   SISTEMA LEGALE: disclaimer bloccante, modale documenti,
+   riga di consenso nell'onboarding, Note Legali nelle Info
+   ============================================================ */
+
+/* Overlay bloccante primo avvio: sopra a tutto, login compreso */
+.disclaimer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(2, 6, 23, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.disclaimer-card {
+    max-width: 520px;
+    width: 100%;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.disclaimer-card h2 {
+    font-size: 1.15rem;
+    text-align: center;
+    color: #f59e0b;
+    margin: 0;
+}
+
+.disclaimer-card p {
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* Riga di link legali (disclaimer + Note Legali) */
+.legal-links-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+}
+
+.legal-links-row a {
+    color: #60a5fa;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.legal-links-row a:hover {
+    color: #93c5fd;
+}
+
+/* Checkbox di consenso esplicito nel disclaimer: obbligatoria per abilitare
+   il bottone "Accetto e Confermo" */
+.disclaimer-check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.disclaimer-check-row input[type="checkbox"] {
+    margin-top: 2px;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+}
+
+.disclaimer-check-row span {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+#disclaimerAcceptBtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    filter: grayscale(0.5);
+}
+
+/* Interruttore a 3 stadi (header Connessioni Broker):
+   0 = FH (Test/Finnhub), 1 = ALP (Alpaca Paper), 2 = ALrt (reale, sola lettura) */
+.tri-switch {
+    display: flex;
+    align-items: center;
+}
+
+.tri-switch input[type="range"] {
+    width: 58px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: #f59e0b;
+    background: transparent;
+}
+
+/* Pannello Impostazioni (ingranaggio nella barra superiore) */
+.app-settings-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 280px;
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    z-index: 99999;
+    backdrop-filter: blur(10px);
+}
+
+.app-settings-panel.hidden {
+    display: none;
+}
+
+.app-settings-panel .settings-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 10px 0;
+}
+
+.app-settings-panel .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+
+.app-settings-panel .settings-row + .settings-row {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.app-settings-panel .settings-vol-val {
+    min-width: 40px;
+    text-align: right;
+    font-weight: 700;
+    color: #3b82f6;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Tooltip HTML del tri-switch: 3 righe, una per stadio, colore = broker.
+   (data-tooltip usa content: attr() e non può colorare righe diverse) */
+.tri-switch-tooltip {
+    position: absolute;
+    top: calc(100% + 10px);
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: max-content;
+    max-width: 340px;
+    text-align: left;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 99999;
+    backdrop-filter: blur(10px);
+}
+
+#testModeToggleBox:hover .tri-switch-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+.tri-tip-line {
+    display: block;
+    font-size: 0.7rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    line-height: 1.45;
+    white-space: nowrap;
+}
+
+/* Bottone "Test Connessione" nei modali broker: sfondo giallo */
+.btn-test-conn {
+    background: #f59e0b !important;
+    border-color: #f59e0b !important;
+    color: #111827 !important;
+    font-weight: 700;
+}
+
+.btn-test-conn:hover:not(:disabled) {
+    background: #fbbf24 !important;
+    border-color: #fbbf24 !important;
+}
+
+.btn-test-conn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+/* Consenso nella schermata di accesso */
+.legal-consent {
+    margin-top: 14px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.legal-consent a {
+    color: #60a5fa;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* Riga di consenso OBBLIGATORIO nel banner di login */
+.login-consent-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    text-align: left;
+    margin: 6px 0 16px;
+    cursor: pointer;
+}
+
+.login-consent-row input[type="checkbox"] {
+    margin-top: 2px;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+}
+
+.login-consent-row .legal-consent {
+    margin: 0;
+    text-align: left;
+}
+
+/* Pulsanti di accesso bloccati finché il consenso non è dato */
+.login-actions {
+    transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.login-actions.consent-required {
+    opacity: 0.4;
+    filter: grayscale(0.8);
+    pointer-events: none;
+}
+
+/* Pulsante Google custom (la libreria GSI si carica solo al click) */
+.google-login-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 16px;
+    background: #ffffff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    font-family: 'Roboto', 'Inter', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.google-login-btn:hover {
+    background: #f7f8f8;
+    box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
+}
+
+.google-login-btn svg {
+    flex-shrink: 0;
+}
+
+/* In Capacitor il login Google usa il plugin nativo @capgo/capacitor-social-login
+   (vedi initGoogleLoginButton in app.js), quindi il pulsante DEVE restare visibile.
+   Nascondiamo solo il widget GSI web ufficiale (.g_id_signin, regola sopra), non
+   questo pulsante custom. */
+
+/* Lampeggio della riga consenso se si tenta di accedere senza spuntarla */
+.login-consent-row.consent-flash {
+    animation: consentFlash 0.55s ease 2;
+    border-radius: 6px;
+}
+
+@keyframes consentFlash {
+    0%, 100% { background: transparent; }
+    50% { background: rgba(239, 68, 68, 0.18); }
+}
+
+/* Note Legali dentro il modale Info */
+.info-legal-links {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.info-legal-links h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+    text-align: center;
+}
+
+/* Modale documenti legali: deve stare SOPRA il disclaimer bloccante
+   (z-index 100000), altrimenti i link del banner lo aprono ma resta
+   nascosto dietro l'overlay */
+#legalModal {
+    z-index: 100001;
+}
+
+/* Modale documenti legali */
+.legal-modal {
+    max-width: 640px;
+    width: 92%;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 22px;
+}
+
+.legal-tabs {
+    display: flex;
+    gap: 8px;
+}
+
+.legal-tab {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.legal-tab:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.legal-tab.active {
+    color: #fff;
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.5);
+}
+
+.legal-content {
+    overflow-y: auto;
+    min-height: 200px;
+    padding: 4px 14px 4px 2px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+
+.legal-content h4 {
+    margin: 14px 0 4px;
+    font-size: 0.85rem;
+    color: #93c5fd;
+}
+
+.legal-content p {
+    margin: 0 0 6px;
+    color: var(--text-secondary);
+}
+
+.legal-content .legal-date {
+    font-size: 0.72rem;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.legal-content::-webkit-scrollbar { width: 6px; }
+.legal-content::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.35); border-radius: 3px; }
+
+@media (max-width: 768px) {
+    .disclaimer-card { padding: 20px; }
+    .legal-modal { max-height: 90vh; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   TOOLTIP IN PRIMO PIANO (motore JS, portale su <body>)
+   I tooltip CSS via ::after/::before sono ancorati all'elemento e vengono
+   RITAGLIATI da qualsiasi antenato con overflow:hidden/auto (i pannelli
+   scrollabili) o dallo stesso elemento (es. i box con overflow:hidden per
+   contenere effetti decorativi). Risultato: alcuni tooltip non arrivavano
+   mai in primo piano. Il motore JS (initFloatingTooltips in app.js) crea un
+   solo #jsTooltip in position:fixed appeso al <body>: essendo fuori da ogni
+   contenitore che ritaglia, appare SEMPRE davanti a tutto.
+
+   Quando il motore è attivo aggiunge la classe .js-tt a <html> e qui
+   disattiviamo i tooltip CSS per non duplicarli. Disattiviamo SOLO:
+   • il testo (::after, che è esclusivamente il tooltip);
+   • la freccia (::before) rendendone il bordo trasparente — gli ::before
+     decorativi (es. lo "shine" di .capital-main-display) non hanno bordo,
+     quindi restano intatti. Se il JS non parte, i tooltip CSS continuano a
+     funzionare come prima (progressive enhancement).
+   ───────────────────────────────────────────────────────────────────── */
+html.js-tt [data-tooltip]::after { content: none !important; }
+html.js-tt [data-tooltip]::before { border-color: transparent !important; }
+
+#jsTooltip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    /* sopra pannelli, modali (10000), banner/disclaimer (100001) e
+       tri-switch (99999): il tooltip deve stare davanti a tutto */
+    z-index: 100060;
+    max-width: 260px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.97);
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.74rem;
+    font-weight: 400;
+    line-height: 1.55;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: break-word;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+#jsTooltip.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+#jsTooltip .jstt-arrow {
+    position: absolute;
+    width: 0;
+    height: 0;
+    border: 6px solid transparent;
+}
+
+#jsTooltip.place-top .jstt-arrow {
+    top: 100%;
+    border-top-color: rgba(15, 23, 42, 0.97);
+}
+
+#jsTooltip.place-bottom .jstt-arrow {
+    bottom: 100%;
+    border-bottom-color: rgba(15, 23, 42, 0.97);
+}
+
+/* =====================================================================
+   FIX RESPONSIVE (telefoni) — impedisce che la pagina diventi più larga
+   dello schermo.
+   Causa: la riga di icone dentro .broker-controls (3 pulsanti broker + LED
+   di stato + interruttore a 3 stadi) era flex-wrap:nowrap con larghezza
+   minima ~511px. Non potendo restringersi, la WebView allargava la viewport
+   a ~539px su qualunque telefono più stretto, spingendo fuori schermo sia la
+   card di login sia la dashboard (contenuto tagliato, pagina che scorreva in
+   orizzontale). Qui rendiamo avvolgibili/riducibili gli elementi dell'header
+   così la larghezza minima del documento resta entro lo schermo.
+   Questo blocco è in fondo al file di proposito: a parità di specificità
+   vince per ordine di sorgente sulle regole .app-header precedenti.
+   ===================================================================== */
+@media (max-width: 768px) {
+    /* body aveva già overflow-x:hidden, html no: senza questo la viewport
+       mobile può comunque espandersi per contenere il min-content */
+    html { overflow-x: hidden; }
+
+    /* Nessun figlio dell'header può imporre una larghezza minima > schermo */
+    .app-header > * { min-width: 0; max-width: 100%; }
+    .logo { flex-wrap: wrap; min-width: 0; }
+
+    /* La riga connessioni broker va a capo invece di sforare la larghezza */
+    .broker-controls { width: 100%; min-width: 0; }
+    .broker-controls > div { flex-wrap: wrap; justify-content: center; }
+
+    /* Interruttore a 3 stadi + etichetta: compatti e avvolgibili */
+    #testModeToggleBox { flex-wrap: wrap; justify-content: center; max-width: 100%; }
+
+    /* La card "Orari di Mercato" nell'header deve potersi restringere
+       (aveva flex-shrink:0) */
+    .app-header .market-hours-card { flex-shrink: 1; max-width: 100%; }
+
+    /* La legenda del grafico aveva width:max-content (tutte le voci su una riga
+       sola, ~507px): su mobile va a capo e non sfora più la larghezza. Questo
+       allargava anche la colonna del grafico e i pulsanti Compra/Vendi sotto. */
+    .chart-legend-overlay { width: auto; max-width: 100%; flex-wrap: wrap; }
+
+    /* Rete di sicurezza: la sezione grafico non deve mai generare scroll
+       orizzontale (canvas/legenda) */
+    .chart-section { overflow-x: hidden; }
+
+    /* --- Niente barre di scorrimento verticali dentro i pannelli ---
+       Su mobile i pannelli hanno altezza naturale (scorre la pagina, non il
+       singolo pannello). Prima .panel-cell aveva max-height:85vh + overflow
+       auto, quindi i pannelli con più contenuto (es. Gestione Capitale)
+       mostravano una loro barra verticale. */
+    .panel-cell {
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        overflow: visible;
+    }
+    .auto-col.panel-cell,
+    .auto-col .control-card {
+        overflow: visible;
+        max-height: none;
+    }
+    /* I feed live (radar, cronologia, posizioni, ordini) restano scorrevoli
+       come lista interna, così la pagina non diventa lunghissima: una sola
+       barra — quella della lista — non quella del pannello. */
+    .radar-scroll-list,
+    .trade-list,
+    .positions-card .open-positions-list,
+    .pending-card .open-positions-list {
+        max-height: 55vh;
+    }
+
+    /* --- Safe area (barra di stato in alto, barra di navigazione in basso) ---
+       targetSdk 36 forza il layout edge-to-edge: la WebView disegna DIETRO la
+       barra di stato e quella di navigazione. Su mobile .app-container aveva
+       padding:8px/4px che azzerava il padding safe-area dichiarato altrove, così
+       l'header finiva sotto l'orologio/batteria. Qui lo ripristiniamo (questo
+       blocco è in fondo al file: vince per ordine di sorgente). */
+    .app-container {
+        padding-top: calc(8px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+        padding-left: calc(8px + env(safe-area-inset-left, 0px));
+        padding-right: calc(8px + env(safe-area-inset-right, 0px));
+    }
+
+    /* --- Modali: scorrevoli e dentro la safe area ---
+       .modal-content non aveva overflow-y: con contenuto alto (es. Informazioni
+       app) il pulsante "Ho capito" finiva sotto lo schermo e il modale non si
+       poteva più chiudere. Ora il contenuto scorre e resta entro le barre di
+       sistema, così il pulsante è sempre raggiungibile. */
+    .modal-overlay {
+        align-items: center;
+        padding-top: max(16px, env(safe-area-inset-top, 0px));
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+        padding-left: max(12px, env(safe-area-inset-left, 0px));
+        padding-right: max(12px, env(safe-area-inset-right, 0px));
+    }
+    .modal-content {
+        max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px);
+        overflow-y: auto;
+        margin: 0 auto;
+    }
+
+    /* --- Box "Connessioni Broker": altezza automatica ---
+       Sul desktop ha height:62px fisso; su mobile la riga di icone va a capo
+       (2 righe) e sforava il box: l'etichetta "CONNESSIONI BROKER" usciva sopra
+       e i pulsanti/interruttore sotto. Con altezza automatica il box li contiene. */
+    .app-header .broker-controls {
+        height: auto !important;
+        min-height: 0;
+    }
+
+    /* --- Header del grafico: niente testo tagliato a destra ---
+       La combo asset e la scritta "Prezzo in Tempo Reale" stavano su una sola
+       riga senza andare a capo, così l'etichetta (e il prezzo) finivano oltre il
+       bordo destro dello schermo. Ora vanno a capo e restano visibili. */
+    .section-header > div:first-child {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .pair-selector {
+        max-width: 100%;
+    }
+}
+
+/* --- Onboarding broker (primo accesso, obbligatorio) --- */
+.onb-step {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+.onb-step-info { min-width: 0; }
+.onb-step-title { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+.onb-step-cats { font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px; }
+.onb-badge {
+    font-size: 0.6rem; font-weight: 700; padding: 2px 7px; border-radius: 6px;
+    background: rgba(245, 158, 11, 0.15); color: #f59e0b; margin-left: 4px; white-space: nowrap;
+}
+.onb-badge.ok { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.onb-btn { flex-shrink: 0; }
+
+/* --- Schede Broker (una dashboard per broker service) --- */
+.broker-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 2px 2px 4px;
+    overflow-x: auto;               /* su mobile scorre in orizzontale */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 0;
+}
+.broker-tabs::-webkit-scrollbar { display: none; }
+.broker-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    min-height: 38px; /* touch target */
+}
+.broker-tab:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-primary); }
+.broker-tab.active {
+    color: #fff;
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.55);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.15);
+}
+.broker-tab .bt-ico { font-size: 0.9rem; }
+
+/* FASE D1: indicatore bot attivo sulla scheda broker */
+.broker-tab .bot-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+    display: inline-block;
+    margin-left: 3px;
+    flex-shrink: 0;
+    animation: botDotPulse 1.6s ease-in-out infinite;
+}
+@keyframes botDotPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+
+/* --- Interruttori BOT per broker (leve nell'header Connessioni Broker) --- */
+.arm-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+}
+.arm-lbl {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+.arm-switch {
+    position: relative;
+    display: inline-block;
+    width: 30px;
+    height: 16px;
+    flex-shrink: 0;
+}
+.arm-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.arm-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
+    transition: background 0.18s, border-color 0.18s;
+}
+.arm-slider::before {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    left: 2px;
+    top: 2px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    transition: transform 0.18s, background 0.18s;
+}
+.arm-switch input:checked + .arm-slider {
+    background: rgba(16, 185, 129, 0.45);
+    border-color: rgba(16, 185, 129, 0.8);
+}
+.arm-switch input:checked + .arm-slider::before {
+    transform: translateX(14px);
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+}
+
+/* Colonna LED + leva bot: la leva sta sotto il suo LED */
+.broker-status-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.broker-status-col .broker-status { padding: 2px 6px; }
