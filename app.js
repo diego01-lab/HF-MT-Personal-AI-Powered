@@ -4790,8 +4790,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             ChartManager.setSymbol(symbol);
             
             // Lazy load della cronologia OHLC per il grafico quando si cambia asset
-            // tryAlpacaPreload gestisce tutte le categorie: Stocks, Crypto, Forex (OANDA) e Commodity
-            if (typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
+            // Alpaca offre bars solo per Crypto e Stock; Forex/Commodity si costruiscono dai tick live
+            const assetType = getAssetType(symbol);
+            const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
+            if (isAlpacaCompatible && typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
                 tryAlpacaPreload(symbol).then(data => {
                     if (data && assetPairSelect && assetPairSelect.value === symbol) {
                         ChartManager.setHistoricalData(data);
@@ -7232,14 +7234,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const cat = getAssetType(symbol);
 
-            // Forex e Commodity: tentativo preload via Alpaca v1beta1/forex/bars
-            // (i simboli OANDA sono gestiti da tryAlpacaPreload). Se Alpaca non
-            // ha le chiavi o l'endpoint non risponde, i prezzi live arriveranno
-            // comunque tramite WebSocket.
+            // Forex e Commodity: Alpaca NON offre candele OHLC (solo /v1beta1/forex/rates).
+            // Lo storico per queste categorie si costruisce dai tick live WebSocket.
+            if (cat === 'FOREX' || cat === 'COMMODITY') return;
 
-            // Se Finnhub è già stato bloccato (403), saltiamo Stock (usa Finnhub);
-            // Crypto, Forex e Commodity passano via Alpaca e non sono impattati.
-            if (window.finnhubForbidden && cat === 'STOCK') return;
+            // Se Finnhub è già stato bloccato (403), saltiamo tutto tranne Crypto (che usa Alpaca)
+            if (window.finnhubForbidden && cat !== 'CRYPTO') return;
 
             console.log(`[RADAR] Avvio precaricamento per ${symbol}...`);
             try {
@@ -7268,13 +7268,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     }
                 } else {
-                    // Preload storico via Alpaca per tutte le categorie (Stocks, Forex, Commodity).
+                    // Preload storico via Alpaca per Stocks.
                     // NOTA: l'endpoint Finnhub /v1/stock/candle è PREMIUM (403 sul piano
-                    // gratuito) e NON viene più chiamato: lo storico si costruisce
+                    // gratuito) e NON viene più chiamato: lo storico azioni si costruisce
                     // dai tick live del WebSocket Finnhub. Niente più errori 403 in console.
                     if (!restrictedAssets.has(symbol)) {
                         const data = await tryAlpacaPreload(symbol);
                         if (data) historicalData = data;
+                        else restrictedAssets.add(symbol);
                     }
                 }
 
@@ -7308,11 +7309,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         async function tryAlpacaPreload(symbol) {
             if (!alpacaKeyId || !alpacaSecretKey) return null;
             try {
-                const isForex = symbol.includes(':');
-                const cleanSym = isForex ? symbol.split(':')[1].replace('_', '/') : symbol;
-                const baseUrl = isForex ? `${ALPACA_DATA_BASE}/v1beta1/forex/bars` : `${ALPACA_DATA_BASE}/v2/stocks/bars`;
-                const feedParam = !isForex ? '&feed=iex' : '';
-                const alpacaUrl = `${baseUrl}?symbols=${encodeURIComponent(cleanSym)}&timeframe=1Min&limit=100${feedParam}`;
+                // Alpaca offre bars solo per Stocks e Crypto; Forex/Commodity non supportati
+                const assetType = getAssetType(symbol);
+                if (assetType === 'FOREX' || assetType === 'COMMODITY') return null;
+
+                let alpacaUrl, responseKey;
+                if (assetType === 'CRYPTO') {
+                    responseKey = symbol.replace('USDT', '/USD');
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(responseKey)}&timeframe=1Min&limit=100`;
+                } else {
+                    responseKey = symbol;
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=1Min&limit=100&feed=iex`;
+                }
 
                 const aRes = await fetch(alpacaUrl, {
                     headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
@@ -7320,7 +7328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 if (aRes.ok) {
                     const aData = await aRes.json();
-                    const bars = aData.bars ? aData.bars[cleanSym] : null;
+                    const bars = aData.bars ? aData.bars[responseKey] : null;
                     if (bars && bars.length > 0) {
                         const historicalData = bars.map(b => ({
                             time: Math.floor(new Date(b.t).getTime() / 1000),
