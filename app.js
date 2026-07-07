@@ -6611,47 +6611,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Pannello stato motore: mostra warm-up storico e ultimo segnale, così è
         // visibile PERCHÉ il bot non sta (ancora) aprendo posizioni.
-        function updateEngineStatus() {
-            // Tiene allineato anche il contatore "Saltate" (mostra/nasconde con lo stato bot)
-            if (typeof updateSkippedCounterUI === 'function') updateSkippedCounterUI();
-            const el = document.getElementById('engineStatus');
-            if (!el) return;
-            // Bot in pausa: mostralo ESPLICITAMENTE (prima il pannello restava vuoto, così
-            // sembrava attivo). Il selettore broker (FH/ALP/ALrt) NON avvia il bot: serve
-            // il pulsante ON dedicato. Senza bot ON non si aprono posizioni automatiche.
-            if (!isBotActive) {
-                el.textContent = `⏸️ ${tr('engine_paused', 'Bot in PAUSA — premi ON per il trading automatico (il selettore broker non avvia il bot)')}`;
-                el.style.color = '#f59e0b';
-                return;
-            }
-            el.style.color = '';
-            const MIN_HISTORY = 30; // punti minimi perché EMA26/RSI14 possano generare segnali
-            let ready = 0, total = 0;
-            for (const cat in VALID_SYMBOLS) {
-                if (!enabledTradingCategories.includes(cat)) continue;
-                // Conta SOLO le categorie disponibili e attive (supportate dal broker
-                // corrente E con mercato aperto): prima le Azioni a mercato chiuso
-                // restavano nel totale senza mai ricevere tick, e il rapporto X/Y
-                // sembrava congelato ("il motore non si aggiorna").
-                if (typeof window.categoryAvailability === 'function' && !window.categoryAvailability(cat).available) continue;
-                for (const sym of VALID_SYMBOLS[cat]) {
-                    if (restrictedAssets.has(sym)) continue;
-                    total++;
-                    if ((bgPriceHistories[sym] || []).length >= MIN_HISTORY) ready++;
-                }
-            }
-            let txt = `🤖 ${tr('engine_label', 'Motore')}: ${ready}/${total} asset ${tr('engine_ready', 'pronti')}`;
-            if (ready === 0 && total > 0) {
-                txt += ` — ${tr('engine_warmup', 'warm-up storico in corso…')}`;
-            } else if (lastEngineSignal) {
-                const t = new Date(lastEngineSignal.time).toLocaleTimeString('it-IT', { hour12: false });
-                txt += ` · ${tr('engine_last_signal', 'ultimo segnale')}: ${lastEngineSignal.signal} ${lastEngineSignal.sym} (${lastEngineSignal.confidence}%) ${t}`;
-            } else {
-                txt += ` · ${tr('engine_waiting', 'in attesa di un segnale operativo')}`;
-            }
-            el.textContent = txt;
-        }
-        setInterval(updateEngineStatus, 3000);
+        // engineStatus is now managed by StatusBarManager
+        let lastPingForUI = 0;
+        let currentFpsForUI = 0;
+        setInterval(() => {
+            if(window.StatusBarManager) window.StatusBarManager.updateEngineStatus(lastPingForUI, currentFpsForUI);
+        }, 3000);
 
 
         function updateCategoryPulse() {
