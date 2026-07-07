@@ -7229,6 +7229,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         async function preloadHistory(symbol) {
             if (!symbol || restrictedAssets.has(symbol)) return;
+            if (bgPriceHistories[symbol] && bgPriceHistories[symbol].length > 10) return;
 
             const cat = getAssetType(symbol);
 
