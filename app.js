@@ -715,7 +715,8 @@ function uiLocale() {
 
 let isBotActive = false;
 let isCapitalExhausted = false;
-let sessionBudgetUsed = 0; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
+let sessionBudgetUsed = 0;
+let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
 let isManualMode = localStorage.getItem('sim_trading_mode') !== 'auto'; // Default a manuale dopo reset
 let useAlpacaBroker = false; // L'app parte SEMPRE in test mode; il broker si attiva solo dal toggle
 let alpacaKeyId = localStorage.getItem('alpaca_key_id') || '';
@@ -1321,6 +1322,12 @@ if (langSelector) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+
+    var LOCAL_CTXS = ['fh', 'capd', 'capl'];
+    var ctxLive = {};
+    let currentCandle = null;
+    let lastCandleTime = 0;
+    const sessionStartPrices = {};
     console.log("App: DOM pronto.");
     await loadLanguage(currentLang); // carica le traduzioni PRIMA di applicarle
     updateLanguage();
@@ -1763,8 +1770,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         portfolioBalance = Math.round((parseFloat(localStorage.getItem('sim_portfolio_balance')) || 0) * 100) / 100;
 
         if (!useAlpacaBroker) {
-            // ===== MODALITÀ TEST: reset SEMPRE a $1000 ad ogni ricarica pagina =====
-            resetTestState();
+            // ===== MODALITÀ TEST: recupera contesto se esiste =====
+            loadLocalCtxState('fh');
         } else {
             // ===== MODALITÀ BROKER: chiavi Alpaca (ri-sincronizzate live all'avvio) =====
             activePositions = JSON.parse(localStorage.getItem('sim_active_positions')) || {};
@@ -1849,11 +1856,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // simulati) ha il SUO portafoglio: posizioni, capitale, cronologia e
         // statistiche sono salvati/ripristinati per contesto quando si cambia scheda.
         // I contesti alp/alrt restano sincronizzati live da Alpaca (fonte autorevole).
-        const LOCAL_CTXS = ['fh', 'capd', 'capl'];
+        var LOCAL_CTXS = ['fh', 'capd', 'capl'];
         // FASE D1: stato bot ON/OFF ricordato PER SCHEDA nella sessione corrente.
         // Il bot non parte mai da solo all'avvio dell'app (tutte le schede OFF);
         // tornando su una scheda dove era ON, riparte automaticamente.
-        const botActiveByCtx = { 
+        var botActiveByCtx = { 
             fh: false, 
             alp: false, 
             alrt: false, 
@@ -1864,7 +1871,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!LOCAL_CTXS.includes(ctx)) return;
             const s = {
                 sessionInitialCapital, tradingCapital, totalPnL, activePositions,
-                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed
+                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed, skippedCounters
             };
             ctxLive[ctx] = s; // FASE D2: tiene fresco anche lo stato in-memory
             try { localStorage.setItem('sim_ctx_' + ctx, JSON.stringify(s)); } catch (_) { }
@@ -1884,8 +1891,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 executedTrades = 0; winTrades = 0; grossProfit = 0; grossLoss = 0;
                 sessionBudgetUsed = 0;
             } else {
-                sessionInitialCapital = parseFloat(s.sessionInitialCapital) || TEST_DEFAULT_CAPITAL;
-                tradingCapital = parseFloat(s.tradingCapital) || TEST_DEFAULT_CAPITAL;
+                sessionInitialCapital = !isNaN(parseFloat(s.sessionInitialCapital)) ? parseFloat(s.sessionInitialCapital) : TEST_DEFAULT_CAPITAL;
+                tradingCapital = !isNaN(parseFloat(s.tradingCapital)) ? parseFloat(s.tradingCapital) : TEST_DEFAULT_CAPITAL;
                 totalPnL = parseFloat(s.totalPnL) || 0;
                 activePositions = s.activePositions || {};
                 tradeHistory = Array.isArray(s.tradeHistory) ? s.tradeHistory : [];
@@ -1894,6 +1901,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 grossProfit = parseFloat(s.grossProfit) || 0;
                 grossLoss = parseFloat(s.grossLoss) || 0;
                 sessionBudgetUsed = parseFloat(s.sessionBudgetUsed) || 0;
+                skippedCounters = s.skippedCounters || { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 };
             }
             isCapitalExhausted = false;
         }
@@ -1936,14 +1944,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         // swap useAlpacaBroker/liveMonitorActive sono FORZATI a false: impossibile
         // instradare per errore ordini reali dal background. I contesti alp/alrt
         // (ordini reali, percorsi async) NON girano in background per progetto.
-        var ctxLive = {}; // stato in-memory dei contesti locali non attivi
+        // stato in-memory dei contesti locali non attivi
         function hydrateCtxLive(ctx) {
             if (ctxLive[ctx]) return;
             let s = null;
             try { s = JSON.parse(localStorage.getItem('sim_ctx_' + ctx) || 'null'); } catch (_) { }
             ctxLive[ctx] = s ? {
-                sessionInitialCapital: parseFloat(s.sessionInitialCapital) || TEST_DEFAULT_CAPITAL,
-                tradingCapital: parseFloat(s.tradingCapital) || TEST_DEFAULT_CAPITAL,
+                sessionInitialCapital: !isNaN(parseFloat(s.sessionInitialCapital)) ? parseFloat(s.sessionInitialCapital) : TEST_DEFAULT_CAPITAL,
+                tradingCapital: !isNaN(parseFloat(s.tradingCapital)) ? parseFloat(s.tradingCapital) : TEST_DEFAULT_CAPITAL,
                 totalPnL: parseFloat(s.totalPnL) || 0,
                 activePositions: s.activePositions || {},
                 tradeHistory: Array.isArray(s.tradeHistory) ? s.tradeHistory : [],
@@ -1955,13 +1963,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             } : {
                 sessionInitialCapital: TEST_DEFAULT_CAPITAL, tradingCapital: TEST_DEFAULT_CAPITAL,
                 totalPnL: 0, activePositions: {}, tradeHistory: [], executedTrades: 0,
-                winTrades: 0, grossProfit: 0, grossLoss: 0, sessionBudgetUsed: 0
+                winTrades: 0, grossProfit: 0, grossLoss: 0, sessionBudgetUsed: 0, skippedCounters: { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 }
             };
         }
         function snapshotGlobalsTo(ctx) {
             ctxLive[ctx] = {
                 sessionInitialCapital, tradingCapital, totalPnL, activePositions,
-                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed
+                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed, skippedCounters
             };
         }
         function loadGlobalsFrom(ctx) {
@@ -1987,8 +1995,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 1) salva i globals del contesto ATTIVO (qualunque esso sia)
             const tmp = {
                 sessionInitialCapital, tradingCapital, totalPnL, activePositions,
-                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss,
-                sessionBudgetUsed, isCapitalExhausted
+                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed, skippedCounters, isCapitalExhausted
             };
             const saveAlpaca = useAlpacaBroker, saveLive = window.liveMonitorActive, saveCap = window.capitalMode;
             const saveBot = isBotActive, saveManual = isManualMode;
@@ -2023,6 +2030,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             grossProfit = tmp.grossProfit;
             grossLoss = tmp.grossLoss;
             sessionBudgetUsed = tmp.sessionBudgetUsed;
+            skippedCounters = tmp.skippedCounters;
             isCapitalExhausted = tmp.isCapitalExhausted;
             // Anti-bleed UI: durante fn le funzioni di rendering possono aver scritto
             // nel DOM i valori del contesto in background; ri-renderizza subito i
@@ -2362,7 +2370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (sidebarAlpacaToggle) {
                     sidebarAlpacaToggle.disabled = true;
                 }
-                resetTestState();
+                loadLocalCtxState((typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh');
             } else {
                 // BROKER MODE (Alpaca Paper o ALrt): Alpaca è la fonte AUTOREVOLE per
                 // conto/posizioni/ordini. FASE C: Finnhub resta connesso come feed per
@@ -3071,11 +3079,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const EMA_LONG_PERIOD = 26;
         const EMA_TREND_PERIOD = 200;
         const RSI_PERIOD = 14;
-
-        let currentCandle = null;
-        let lastCandleTime = 0;
-
-        const sessionStartPrices = {};
         
         function getBrokerCtx() {
             // FASE D2: durante l'esecuzione di un motore in background il contesto
@@ -3143,7 +3146,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         window.updateCapitalHistoryBoxes = updateCapitalHistoryBoxes;
 
-        function updateWalletUI() {
+                var lastWalletUITime = 0;
+        function updateWalletUI(force = false) {
+            const now = Date.now();
+            if (!force && now - lastWalletUITime < 500) return; // Throttle a max 2 update al sec
+            lastWalletUITime = now;
             // Calcola valore corrente posizioni aperte (mark-to-market)
             let investedTotal = 0;
             let unrealizedTotal = 0;
@@ -3913,7 +3920,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (!sym || !mid || mid <= 0) return;
                         const type = getAssetType(sym);
                         globalPrices[sym] = mid;
-                        updateBackgroundHistoryAndStrategy(sym, mid, now, type);
+                        updateBackgroundHistoryAndStrategy(sym, mid, now, type, 'cap');
                         processRadarTick(sym, mid, now, type);
                     });
                     setCapitalLed('active');
@@ -4186,8 +4193,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             tradingCapital = parseFloat(data.portfolio_value || data.equity || 0);
             const lastEquity = parseFloat(data.last_equity || tradingCapital);
             window.brokerLastEquity = lastEquity; // baseline PnL giornaliero (chiusura precedente)
-            brokerMarketValue = parseFloat(data.long_market_value || 0) + Math.abs(parseFloat(data.short_market_value || 0));
+            brokerMarketValue = (parseFloat(data.long_market_value) || 0) + Math.abs(parseFloat(data.short_market_value) || 0);
             brokerUnrealizedPnL = parseFloat(data.unrealized_intraday_pl != null ? data.unrealized_intraday_pl : (data.unrealized_pl || 0));
+            window.alpacaShortingEnabled = data.shorting_enabled === true;
 
             // Valuta
             if (data.currency) {
@@ -4359,14 +4367,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 for (const pos of positions) {
                     const sym = pos.symbol;
                     const isLong = pos.side === 'long';
-                    const qty = Math.abs(parseFloat(pos.qty));
-                    const entryPrice = parseFloat(pos.avg_entry_price);
+                    const qty = Math.abs(parseFloat(pos.qty || 0)) || 0;
+                    const entryPrice = parseFloat(pos.avg_entry_price || 0) || 0;
 
                     if (!activePositions[sym]) {
                         activePositions[sym] = {
-                            type: isLong ? 'buy' : 'sell',
+                            type: isLong ? 'LONG' : 'SHORT',
                             entryPrice: entryPrice,
-                            quantity: qty,
+                            amount: qty,
+                            invested: qty * entryPrice,
                             dynTP: null,
                             dynSL: null,
                             highestPrice: entryPrice,
@@ -4778,14 +4787,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             ChartManager.setSymbol(symbol);
             if (currentPriceEl) {
-                const count = priceHistory.length;
-                if (isBotActive) {
-                    currentPriceEl.textContent = count >= 20 ? 'Pronto (Analisi OK)' : `Analisi ${count}/20...`;
-                } else {
-                    currentPriceEl.textContent = 'In attesa...';
-                }
                 currentPriceEl.style.color = '#94a3b8';
             }
+            lastPriceUITime = 0;
+            updatePriceUI();
             if (priceChangeEl) priceChangeEl.textContent = '--';
 
             // Aggiorna il nome visualizzato dell'asset (Stock Name / Pair Name)
@@ -5392,6 +5397,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // senza spammare. Ogni "chiave" può ricomparire al massimo ogni minGapMs.
         const _botNotifyLast = {};
         function botNotify(key, message, type = 'info', minGapMs = 20000) {
+            if (window.__ctxOverride) return;
             const now = Date.now();
             if (_botNotifyLast[key] && now - _botNotifyLast[key] < minGapMs) return;
             _botNotifyLast[key] = now;
@@ -5401,12 +5407,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Contatore posizioni SALTATE dalla sessione bot corrente, per motivo. Mostrato
         // nel pannello Posizioni Aperte (sopra le icone): rende visibile PERCHÉ in Alpaca
         // si aprono meno posizioni che in Test (SHORT crypto non consentito, cash, ecc.).
-        const skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 };
+        
         function bumpSkipped(reason) {
             if (reason in skippedCounters) skippedCounters[reason]++;
             updateSkippedCounterUI();
         }
         function updateSkippedCounterUI() {
+            if (window.__ctxOverride) return;
             const el = document.getElementById('skippedCounter');
             if (!el) return;
             const c = skippedCounters;
@@ -6713,7 +6720,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const price = trade.p;
                             globalPrices[sym] = price;
 
-                            updateBackgroundHistoryAndStrategy(sym, price, now, getAssetType(sym));
+                            updateBackgroundHistoryAndStrategy(sym, price, now, getAssetType(sym), 'fh');
                             processRadarTick(sym, price, now, getAssetType(sym));
                         });
                     }
@@ -6815,7 +6822,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         globalPrices[sym] = price;
                         const cat = getAssetType(sym);
-                        updateBackgroundHistoryAndStrategy(sym, price, now, cat);
+                        updateBackgroundHistoryAndStrategy(sym, price, now, cat, 'alp');
                         processRadarTick(sym, price, now, cat);
                     } else if (msg.T === 'error') {
                         console.error("[ALPACA WS] Errore:", msg.msg);
@@ -6922,7 +6929,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const now = Date.now();
                             if (sym.endsWith('/USD')) sym = sym.replace('/USD', 'USDT');
                             globalPrices[sym] = price;
-                            updateBackgroundHistoryAndStrategy(sym, price, now, 'CRYPTO');
+                            updateBackgroundHistoryAndStrategy(sym, price, now, 'CRYPTO', 'binance');
                             processRadarTick(sym, price, now, 'CRYPTO');
                         } else if (msg.T === 'error') {
                             console.warn("[ALPACA CRYPTO WS] Errore server:", msg.msg);
@@ -7000,7 +7007,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 const botSym = aSym.replace('/USD', 'USDT');
                                 const price = data.trades[aSym].p; // Prezzo ultimo trade
                                 globalPrices[botSym] = price;
-                                updateBackgroundHistoryAndStrategy(botSym, price, now, 'CRYPTO');
+                                updateBackgroundHistoryAndStrategy(botSym, price, now, 'CRYPTO', 'sim');
                                 processRadarTick(botSym, price, now, 'CRYPTO'); // Aggiorna anche il Radar
                             }
                         }
@@ -7041,7 +7048,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return true;
         }
 
-        function updateBackgroundHistoryAndStrategy(sym, price, now, type) {
+        function updateBackgroundHistoryAndStrategy(sym, price, now, type, sourceCtx = 'fh') {
             if (!isMarketOpen(type)) return;
             // FASE C: i DATI fluiscono per tutte le categorie in ogni modalità (feed
             // concorrenti, multi-dashboard). A vincolare il BOT alle categorie del
@@ -7054,7 +7061,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             // (requestAnimationFrame). Storico indicatori e strategia restano invece
             // a 1 aggiornamento/sec (throttle più sotto): così non si accorcia la
             // finestra di lookback degli indicatori né cambia la cadenza del bot.
-            if (assetPairSelect && sym === assetPairSelect.value) {
+            
+            const activeCtx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
+            let isAuthoritative = false;
+            
+            if (sourceCtx === activeCtx || (sourceCtx === 'cap' && activeCtx.startsWith('cap'))) {
+                isAuthoritative = true;
+            } else if (activeCtx === 'alp' || activeCtx === 'alrt') {
+                if (type === 'CRYPTO' && (sourceCtx === 'fh' || sourceCtx === 'binance')) isAuthoritative = true;
+                if ((type === 'FOREX' || type === 'COMMODITY') && sourceCtx === 'cap') isAuthoritative = true;
+                // Fallback a Finnhub per Forex/Commodity se Capital non è attivo
+                if ((type === 'FOREX' || type === 'COMMODITY') && sourceCtx === 'fh' && !window.__capitalFeedOk) isAuthoritative = true;
+            } else if (activeCtx.startsWith('cap')) {
+                if (type === 'CRYPTO' && (sourceCtx === 'fh' || sourceCtx === 'binance')) isAuthoritative = true;
+                if (type === 'STOCK' && sourceCtx === 'alp') isAuthoritative = true;
+                if (type === 'STOCK' && sourceCtx === 'fh' && (!window.__connAllowed || !window.__connAllowed.alp)) isAuthoritative = true;
+            } else if (sourceCtx === 'sim') {
+                isAuthoritative = true;
+            }
+
+            if (isAuthoritative && assetPairSelect && sym === assetPairSelect.value) {
                 currentPrice = price;
                 const time = Math.floor(now / 1000);
 
@@ -7120,8 +7146,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             // con chiavi salvate ma login fallito, Finnhub resta la fonte — prima il
             // grafico Forex restava "in attesa" per sempre.
             const capitalFeeds = !!window.__capitalFeedOk;
-            const fhCovers = (t) => !(((t === 'CRYPTO' || t === 'STOCK') && alpacaFeeds) ||
-                ((t === 'FOREX' || t === 'COMMODITY') && capitalFeeds));
+            const fhCovers = (t) => {
+                if (t === 'CRYPTO' && alpacaFeeds) return false;
+                if (t === 'STOCK' && alpacaFeeds && !useFinnhubData) return false;
+                if ((t === 'FOREX' || t === 'COMMODITY') && capitalFeeds) return false;
+                return true;
+            };
             for (const cat in VALID_SYMBOLS) {
                 if (fhCovers(cat)) VALID_SYMBOLS[cat].forEach(s => requiredSubs.add(s));
             }
@@ -7642,6 +7672,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // --- Pending Orders Sync & Management ---
         async function syncAlpacaOrders() {
+            if (!brokerViewActive()) {
+                if (typeof renderPendingOrders === 'function') renderPendingOrders([]);
+                return;
+            }
             const mgr = getAlpacaManager();
             if (!mgr) {
                 if (typeof renderPendingOrders === 'function') renderPendingOrders([]);
@@ -7649,7 +7683,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             try {
                 const orders = await mgr.getOpenOrders();
-                if (!brokerViewActive()) return;
                 renderPendingOrders(orders);
             } catch (e) { console.error("[ALPACA] Errore sync ordini:", e); }
         }

@@ -152,7 +152,7 @@ window.ChartManager = (function() {
         if (!candleSeries) return;
         
         // Rimuove il messaggio "In attesa..."
-        if (currentPriceEl && currentPriceEl.textContent.includes('attesa')) {
+        if (currentPriceEl) {
             currentPriceEl.textContent = price.toFixed(5);
         }
 
@@ -201,7 +201,7 @@ window.ChartManager = (function() {
             const last = data[data.length - 1];
             lastCandleTime = last.time;
             currentCandle = { ...last };
-            if (currentPriceEl && currentPriceEl.textContent.includes('attesa')) {
+            if (currentPriceEl) {
                 currentPriceEl.textContent = last.close.toFixed(5);
             }
         }
