@@ -4786,6 +4786,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             lastCandleTime = 0;
 
             ChartManager.setSymbol(symbol);
+            
+            // Lazy load della cronologia OHLC per il grafico quando si cambia asset
+            const assetType = getAssetType(symbol);
+            const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
+            if (isAlpacaCompatible && typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
+                tryAlpacaPreload(symbol).then(data => {
+                    if (data && assetPairSelect && assetPairSelect.value === symbol) {
+                        ChartManager.setHistoricalData(data);
+                        console.log(`[CHART] Main series popolata (lazy switch) per ${symbol}`);
+                    }
+                }).catch(e => console.error('[PRELOAD] Errore lazy load:', e));
+            }
+
             if (currentPriceEl) {
                 currentPriceEl.style.color = '#94a3b8';
             }
@@ -7263,7 +7276,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (cat === 'CRYPTO') {
                     // Preload history via Alpaca Crypto API (solo in broker mode, Paper o REALE)
                     const _dk = getBrokerHttp();
-                    if (brokerViewActive() && _dk.key && _dk.secret) {
+                    if (_dk.key && _dk.secret) { // Allow preload even on Finnhub tab
                         const alpacaSym = symbol.replace('USDT', '/USD');
                         const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${alpacaSym}&timeframe=1Min&limit=100`;
                         const res = await fetch(url, {
@@ -7295,7 +7308,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // NOTA: l'endpoint Finnhub /v1/stock/candle è PREMIUM (403 sul piano
                         // gratuito) e NON viene più chiamato: lo storico azioni si costruisce
                         // dai tick live del WebSocket Finnhub. Niente più errori 403 in console.
-                        if (useAlpacaBroker && isAlpacaCompatible && !restrictedAssets.has(symbol)) {
+                        if (isAlpacaCompatible && !restrictedAssets.has(symbol)) { // Allow preload via Alpaca keys even if on Finnhub tab
                             const data = await tryAlpacaPreload(symbol);
                             if (data) historicalData = data;
                             else {
