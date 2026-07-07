@@ -4790,9 +4790,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             ChartManager.setSymbol(symbol);
             
             // Lazy load della cronologia OHLC per il grafico quando si cambia asset
-            const assetType = getAssetType(symbol);
-            const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
-            if (isAlpacaCompatible && typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
+            // tryAlpacaPreload gestisce tutte le categorie: Stocks, Crypto, Forex (OANDA) e Commodity
+            if (typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
                 tryAlpacaPreload(symbol).then(data => {
                     if (data && assetPairSelect && assetPairSelect.value === symbol) {
                         ChartManager.setHistoricalData(data);
@@ -7233,14 +7232,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const cat = getAssetType(symbol);
 
-            // Forex e Commodity non hanno sorgenti di candle disponibili:
-            // - Finnhub: solo azioni (piano gratuito)
-            // - Alpaca: non supporta Forex spot
-            // I prezzi live arriveranno tramite WebSocket, skip del preload.
-            if (cat === 'FOREX' || cat === 'COMMODITY') return;
+            // Forex e Commodity: tentativo preload via Alpaca v1beta1/forex/bars
+            // (i simboli OANDA sono gestiti da tryAlpacaPreload). Se Alpaca non
+            // ha le chiavi o l'endpoint non risponde, i prezzi live arriveranno
+            // comunque tramite WebSocket.
 
-            // Se Finnhub è già stato bloccato (403), saltiamo tutto tranne Crypto (che usa Alpaca)
-            if (window.finnhubForbidden && cat !== 'CRYPTO') return;
+            // Se Finnhub è già stato bloccato (403), saltiamo Stock (usa Finnhub);
+            // Crypto, Forex e Commodity passano via Alpaca e non sono impattati.
+            if (window.finnhubForbidden && cat === 'STOCK') return;
 
             console.log(`[RADAR] Avvio precaricamento per ${symbol}...`);
             try {
@@ -7268,25 +7267,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                         }
                     }
-                } else if (finnhubApiKey) {
-                    const assetType = getAssetType(symbol);
-                    const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
-
-                    if (historicalData.length === 0) {
-                        // Se Finnhub è già stato segnato come Forbidden in questa sessione, saltiamo a priori
-                        if (window.finnhubForbidden) return;
-
-                        // Preload storico SOLO via Alpaca in broker mode.
-                        // NOTA: l'endpoint Finnhub /v1/stock/candle è PREMIUM (403 sul piano
-                        // gratuito) e NON viene più chiamato: lo storico azioni si costruisce
-                        // dai tick live del WebSocket Finnhub. Niente più errori 403 in console.
-                        if (isAlpacaCompatible && !restrictedAssets.has(symbol)) { // Allow preload via Alpaca keys even if on Finnhub tab
-                            const data = await tryAlpacaPreload(symbol);
-                            if (data) historicalData = data;
-                            else {
-                                restrictedAssets.add(symbol);
-                            }
-                        }
+                } else {
+                    // Preload storico via Alpaca per tutte le categorie (Stocks, Forex, Commodity).
+                    // NOTA: l'endpoint Finnhub /v1/stock/candle è PREMIUM (403 sul piano
+                    // gratuito) e NON viene più chiamato: lo storico si costruisce
+                    // dai tick live del WebSocket Finnhub. Niente più errori 403 in console.
+                    if (!restrictedAssets.has(symbol)) {
+                        const data = await tryAlpacaPreload(symbol);
+                        if (data) historicalData = data;
                     }
                 }
 
