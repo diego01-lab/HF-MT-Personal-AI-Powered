@@ -5452,26 +5452,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (reason in skippedCounters) skippedCounters[reason]++;
             updateSkippedCounterUI();
         }
+        let _skippedUpdatePending = false;
         function updateSkippedCounterUI() {
             if (window.__ctxOverride) return;
-            const el = document.getElementById('skippedCounter');
-            if (!el) return;
-            const c = skippedCounters;
-            const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos;
-            // Visibile per TUTTA la sessione col bot attivo (anche a 0), così è chiaro che
-            // c'è e sta contando; si nasconde solo a bot fermo.
-            if (!isBotActive) { el.style.display = 'none'; return; }
-            const parts = [];
-            if (c.shortcrypto) parts.push(`SHORT crypto ${c.shortcrypto}`);
-            if (c.nocash) parts.push(`cash ${c.nocash}`);
-            if (c.reject) parts.push(`rifiuti ${c.reject}`);
-            if (c.qty) parts.push(`qty ${c.qty}`);
-            if (c.maxpos) parts.push(`limite ${c.maxpos}`);
-            const totalEl = document.getElementById('skippedTotal');
-            const breakEl = document.getElementById('skippedBreakdown');
-            if (totalEl) totalEl.textContent = total;
-            if (breakEl) breakEl.textContent = parts.length ? ' · ' + parts.join(' · ') : '';
-            el.style.display = 'block';
+            if (_skippedUpdatePending) return;
+            _skippedUpdatePending = true;
+            
+            requestAnimationFrame(() => {
+                _skippedUpdatePending = false;
+                const el = document.getElementById('skippedCounter');
+                if (!el) return;
+                const c = skippedCounters;
+                const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos;
+                // Visibile per TUTTA la sessione col bot attivo (anche a 0), così è chiaro che
+                // c'è e sta contando; si nasconde solo a bot fermo.
+                if (!isBotActive) { el.style.display = 'none'; return; }
+                const parts = [];
+                if (c.shortcrypto) parts.push(`SHORT crypto ${c.shortcrypto}`);
+                if (c.nocash) parts.push(`cash ${c.nocash}`);
+                if (c.reject) parts.push(`rifiuti ${c.reject}`);
+                if (c.qty) parts.push(`qty ${c.qty}`);
+                if (c.maxpos) parts.push(`limite ${c.maxpos}`);
+                const totalEl = document.getElementById('skippedTotal');
+                const breakEl = document.getElementById('skippedBreakdown');
+                if (totalEl) totalEl.textContent = total;
+                if (breakEl) breakEl.textContent = parts.length ? ' · ' + parts.join(' · ') : '';
+                el.style.display = 'block';
+            });
         }
         window.resetSkippedCounters = function () {
             skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = 0;
@@ -6267,6 +6274,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Count by category
             const catCount = { ALL: 0, CRYPTO: 0, STOCK: 0, FOREX: 0, COMMODITY: 0 };
 
+            // Cache DOM lookups outside the loop for performance
+            const userTP = parseFloat(document.getElementById('botTargetProfit')?.value) || 1.5;
+            const userSL = parseFloat(document.getElementById('botStopLoss')?.value) || 0;
+            const aiDynamicOn = document.getElementById('aiModeToggle')?.checked;
+            const useRisk = document.getElementById('aiModeRisk')?.checked;
+            const useHedging = document.getElementById('aiModeHedging')?.checked;
+
             for (let sym in activePositions) {
                 const pos = activePositions[sym];
                 const livePrice = globalPrices[sym] || pos.entryPrice;
@@ -6280,13 +6294,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const invested = pos.invested || pos.entryPrice * pos.amount;
                 const unrealizedPct = (unrealized / invested) * 100;
 
-                const userTP = parseFloat(document.getElementById('botTargetProfit')?.value) || 1.5;
-                const userSL = parseFloat(document.getElementById('botStopLoss')?.value) || 0;
-
                 // --- AI Avanzata: TP/SL ricalibrati in tempo reale ---
                 // La volatilità corrente (Bande di Bollinger) aggiorna il target e lo
                 // stop di OGNI posizione a ogni ciclo, non solo al momento dell'apertura.
-                const aiDynamicOn = document.getElementById('aiModeToggle')?.checked;
                 if (aiDynamicOn) {
                     const h = bgPriceHistories[sym];
                     if (h && h.length >= 20) {
@@ -6307,7 +6317,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (isBotActive && manageRisk) {
                     const closePending = closingAssets.has(sym) || (Date.now() - (recentlyClosed[sym] || 0) < 30000);
 
-                    const useRisk = document.getElementById('aiModeRisk')?.checked;
                     if (useRisk) {
                         // -- Trailing Stop Loss via ATR --
                         if (pos.type === 'LONG') {
@@ -6340,7 +6349,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
 
                     // -- Hedging Strategico --
-                    const useHedging = document.getElementById('aiModeHedging')?.checked;
                     if (useHedging && unrealizedPct <= -3.0 && !pos.isHedged) {
                         pos.isHedged = true;
                         // Il testo riflette ciò che accade davvero: in modalità broker
