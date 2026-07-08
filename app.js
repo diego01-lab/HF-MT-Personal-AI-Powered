@@ -5866,14 +5866,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         else qtyVal = Math.ceil((minUsd / price) * 100) / 100;
                     }
                     actualCost = qtyVal * price;
-                    
-                    const brokerFunds = isCrypto ? availableCash : availableMargin;
-                    if (actualCost > brokerFunds) {
-                        orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
-                        console.warn(`[BROKER] Fondi insufficienti per coprire il minimo di $10 per ${sym}.`);
-                        if (isBotActive) { botNotify('min_order_10', tr('bot_skip_min10', `Fondi insufficienti dopo arrotondamento. Alpaca richiede >= 10$.`), 'warning', 30000); bumpSkipped('nocash'); }
-                        return;
-                    }
+                }
+
+                // CONTROLLO GLOBALE DEI FONDI REALI SUL BROKER (Evita i 403)
+                const brokerFunds = isCrypto ? availableCash : availableMargin;
+                if (actualCost > brokerFunds) {
+                    orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
+                    console.warn(`[BROKER] Fondi insufficienti per coprire l'ordine di $${actualCost.toFixed(2)} per ${sym}. Disponibili: $${(brokerFunds || 0).toFixed(2)}.`);
+                    if (isBotActive) { botNotify('nocash', tr('bot_skip_nocash', `Fondi insufficienti sul broker per aprire il trade su ${sym}.`), 'warning', 30000); bumpSkipped('nocash'); }
+                    return;
                 }
 
                 if (qtyVal > 0) {
