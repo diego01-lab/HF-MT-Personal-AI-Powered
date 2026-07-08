@@ -3162,6 +3162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 var lastWalletUITime = 0;
         function updateWalletUI(force = false) {
+            if (window.__ctxOverride) return;
             const now = Date.now();
             if (!force && now - lastWalletUITime < 500) return; // Throttle a max 2 update al sec
             lastWalletUITime = now;
@@ -5970,6 +5971,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         var _lastRenderedHistoryJSON = null;
         function renderHistory() {
+            if (window.__ctxOverride) return;
             const historyCountBadge = document.getElementById('historyCountBadge');
             
             let validHistoryCount = 0;
@@ -6183,6 +6185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         function updateDashboard() {
+            if (window.__ctxOverride) return;
             // Ricalcolo Dinamico Statistiche
             let totalTrades = 0;
             let totalWins = 0;
@@ -6367,6 +6370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // dobbiamo liquidarle. La gestione del rischio resta attiva tramite il
         // ciclo dedicato setInterval(renderOpenPositions, 500).
         function renderOpenPositions(manageRisk = true) {
+            if (window.__ctxOverride) return;
             const now = Date.now();
             let htmlBuffer = '';
             let hasPositions = false;
