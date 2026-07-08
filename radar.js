@@ -12,7 +12,7 @@ window.RadarManager = (function() {
     }
 
     function processRadarTick(symbol, price, now, type) {
-        if (!deps.isMarketOpen(type)) return;
+        if (!deps || typeof deps.isMarketOpen !== "function" || !deps.isMarketOpen(type)) return;
 
         if (!radarTracker[symbol]) {
             radarTracker[symbol] = { startPrice: price, startTime: now };

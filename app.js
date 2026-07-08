@@ -6163,6 +6163,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Ricalcolo Dinamico Statistiche
             let totalTrades = 0;
             let totalWins = 0;
+            let totalWinningTrades = 0;
+            let totalLosingTrades = 0;
             let totalGrossProfit = 0;
             let totalGrossLoss = 0;
             let totalRealizedPnL = 0;
@@ -6178,9 +6180,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 totalRealizedPnL += trade.pnl;
                 if (trade.pnl > 0) {
                     totalWins++;
+                    totalWinningTrades++;
                     totalGrossProfit += trade.pnl;
                 } else if (trade.pnl < 0) {
                     totalGrossLoss += Math.abs(trade.pnl);
+                    totalLosingTrades++;
                 }
             });
 
@@ -6601,7 +6605,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // resta true, così le posizioni sotto soglia vengono comunque gestite.
         setInterval(() => renderOpenPositions(true), 500);
 
-        let lastPriceUITime = 0;
+        var lastPriceUITime = 0;
         function updatePriceUI() {
             if (!currentPriceEl) return;
             const now = Date.now();
