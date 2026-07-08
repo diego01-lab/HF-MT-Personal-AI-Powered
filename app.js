@@ -7406,9 +7406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const cat = getAssetType(symbol);
 
-            // Forex e Commodity: Alpaca NON offre candele OHLC (solo /v1beta1/forex/rates).
-            // Lo storico per queste categorie si costruisce dai tick live WebSocket.
-            if (cat === 'FOREX' || cat === 'COMMODITY') return;
+
 
             // Se Finnhub è già stato bloccato (403), saltiamo tutto tranne Crypto (che usa Alpaca)
             if (window.finnhubForbidden && cat !== 'CRYPTO') return;
@@ -7516,7 +7514,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         async function tryAlpacaPreload(symbol) {
-            if (!alpacaKeyId || !alpacaSecretKey) return null;
+            let key = alpacaKeyId;
+            let sec = alpacaSecretKey;
+            if (!key || !sec) {
+                const keys = JSON.parse(localStorage.getItem('bot_keys') || '{}');
+                // Usa la paper key come default per prelevare lo storico
+                key = keys.al_key;
+                sec = keys.al_secret;
+                if (!key || !sec) return null;
+            }
             try {
                 // Alpaca offre bars solo per Stocks e Crypto; Forex/Commodity non supportati
                 const assetType = getAssetType(symbol);
@@ -7528,11 +7534,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     alpacaUrl = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(responseKey)}&timeframe=1Min&limit=100`;
                 } else {
                     responseKey = symbol;
-                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=1Min&limit=100&feed=iex`;
+                    const nowIso = new Date().toISOString();
+                    const startIso = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=1Min&limit=100&start=${startIso}&end=${nowIso}&feed=iex`;
                 }
 
                 const aRes = await fetch(alpacaUrl, {
-                    headers: { 'apca-api-key-id': alpacaKeyId, 'apca-api-secret-key': alpacaSecretKey }
+                    headers: { 'apca-api-key-id': key, 'apca-api-secret-key': sec }
                 });
 
                 if (aRes.ok) {
