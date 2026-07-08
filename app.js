@@ -6136,6 +6136,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             let dailyPnL = 0;
 
             tradeHistory.forEach(trade => {
+                // Ulteriore sicurezza: salta se malformato
+                if (!trade || !trade.sym || trade.sym === 'undefined') return;
+
                 // Filtro identico alla cronologia visiva per escludere trade fantasma
                 if (trade.reason === 'BROKER_SYNC' && trade.pnl === 0 && trade.entryPrice === trade.exitPrice) return;
 
