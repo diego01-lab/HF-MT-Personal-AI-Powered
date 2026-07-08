@@ -6359,17 +6359,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // con il valore matematico assoluto dell'account (Equity - Depositi Iniziali - PnL Non Realizzato).
                 // Questo rende i pannelli "Prestazioni" e "Gestione Capitale" perfettamente coerenti con il Capitale Attuale.
                 const trueRealizedPnL = totalPnL - openUnrealizedTotal;
-                
-                // Per evitare incongruenze matematiche nel Pannello Prestazioni,
-                // riversiamo la discrepanza ("gap" storico non caricato) nel Profitto Lordo o Perdita Lorda.
                 const gap = trueRealizedPnL - totalRealizedPnL;
-                if (gap > 0) {
-                    totalGrossProfit += gap;
-                } else if (gap < 0) {
-                    totalGrossLoss += Math.abs(gap);
+                
+                let globalCommissions = 0;
+                if (gap < -0.01) {
+                    globalCommissions = Math.abs(gap);
                 }
                 
-                totalRealizedPnL = trueRealizedPnL;
+                // Salviamo le variabili globali per la UI
+                window.__trueRealizedPnL = trueRealizedPnL;
+                window.__globalCommissions = globalCommissions;
             }
 
             globalTotalRealizedPnL = totalRealizedPnL;
