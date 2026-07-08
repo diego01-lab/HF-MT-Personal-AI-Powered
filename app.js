@@ -4884,7 +4884,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (!data && assetPairSelect && assetPairSelect.value === symbol) {
                     // Se entrambi i preload falliscono (es. storico non disponibile su free tier o no keys),
                     // recuperiamo almeno l'ultimo prezzo per resettare la Y-axis del grafico ed evitare $0.0000
-                    if (finnhubApiKey) {
+                    const aType = getAssetType(symbol);
+                    // Finnhub quote endpoint supports ONLY US stocks
+                    if (finnhubApiKey && aType === 'STOCK') {
                         try {
                             const qRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${finnhubApiKey}`);
                             if (qRes.ok) {
@@ -7500,9 +7502,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         async function tryFinnhubPreload(symbol) {
+            const assetType = getAssetType(symbol);
+            if (window.finnhubForbidden && assetType !== 'CRYPTO') return null;
             if (!finnhubApiKey) return null;
             const key = finnhubApiKey;
-            const assetType = getAssetType(symbol);
             try {
                 let endpoint = 'stock/candle';
                 if (assetType === 'FOREX' || assetType === 'COMMODITY') endpoint = 'forex/candle';
