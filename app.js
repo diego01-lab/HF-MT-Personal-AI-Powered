@@ -3149,7 +3149,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (valEl) valEl.textContent = formatMoney(attuale);
             if (dltEl) {
                 if (dep > 0) {
-                    const diff = attuale - dep;
+                    const diff = typeof globalTotalRealizedPnL !== 'undefined' ? globalTotalRealizedPnL : (attuale - dep);
                     dltEl.textContent = `${diff >= 0 ? '▲ +' : '▼ '}${formatMoney(diff)}`;
                     dltEl.style.color = diff >= 0 ? '#10b981' : '#ef4444';
                     if (valEl) valEl.style.color = diff >= 0 ? '#10b981' : '#ef4444';
