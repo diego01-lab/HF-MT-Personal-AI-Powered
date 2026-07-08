@@ -5785,6 +5785,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
             if (brokerViewActive() && !restrictedAssets.has(sym)) {
+                if (type === 'SHORT' && window.__alpacaShortNotAllowed) {
+                    if (Date.now() % 30000 < 500) {
+                        console.log(`[BROKER] SHORT ignorato: l'account Alpaca non abilita lo scoperto.`);
+                    }
+                    if (isBotActive) { botNotify('short_disabled', tr('bot_skip_shortnotsupported', 'SHORT ignorato: account Alpaca non abilita lo scoperto. Usa "Solo LONG".'), 'warning', 30000); bumpSkipped('reject'); }
+                    return;
+                }
+
                 const isForex = sym.includes('OANDA');
                 const isCrypto = sym.includes('USDT');
 
@@ -7779,7 +7787,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return true;
             } catch (e) {
                 console.error("[ALPACA] Errore ordine:", e);
-                showNotification(`Alpaca Errore: ${e.message}`, "error");
+                if (e.message && e.message.includes('account is not allowed to short')) {
+                    window.__alpacaShortNotAllowed = true;
+                    showNotification(`L'account Alpaca non permette vendite allo scoperto (SHORT). Imposta la direzione su "Solo LONG".`, "warning");
+                } else {
+                    showNotification(`Alpaca Errore: ${e.message}`, "error");
+                }
                 return false;
             }
         }
