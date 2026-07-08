@@ -3172,7 +3172,7 @@ html.no-gsi .g_id_signin {
    visibile solo in modalità broker — il JS aggiunge .has-pending alla griglia
    e le colonne si ridimensionano da 6 a 7 mantenendo larghezze identiche */
 .dashboard-grid.has-pending {
-    grid-template-columns: 0.95fr 1.35fr 1.35fr 0.95fr 1fr 0.9fr 0.9fr;
+    grid-template-columns: 0.9fr 1.25fr 1.25fr 0.9fr 1.15fr 0.8fr 1.15fr;
 }
 
 /* Modalità broker (7 colonne desktop → pannelli più stretti): in Gestione
