@@ -3229,19 +3229,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if ($('totalInvested')) $('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
                 
                 const dep = getDepositedTotal(getBrokerCtx(), testEquity);
-                const globalPnl = testEquity - dep;
+                const realizedPnl = testEquity - dep - unrealizedTotal;
                 if ($('sessionRevenue')) {
-                    $('sessionRevenue').textContent = `${globalPnl >= 0 ? '+' : ''}${formatMoney(globalPnl)}`;
-                    $('sessionRevenue').style.color = globalPnl >= 0 ? '#10b981' : '#ef4444';
+                    $('sessionRevenue').textContent = `${realizedPnl >= 0 ? '+' : ''}${formatMoney(realizedPnl)}`;
+                    $('sessionRevenue').style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
                 }
                 if ($('sessionROI')) {
-                    const pct = dep > 0 ? (globalPnl / dep) * 100 : 0;
+                    const pct = dep > 0 ? (realizedPnl / dep) * 100 : 0;
                     $('sessionROI').textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                     $('sessionROI').style.color = pct >= 0 ? '#10b981' : '#ef4444';
                 }
                 if ($('unrealizedPnL')) {
                     $('unrealizedPnL').textContent = `${unrealizedTotal >= 0 ? '+' : ''}${formatMoney(unrealizedTotal)}`;
                     $('unrealizedPnL').style.color = unrealizedTotal >= 0 ? '#60a5fa' : '#ef4444';
+                }
+                if ($('openDailyNet')) {
+                    const oSign = unrealizedTotal >= 0 ? '+' : '';
+                    $('openDailyNet').textContent = `${oSign}${formatMoney(unrealizedTotal)}`;
+                    $('openDailyNet').style.color = unrealizedTotal > 0 ? '#10b981' : unrealizedTotal < 0 ? '#ef4444' : '#fff';
                 }
                 // Box storiche Versato/Attuale: formula lifetime (versato + P&L
                 // realizzato storico + non realizzato corrente) per i contesti locali
@@ -3272,39 +3277,45 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Valore Mercato (Long + Short Market Value)
             if (totalInvestedEl) totalInvestedEl.textContent = formatMoney(brokerMarketValue || 0);
 
-            // PnL Globale (Lifetime)
+            // Calcolo preliminare Unrealized per separare PnL Realizzato
+            let localUnreal = 0;
+            let hasLocal = false;
+            for (let s in activePositions) {
+                const p = activePositions[s];
+                const lp = globalPrices[s] || p.entryPrice;
+                localUnreal += p.type === 'LONG' ? (lp - p.entryPrice) * p.amount : (p.entryPrice - lp) * p.amount;
+                hasLocal = true;
+            }
+            const displayUnreal = hasLocal ? localUnreal : brokerUnrealizedPnL;
+
+            // PnL Realizzato (Lifetime)
             if (sessionRevenueEl) {
                 const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
-                const globalPnl = tradingCapital - dep;
-                const sign = globalPnl >= 0 ? '+' : '';
-                sessionRevenueEl.textContent = `${sign}${formatMoney(globalPnl)}`;
-                sessionRevenueEl.style.color = globalPnl >= 0 ? '#10b981' : '#ef4444';
+                const realizedPnl = tradingCapital - dep - displayUnreal;
+                const sign = realizedPnl >= 0 ? '+' : '';
+                sessionRevenueEl.textContent = `${sign}${formatMoney(realizedPnl)}`;
+                sessionRevenueEl.style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
             }
 
-            // ROI Globale (Lifetime ROI)
+            // ROI Realizzato (Lifetime ROI)
             if (sessionROIEl) {
                 const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
-                const globalPnl = tradingCapital - dep;
-                const pct = (dep > 0) ? (globalPnl / dep) * 100 : 0;
+                const realizedPnl = tradingCapital - dep - displayUnreal;
+                const pct = (dep > 0) ? (realizedPnl / dep) * 100 : 0;
                 sessionROIEl.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                 sessionROIEl.style.color = pct >= 0 ? '#10b981' : '#ef4444';
             }
 
-            // PnL Non Realizzato (Totale posizioni aperte — calcolato localmente per accuratezza)
+            // PnL Non Realizzato
             if (unrealizedPnLEl) {
-                // Calcolo diretto dalle posizioni aperte con prezzi live
-                let localUnreal = 0;
-                let hasLocal = false;
-                for (let s in activePositions) {
-                    const p = activePositions[s];
-                    const lp = globalPrices[s] || p.entryPrice;
-                    localUnreal += p.type === 'LONG' ? (lp - p.entryPrice) * p.amount : (p.entryPrice - lp) * p.amount;
-                    hasLocal = true;
-                }
-                const displayUnreal = hasLocal ? localUnreal : brokerUnrealizedPnL;
                 const sign = displayUnreal >= 0 ? '+' : '';
                 unrealizedPnLEl.textContent = `${sign}${formatMoney(displayUnreal)}`;
                 unrealizedPnLEl.style.color = displayUnreal >= 0 ? '#60a5fa' : '#ef4444';
+            }
+            if ($('openDailyNet')) {
+                const oSign = displayUnreal >= 0 ? '+' : '';
+                $('openDailyNet').textContent = `${oSign}${formatMoney(displayUnreal)}`;
+                $('openDailyNet').style.color = displayUnreal > 0 ? '#10b981' : displayUnreal < 0 ? '#ef4444' : '#fff';
             }
 
             // Update invest preview (Alpaca Mode)
