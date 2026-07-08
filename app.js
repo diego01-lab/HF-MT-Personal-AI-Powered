@@ -1251,8 +1251,11 @@ function renderCategorySelection() {
         label.style.pointerEvents = active ? 'auto' : 'none';
 
         label.innerHTML = `
-                    <input type="checkbox" value="${cat.id}" ${isChecked ? 'checked' : ''} ${!active ? 'disabled' : ''} style="accent-color: #3b82f6; width: 14px; height: 14px;">
-                    <span style="display: flex; align-items: center; gap: 4px;">${cat.icon} ${cat.label}${reason ? ` <span style="color:#f59e0b; font-size:0.62rem;">(${reason})</span>` : ''}</span>
+                    <input type="checkbox" value="${cat.id}" ${isChecked ? 'checked' : ''} ${!active ? 'disabled' : ''} style="accent-color: #3b82f6; width: 14px; height: 14px; flex-shrink: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; white-space: nowrap; overflow: hidden;">
+                        <span style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis;">${cat.icon} ${cat.label}</span>
+                        ${reason ? `<span style="color:#f59e0b; font-size:0.65rem; margin-left: 4px; flex-shrink: 0;">(${reason})</span>` : ''}
+                    </div>
                 `;
 
         const checkbox = label.querySelector('input');
