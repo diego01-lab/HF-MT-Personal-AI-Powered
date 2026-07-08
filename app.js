@@ -3140,11 +3140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         function updateCapitalHistoryBoxes(currentEquity, unrealizedNow) {
             const ctx = getBrokerCtx();
             const dep = getDepositedTotal(ctx, currentEquity);
-            // Contesti locali (fh/capd/capl, ordini simulati): Capitale Attuale =
-            // versato + P&L realizzato LIFETIME + non realizzato corrente.
-            // Contesti broker (alp/alrt): l'equity live del conto è autorevole.
-            const isLocal = (ctx === 'fh' || ctx === 'capd' || ctx === 'capl');
-            const attuale = isLocal ? (dep + getPnlLedger(ctx) + (unrealizedNow || 0)) : currentEquity;
+            const attuale = currentEquity;
             const depEl = document.getElementById('depositedTotal');
             const valEl = document.getElementById('currentCapitalVal');
             const dltEl = document.getElementById('currentCapitalDelta');
@@ -3230,14 +3226,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Header: SOMMA degli equity di tutti i broker (multi-dashboard)
                 if (typeof updateGlobalPortfolioHeader === 'function') updateGlobalPortfolioHeader();
                 if ($('availableMargin')) $('availableMargin').textContent = formatMoney(tradingCapital);
-                if ($('totalInvested')) $('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
-                const pnlTotal = totalPnL + unrealizedTotal;
+                
+                const dep = getDepositedTotal(getBrokerCtx(), testEquity);
+                const globalPnl = testEquity - dep;
                 if ($('sessionRevenue')) {
-                    $('sessionRevenue').textContent = `${pnlTotal >= 0 ? '+' : ''}${formatMoney(pnlTotal)}`;
-                    $('sessionRevenue').style.color = pnlTotal >= 0 ? '#10b981' : '#ef4444';
+                    $('sessionRevenue').textContent = `${globalPnl >= 0 ? '+' : ''}${formatMoney(globalPnl)}`;
+                    $('sessionRevenue').style.color = globalPnl >= 0 ? '#10b981' : '#ef4444';
                 }
                 if ($('sessionROI')) {
-                    const pct = sessionInitialCapital > 0 ? (pnlTotal / sessionInitialCapital) * 100 : 0;
+                    const pct = dep > 0 ? (globalPnl / dep) * 100 : 0;
                     $('sessionROI').textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                     $('sessionROI').style.color = pct >= 0 ? '#10b981' : '#ef4444';
                 }
@@ -3247,7 +3244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 // Box storiche Versato/Attuale: formula lifetime (versato + P&L
                 // realizzato storico + non realizzato corrente) per i contesti locali
-                updateCapitalHistoryBoxes(testEquity, unrealizedTotal);
+                updateCapitalHistoryBoxes(testEquity);
                 return;
             }
 
@@ -3274,16 +3271,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Valore Mercato (Long + Short Market Value)
             if (totalInvestedEl) totalInvestedEl.textContent = formatMoney(brokerMarketValue || 0);
 
-            // PnL Giornaliero (Session Revenue)
+            // PnL Globale (Lifetime)
             if (sessionRevenueEl) {
-                const sign = totalPnL >= 0 ? '+' : '';
-                sessionRevenueEl.textContent = `${sign}${formatMoney(totalPnL)}`;
-                sessionRevenueEl.style.color = totalPnL >= 0 ? '#10b981' : '#ef4444';
+                const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
+                const globalPnl = tradingCapital - dep;
+                const sign = globalPnl >= 0 ? '+' : '';
+                sessionRevenueEl.textContent = `${sign}${formatMoney(globalPnl)}`;
+                sessionRevenueEl.style.color = globalPnl >= 0 ? '#10b981' : '#ef4444';
             }
 
-            // ROI Giornaliero
+            // ROI Globale (Lifetime ROI)
             if (sessionROIEl) {
-                const pct = (sessionInitialCapital > 0) ? (totalPnL / sessionInitialCapital) * 100 : 0;
+                const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
+                const globalPnl = tradingCapital - dep;
+                const pct = (dep > 0) ? (globalPnl / dep) * 100 : 0;
                 sessionROIEl.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                 sessionROIEl.style.color = pct >= 0 ? '#10b981' : '#ef4444';
             }
