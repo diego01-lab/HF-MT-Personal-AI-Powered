@@ -4864,17 +4864,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             ChartManager.setSymbol(symbol);
             
             // Lazy load della cronologia OHLC per il grafico quando si cambia asset
-            // Alpaca offre bars solo per Crypto e Stock; Forex/Commodity si costruiscono dai tick live
             const assetType = getAssetType(symbol);
             const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
-            if (isAlpacaCompatible && typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
-                tryAlpacaPreload(symbol).then(data => {
-                    if (data && assetPairSelect && assetPairSelect.value === symbol) {
-                        ChartManager.setHistoricalData(data);
-                        console.log(`[CHART] Main series popolata (lazy switch) per ${symbol}`);
-                    }
-                }).catch(e => console.error('[PRELOAD] Errore lazy load:', e));
-            }
+            
+            const doPreload = async () => {
+                let data = null;
+                if (isAlpacaCompatible && typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
+                    data = await tryAlpacaPreload(symbol);
+                }
+                if (!data && typeof tryFinnhubPreload === 'function' && !restrictedAssets.has(symbol)) {
+                    data = await tryFinnhubPreload(symbol);
+                }
+                if (data && assetPairSelect && assetPairSelect.value === symbol) {
+                    ChartManager.setHistoricalData(data);
+                    console.log(`[CHART] Main series popolata (lazy switch) per ${symbol}`);
+                }
+            };
+            doPreload().catch(e => console.error('[PRELOAD] Errore lazy load:', e));
 
             if (currentPriceEl) {
                 currentPriceEl.style.color = '#94a3b8';
@@ -7410,12 +7416,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     }
                 } else {
-                    // Preload storico via Alpaca per Stocks.
-                    // NOTA: l'endpoint Finnhub /v1/stock/candle è PREMIUM (403 sul piano
-                    // gratuito) e NON viene più chiamato: lo storico azioni si costruisce
-                    // dai tick live del WebSocket Finnhub. Niente più errori 403 in console.
                     if (!restrictedAssets.has(symbol)) {
-                        const data = await tryAlpacaPreload(symbol);
+                        let data = null;
+                        if (typeof tryAlpacaPreload === 'function') data = await tryAlpacaPreload(symbol);
+                        if (!data && typeof tryFinnhubPreload === 'function') data = await tryFinnhubPreload(symbol);
                         if (data) historicalData = data;
                         else restrictedAssets.add(symbol);
                     }
@@ -7446,6 +7450,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.warn(`[PRELOAD] Errore per ${symbol}:`, err);
             }
+        }
+
+        async function tryFinnhubPreload(symbol) {
+            const fhKeyEl = document.getElementById('fhKey');
+            if (!fhKeyEl || !fhKeyEl.value) return null;
+            const key = fhKeyEl.value;
+            const assetType = getAssetType(symbol);
+            try {
+                let endpoint = 'stock/candle';
+                if (assetType === 'FOREX' || assetType === 'COMMODITY') endpoint = 'forex/candle';
+                else if (assetType === 'CRYPTO') endpoint = 'crypto/candle';
+                
+                const to = Math.floor(Date.now() / 1000);
+                const from = to - (100 * 60); // 100 minuti
+                
+                const url = `https://finnhub.io/api/v1/${endpoint}?symbol=${encodeURIComponent(symbol)}&resolution=1&from=${from}&to=${to}&token=${key}`;
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.s === 'ok' && data.t && data.t.length > 0) {
+                        const historicalData = [];
+                        for(let i=0; i<data.t.length; i++) {
+                            historicalData.push({
+                                time: data.t[i],
+                                open: data.o[i], high: data.h[i], low: data.l[i], close: data.c[i]
+                            });
+                        }
+                        bgPriceHistories[symbol] = data.c;
+                        console.log(`[PRELOAD] ${symbol}: caricati ${data.t.length} punti via Finnhub.`);
+                        return historicalData;
+                    }
+                }
+            } catch (e) {
+                console.warn(`[FINNHUB PRELOAD] Fallito per ${symbol}`);
+            }
+            return null;
         }
 
         async function tryAlpacaPreload(symbol) {
