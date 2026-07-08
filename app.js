@@ -7350,11 +7350,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             // Precarica i dati storici per TUTTI i simboli richiesti per popolare il radar
-            requiredSubs.forEach(sym => {
-                preloadHistory(sym);
-            });
-            // Assicuriamoci che l'asset corrente sia caricato prioritariamente
-            preloadHistory(assetPairSelect.value);
+            // Usiamo una IIFE asincrona per spaziere le chiamate ed evitare errori 429 (Too Many Requests) su Finnhub
+            (async () => {
+                // Assicuriamoci che l'asset corrente sia caricato prioritariamente e subito
+                await preloadHistory(assetPairSelect.value);
+                for (const sym of requiredSubs) {
+                    if (sym !== assetPairSelect.value) {
+                        await preloadHistory(sym);
+                        await new Promise(r => setTimeout(r, 200));
+                    }
+                }
+            })();
         }
 
         function syncAlpacaDataSubscriptions() {
