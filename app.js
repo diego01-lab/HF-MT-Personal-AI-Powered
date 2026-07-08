@@ -4881,6 +4881,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                     currentPrice = lastPrice;
                     if (typeof updatePriceUI === 'function') updatePriceUI();
                     console.log(`[CHART] Main series popolata (lazy switch) per ${symbol}`);
+                } else if (!data && assetPairSelect && assetPairSelect.value === symbol) {
+                    // Se entrambi i preload falliscono (es. storico non disponibile su free tier o no keys),
+                    // recuperiamo almeno l'ultimo prezzo per resettare la Y-axis del grafico ed evitare $0.0000
+                    const fhKeyEl = document.getElementById('fhKey');
+                    if (fhKeyEl && fhKeyEl.value) {
+                        try {
+                            const qRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${fhKeyEl.value}`);
+                            if (qRes.ok) {
+                                const qData = await qRes.json();
+                                if (qData && qData.c) {
+                                    const now = Math.floor(Date.now() / 1000);
+                                    const singleData = [{ time: now, open: qData.c, high: qData.c, low: qData.c, close: qData.c }];
+                                    ChartManager.setHistoricalData(singleData);
+                                    currentPrice = qData.c;
+                                    if (typeof updatePriceUI === 'function') updatePriceUI();
+                                    console.log(`[CHART] Main series fallback quote per ${symbol}: ${qData.c}`);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Fallback quote err:', e);
+                        }
+                    }
                 }
             };
             doPreload().catch(e => console.error('[PRELOAD] Errore lazy load:', e));
