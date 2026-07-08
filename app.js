@@ -4424,6 +4424,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         };
                         anyChanges = true;
                     }
+                    // Sincronizza SEMPRE il PnL non realizzato e il valore di mercato direttamente dal broker Alpaca
+                    if (pos.unrealized_pl !== undefined) {
+                        activePositions[sym].brokerUnrealizedPnL = parseFloat(pos.unrealized_pl || 0);
+                    }
+                    if (pos.market_value !== undefined) {
+                        activePositions[sym].brokerMarketValue = parseFloat(pos.market_value || 0);
+                    }
                 }
                 
                 // Rimuovi le posizioni fantasma chiuse sul broker
@@ -6493,9 +6500,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const livePrice = globalPrices[sym] || pos.entryPrice;
                 const cat = getAssetType(sym);
 
-                const unrealized = pos.type === 'LONG'
-                    ? (livePrice - pos.entryPrice) * pos.amount
-                    : (pos.entryPrice - livePrice) * pos.amount;
+                let unrealized;
+                if (pos.brokerUnrealizedPnL !== undefined && brokerViewActive()) {
+                    unrealized = pos.brokerUnrealizedPnL;
+                } else {
+                    unrealized = pos.type === 'LONG'
+                        ? (livePrice - pos.entryPrice) * pos.amount
+                        : (pos.entryPrice - livePrice) * pos.amount;
+                }
 
                 // Calcolo percentuale non realizzata
                 const invested = pos.invested || pos.entryPrice * pos.amount;
