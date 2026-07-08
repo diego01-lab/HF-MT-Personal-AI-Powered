@@ -8041,32 +8041,32 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const safeOrderId = String(order.id).replace(/[^a-zA-Z0-9-]/g, '');
 
                 return `
-                    <div class="open-position pending-order" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.03); margin-bottom: 8px; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="open-position pending-order" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.03); margin-bottom: 8px; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch;">
                         <div class="pos-main">
-                            <div class="pos-info" style="display: flex; align-items: center; gap: 8px;">
+                            <div class="pos-info" style="display: flex; align-items: center; justify-content: space-between;">
                                 <span class="pos-asset" style="color: #fff; font-weight: bold; font-size: 0.9rem;">${assetName}</span>
                                 <span class="pos-type ${isBuy ? 'buy' : 'sell'}" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: ${isBuy ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${isBuy ? '#10b981' : '#ef4444'}; font-weight: bold;">
                                     ${side} ${escHtml(order.type.toUpperCase())}
                                 </span>
                             </div>
-                            <div class="pos-metrics" style="margin-top: 6px; display: flex; gap: 15px;">
+                            <div class="pos-metrics" style="margin-top: 8px; display: flex; justify-content: space-between;">
                                 <div class="pos-metric">
                                     <span class="m-label" style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase;">Qty</span>
                                     <span class="m-val" style="color: #fff; font-size: 0.8rem; display: block;">${escHtml(order.qty)}</span>
                                 </div>
-                                <div class="pos-metric">
+                                <div class="pos-metric" style="text-align: center;">
                                     <span class="m-label" style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase;">Prezzo</span>
                                     <span class="m-val" style="color: #fff; font-size: 0.8rem; display: block;">${escHtml(order.limit_price || 'MARKET')}</span>
                                 </div>
-                                <div class="pos-metric">
+                                <div class="pos-metric" style="text-align: right;">
                                     <span class="m-label" style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase;">Stato</span>
                                     <span class="m-val" style="color: #f59e0b; font-size: 0.8rem; display: block; font-weight: bold;">${escHtml(order.status.toUpperCase())}</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="pos-actions" style="${window.liveMonitorActive ? 'display:none;' : ''}">
+                        <div class="pos-actions" style="margin-top: 12px; ${window.liveMonitorActive ? 'display:none;' : ''}">
                             <button class="btn btn-secondary" onclick="cancelAlpacaOrder('${safeOrderId}')"
-                                style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); font-size: 0.65rem; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: all 0.2s;"
+                                style="width: 100%; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); font-size: 0.65rem; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: all 0.2s;"
                                 onmouseover="this.style.background='rgba(239,68,68,0.2)'"
                                 onmouseout="this.style.background='rgba(239,68,68,0.1)'">
                                 ANNULLA
