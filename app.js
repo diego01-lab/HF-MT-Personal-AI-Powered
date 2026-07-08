@@ -977,9 +977,10 @@ function updateLanguage() {
                         const iconMap = { 'lblCatCrypto': '🔸', 'lblCatStock': '📈', 'lblCatForex': '💱', 'lblCatCommodity': '⛽' };
                         el.textContent = (iconMap[id] || '') + ' ' + translatedText;
                     } else if (id === 'lblHistoryTitle' || id === 'openPosTitle') {
-                        const spanEl = el.querySelector('span');
-                        const spanHTML = spanEl ? spanEl.outerHTML : '';
-                        el.innerHTML = translatedText + ' ' + spanHTML;
+                        const spans = el.querySelectorAll('span');
+                        let spansHTML = '';
+                        spans.forEach(s => spansHTML += s.outerHTML);
+                        el.innerHTML = translatedText + ' ' + spansHTML;
                     } else {
                         if (id.startsWith('lblLogic') || id === 'lblAppDesc' || id === 'lblEduOnly' || translatedText.includes('<')) {
                             el.innerHTML = translatedText;
