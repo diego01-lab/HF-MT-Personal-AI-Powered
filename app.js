@@ -4452,20 +4452,43 @@ document.addEventListener('DOMContentLoaded', async () => {
             _historySyncInFlight = true;
             try {
                 // Recupera fino a 1000 FILL storici per popolare tutta la cronologia (10 pagine da 100)
+                // Cache per evitare rate limit (429) facendo 10 chiamate ogni 3 secondi
                 let activities = [];
                 let pageToken = '';
+                const cacheKey = src.live ? 'live' : 'paper';
+                window.__alpacaActivitiesCache = window.__alpacaActivitiesCache || {};
+                const cached = window.__alpacaActivitiesCache[cacheKey] || [];
+                const latestCachedId = cached.length > 0 ? cached[0].id : null;
+
                 for (let i = 0; i < 10; i++) {
                     const url = `${src.base}/v2/account/activities/FILL?direction=desc&page_size=100${pageToken ? '&page_token=' + pageToken : ''}`;
                     const response = await fetch(url, {
                         headers: { 'apca-api-key-id': src.key, 'apca-api-secret-key': src.secret }
                     });
-                    if (!response.ok) break;
+                    if (!response.ok) {
+                        if (response.status === 429) console.warn('[ALPACA] Rate limit exceeded on activities fetch. Using cache.');
+                        break;
+                    }
                     const chunk = await response.json();
                     if (!chunk || chunk.length === 0) break;
-                    activities = activities.concat(chunk);
+                    
+                    let hitCache = false;
+                    for (const act of chunk) {
+                        if (act.id === latestCachedId || cached.some(c => c.id === act.id)) {
+                            hitCache = true;
+                            break;
+                        }
+                        activities.push(act);
+                    }
+                    if (hitCache) break;
+                    
                     if (chunk.length < 100) break; // Ultima pagina
                     pageToken = chunk[chunk.length - 1].id;
                 }
+                
+                activities = activities.concat(cached);
+                if (activities.length > 1000) activities = activities.slice(0, 1000);
+                window.__alpacaActivitiesCache[cacheKey] = activities;
                 
                 if (activities.length > 0) {
                     // Cambio modalità durante la richiesta: non contaminare la modalità test
