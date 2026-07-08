@@ -4388,7 +4388,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const qty = Math.abs(parseFloat(pos.qty || 0)) || 0;
                     const entryPrice = parseFloat(pos.avg_entry_price || 0) || 0;
 
-                    if (!activePositions[sym]) {
+                    activePositions[sym] = activePositions[sym] || {};
+                    activePositions[sym].brokerUnrealizedPnL = parseFloat(pos.unrealized_pl || 0);
+                    if (!activePositions[sym].type) {
                         activePositions[sym] = {
                             type: isLong ? 'LONG' : 'SHORT',
                             entryPrice: entryPrice,
@@ -6188,7 +6190,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const p = activePositions[sym];
                 const livePrice = globalPrices[sym] || p.entryPrice;
                 let pnl = 0;
-                if (livePrice > 0) {
+                if (p.brokerUnrealizedPnL !== undefined && brokerViewActive()) {
+                    pnl = p.brokerUnrealizedPnL;
+                } else if (livePrice > 0) {
                     pnl = p.type === 'LONG' ? (livePrice - p.entryPrice) * p.amount : (p.entryPrice - livePrice) * p.amount;
                 }
                 openUnrealizedTotal += pnl;
@@ -6216,6 +6220,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const winRateEl = document.getElementById('winRate');
             const grossProfitEl = document.getElementById('grossProfit');
             const grossLossEl = document.getElementById('grossLoss');
+            const winningTradesCountEl = document.getElementById('winningTradesCount');
+            const losingTradesCountEl = document.getElementById('losingTradesCount');
             const unrealizedPnLEl = document.getElementById('unrealizedPnL');
 
             const sessionRevenueEl = document.getElementById('sessionRevenue');
@@ -6246,6 +6252,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (grossProfitEl) grossProfitEl.textContent = `${totalGrossProfit > 0 ? '+' : ''}${formatMoney(totalGrossProfit)}`;
             if (grossLossEl) grossLossEl.textContent = `${totalGrossLoss > 0 ? '-' : ''}${formatMoney(totalGrossLoss)}`;
+            if (winningTradesCountEl) winningTradesCountEl.textContent = totalWinningTrades;
+            if (losingTradesCountEl) losingTradesCountEl.textContent = totalLosingTrades;
 
             // Entrate Storico
             if (sessionRevenueEl) {
