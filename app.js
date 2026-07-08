@@ -6246,6 +6246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const grossLossEl = document.getElementById('grossLoss');
             const winningTradesCountEl = document.getElementById('winningTradesCount');
             const losingTradesCountEl = document.getElementById('losingTradesCount');
+            const breakevenTradesCountEl = document.getElementById('breakevenTradesCount');
             const unrealizedPnLEl = document.getElementById('unrealizedPnL');
 
             const sessionRevenueEl = document.getElementById('sessionRevenue');
