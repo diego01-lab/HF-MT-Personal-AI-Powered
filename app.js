@@ -4902,6 +4902,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                             console.warn('Fallback quote err:', e);
                         }
                     }
+                    
+                    // Se qRes ha fallito (es. 403 su Forex) e il grafico è ancora vuoto,
+                    // usiamo i tick live accumulati in background come piano C (Extreme Fallback)
+                    if (currentPrice === 0 || currentPrice === undefined) {
+                        if (window.bgPriceHistories && window.bgPriceHistories[symbol] && window.bgPriceHistories[symbol].length > 0) {
+                            const ticks = window.bgPriceHistories[symbol];
+                            let now = Math.floor(Date.now() / 1000);
+                            const fallbackData = [];
+                            for(let i=ticks.length-1; i>=0; i--) {
+                                const p = ticks[i];
+                                fallbackData.unshift({ time: now, open: p, high: p, low: p, close: p });
+                                now -= 60; // arretriamo di 1 minuto per ogni tick
+                            }
+                            ChartManager.setHistoricalData(fallbackData);
+                            currentPrice = ticks[ticks.length - 1];
+                            if (typeof updatePriceUI === 'function') updatePriceUI();
+                            console.log(`[CHART] Main series fallback estremo (bg ticks) per ${symbol}`);
+                        }
+                    }
                 }
             };
             doPreload().catch(e => console.error('[PRELOAD] Errore lazy load:', e));
