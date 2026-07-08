@@ -2041,6 +2041,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateWalletUI(); 
                 if (typeof updateDashboard === 'function') updateDashboard(); 
                 if (typeof renderHistory === 'function') renderHistory();
+                if (typeof renderOpenPositions === 'function') renderOpenPositions();
             } catch (_) { }
         }
         // ─── Totale portafoglio multi-broker (header) ───
@@ -2388,6 +2389,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Azzera lo stato locale di test: posizioni e cronologia saranno ripopolate da Alpaca
                 activePositions = {};
                 tradeHistory = [];
+                tradingCapital = 0;
+                sessionInitialCapital = 0;
+                portfolioBalance = 0;
+                totalPnL = 0;
+                executedTrades = 0;
+                winTrades = 0;
+                grossProfit = 0;
+                grossLoss = 0;
+                
                 // In Fase C, le connessioni dati sono indipendenti dai tab.
                 // Il cambio tab NON forza l'attivazione della connessione.
                 if (window.__connAllowed.alp) {
