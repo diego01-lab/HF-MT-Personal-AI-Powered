@@ -5957,7 +5957,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const fragment = document.createDocumentFragment();
-            tradeHistory.forEach(trade => {
+            // Mostra al massimo le ultime 100 operazioni per evitare colli di bottiglia nel rendering (DOM troppo grande)
+            const visibleHistory = tradeHistory.slice(-100);
+            visibleHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
                 if (!trade || !trade.sym || trade.sym === 'undefined') return;
 
