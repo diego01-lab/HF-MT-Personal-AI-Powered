@@ -5958,8 +5958,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         var _lastRenderedHistoryJSON = null;
         function renderHistory() {
             const historyCountBadge = document.getElementById('historyCountBadge');
+            
+            let validHistoryCount = 0;
+            tradeHistory.forEach(trade => {
+                if (!trade || !trade.sym || trade.sym === 'undefined') return;
+                if (!brokerViewActive() && (trade.fromBroker || trade.reason === 'BROKER_SYNC')) return;
+                if (trade.reason === 'BROKER_SYNC' && trade.pnl === 0 && trade.entryPrice === trade.exitPrice) return;
+                validHistoryCount++;
+            });
+
             if (historyCountBadge) {
-                const count = tradeHistory.length;
+                const count = validHistoryCount;
                 historyCountBadge.textContent = count;
                 historyCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
             }
@@ -6174,10 +6183,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Ulteriore sicurezza: salta se malformato
                 if (!trade || !trade.sym || trade.sym === 'undefined') return;
 
+                // In modalità TEST la cronologia del broker non deve MAI apparire
+                if (!brokerViewActive() && (trade.fromBroker || trade.reason === 'BROKER_SYNC')) return;
+
                 // Filtro identico alla cronologia visiva per escludere trade fantasma
                 if (trade.reason === 'BROKER_SYNC' && trade.pnl === 0 && trade.entryPrice === trade.exitPrice) return;
 
-                if (trade.pnl !== 0) totalTrades++;
+                totalTrades++;
                 totalRealizedPnL += trade.pnl;
                 if (trade.pnl > 0) {
                     totalWins++;
