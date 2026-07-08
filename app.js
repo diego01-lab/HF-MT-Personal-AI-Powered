@@ -5834,6 +5834,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 }
 
+                let actualCost = qtyVal * price;
+                if (actualCost > 0 && actualCost < 10) {
+                    let minUsd = 10.05;
+                    if (isForex) {
+                        qtyVal = Math.ceil(minUsd / price);
+                    } else if (isCrypto) {
+                        qtyVal = Math.ceil((minUsd / price) * 10000) / 10000;
+                    } else {
+                        if (type === 'SHORT') qtyVal = Math.ceil(minUsd / price);
+                        else qtyVal = Math.ceil((minUsd / price) * 100) / 100;
+                    }
+                    actualCost = qtyVal * price;
+                    
+                    const brokerFunds = isCrypto ? availableCash : availableMargin;
+                    if (actualCost > brokerFunds) {
+                        orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
+                        console.warn(`[BROKER] Fondi insufficienti per coprire il minimo di $10 per ${sym}.`);
+                        if (isBotActive) { botNotify('min_order_10', tr('bot_skip_min10', `Fondi insufficienti dopo arrotondamento. Alpaca richiede >= 10$.`), 'warning', 30000); bumpSkipped('nocash'); }
+                        return;
+                    }
+                }
+
                 if (qtyVal > 0) {
                     const orderOk = await alpacaCreateOrder(type === 'LONG' ? 'buy' : 'sell', alpacaSym, qtyVal.toString());
                     if (!orderOk) {
