@@ -5388,36 +5388,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // APERTURA
                     if (signal === 'BUY' && confidence >= 65 && isBullTrend && totalEvidence >= 6) {
-                        const botMode = botModeSelect ? botModeSelect.value : 'both';
-                        if (botMode === 'short') {
-                            botNotify('skip_mode', tr('bot_skip_mode', `[${sym}] BUY ignorato: Bot in modalità 'Solo Short'.`), 'info', 60000);
-                            bumpSkipped('mode');
-                        } else {
-                            console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
+                        console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
-                            const tpInput = document.getElementById('botTargetProfit');
-                            const slInput = document.getElementById('botStopLoss');
-                            if (tpInput) tpInput.value = dynamicTP.toFixed(2);
-                            if (slInput) slInput.value = dynamicSL.toFixed(2);
+                        const tpInput = document.getElementById('botTargetProfit');
+                        const slInput = document.getElementById('botStopLoss');
+                        if (tpInput) tpInput.value = dynamicTP.toFixed(2);
+                        if (slInput) slInput.value = dynamicSL.toFixed(2);
 
-                            openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
-                        }
+                        openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
                     }
                     if (signal === 'SELL' && confidence >= 65 && isBearTrend && totalEvidence >= 6) {
-                        const botMode = botModeSelect ? botModeSelect.value : 'both';
-                        if (botMode === 'long') {
-                            botNotify('skip_mode', tr('bot_skip_mode', `[${sym}] SELL ignorato: Bot in modalità 'Solo Long'.`), 'info', 60000);
-                            bumpSkipped('mode');
-                        } else {
-                            console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
+                        console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
-                            const tpInput = document.getElementById('botTargetProfit');
-                            const slInput = document.getElementById('botStopLoss');
-                            if (tpInput) tpInput.value = dynamicTP.toFixed(2);
-                            if (slInput) slInput.value = dynamicSL.toFixed(2);
+                        const tpInput = document.getElementById('botTargetProfit');
+                        const slInput = document.getElementById('botStopLoss');
+                        if (tpInput) tpInput.value = dynamicTP.toFixed(2);
+                        if (slInput) slInput.value = dynamicSL.toFixed(2);
 
-                            openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
-                        }
+                        openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
                     }
                 } else {
                     // CHIUSURA DINAMICA (AI Reversal) — con filtro anti-churn:
