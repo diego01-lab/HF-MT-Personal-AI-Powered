@@ -5388,24 +5388,36 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // APERTURA
                     if (signal === 'BUY' && confidence >= 65 && isBullTrend && totalEvidence >= 6) {
-                        console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
+                        const botMode = botModeSelect ? botModeSelect.value : 'both';
+                        if (botMode === 'short') {
+                            botNotify('skip_mode', tr('bot_skip_mode', `[${sym}] BUY ignorato: Bot in modalità 'Solo Short'.`), 'info', 60000);
+                            bumpSkipped('mode');
+                        } else {
+                            console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
-                        const tpInput = document.getElementById('botTargetProfit');
-                        const slInput = document.getElementById('botStopLoss');
-                        if (tpInput) tpInput.value = dynamicTP.toFixed(2);
-                        if (slInput) slInput.value = dynamicSL.toFixed(2);
+                            const tpInput = document.getElementById('botTargetProfit');
+                            const slInput = document.getElementById('botStopLoss');
+                            if (tpInput) tpInput.value = dynamicTP.toFixed(2);
+                            if (slInput) slInput.value = dynamicSL.toFixed(2);
 
-                        openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
+                            openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
+                        }
                     }
                     if (signal === 'SELL' && confidence >= 65 && isBearTrend && totalEvidence >= 6) {
-                        console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
+                        const botMode = botModeSelect ? botModeSelect.value : 'both';
+                        if (botMode === 'long') {
+                            botNotify('skip_mode', tr('bot_skip_mode', `[${sym}] SELL ignorato: Bot in modalità 'Solo Long'.`), 'info', 60000);
+                            bumpSkipped('mode');
+                        } else {
+                            console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
-                        const tpInput = document.getElementById('botTargetProfit');
-                        const slInput = document.getElementById('botStopLoss');
-                        if (tpInput) tpInput.value = dynamicTP.toFixed(2);
-                        if (slInput) slInput.value = dynamicSL.toFixed(2);
+                            const tpInput = document.getElementById('botTargetProfit');
+                            const slInput = document.getElementById('botStopLoss');
+                            if (tpInput) tpInput.value = dynamicTP.toFixed(2);
+                            if (slInput) slInput.value = dynamicSL.toFixed(2);
 
-                        openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
+                            openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
+                        }
                     }
                 } else {
                     // CHIUSURA DINAMICA (AI Reversal) — con filtro anti-churn:
@@ -5681,13 +5693,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Alpaca non supporta posizioni SHORT sulle Crypto
                 if (isCryptoSym && type === 'SHORT') {
-                    orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
-                    console.warn(`[BROKER] Alpaca non supporta posizioni SHORT sulle Crypto. Ordine ${sym} annullato.`);
-                    if (isBotActive) {
-                        botNotify('noshortcrypto', tr('bot_skip_shortcrypto', `Alpaca non permette lo SHORT sulle Crypto: operazione su ${sym} saltata.`), 'info', 30000);
-                        bumpSkipped('reject');
+                    if (!window.__shortCryptoCooldown) window.__shortCryptoCooldown = {};
+                    if (!window.__shortCryptoCooldown[sym] || Date.now() > window.__shortCryptoCooldown[sym]) {
+                        window.__shortCryptoCooldown[sym] = Date.now() + 60000;
+                        console.warn(`[BROKER] Alpaca non supporta posizioni SHORT sulle Crypto. Ordine ${sym} annullato.`);
+                        if (isBotActive) {
+                            botNotify('noshortcrypto', tr('bot_skip_shortcrypto', `Alpaca non permette lo SHORT sulle Crypto: operazione su ${sym} saltata.`), 'info', 30000);
+                            bumpSkipped('reject');
+                        }
                     }
-                    return;
+                    return; // NON settiamo orderRejectCooldown globale per non bloccare eventuali segnali LONG successivi
                 }
 
                 const brokerFunds = isCryptoSym ? availableCash : availableMargin;
