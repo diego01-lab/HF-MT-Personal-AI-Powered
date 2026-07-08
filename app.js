@@ -6176,7 +6176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Filtro identico alla cronologia visiva per escludere trade fantasma
                 if (trade.reason === 'BROKER_SYNC' && trade.pnl === 0 && trade.entryPrice === trade.exitPrice) return;
 
-                totalTrades++;
+                if (trade.pnl !== 0) totalTrades++;
                 totalRealizedPnL += trade.pnl;
                 if (trade.pnl > 0) {
                     totalWins++;
