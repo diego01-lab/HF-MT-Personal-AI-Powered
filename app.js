@@ -4390,6 +4390,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     activePositions[sym] = activePositions[sym] || {};
                     activePositions[sym].brokerUnrealizedPnL = parseFloat(pos.unrealized_pl || 0);
+                    activePositions[sym].brokerMarketValue = Math.abs(parseFloat(pos.market_value || 0));
                     if (!activePositions[sym].type) {
                         activePositions[sym] = {
                             type: isLong ? 'LONG' : 'SHORT',
@@ -6190,6 +6191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const totalTradesEl = document.getElementById('totalTrades');
             let openUnrealizedTotal = 0;
+            let openMarketValueTotal = 0;
             for (let sym in activePositions) {
                 const p = activePositions[sym];
                 const livePrice = globalPrices[sym] || p.entryPrice;
@@ -6200,6 +6202,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     pnl = p.type === 'LONG' ? (livePrice - p.entryPrice) * p.amount : (p.entryPrice - livePrice) * p.amount;
                 }
                 openUnrealizedTotal += pnl;
+                if (p.brokerMarketValue !== undefined && brokerViewActive()) {
+                    openMarketValueTotal += p.brokerMarketValue;
+                } else if (livePrice > 0) {
+                    openMarketValueTotal += p.amount * livePrice;
+                }
             }
 
             if (brokerViewActive()) {
@@ -6276,6 +6283,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Riepilogo Netto Latente (Posizioni Aperte)
             const openDailyNetEl = document.getElementById('openDailyNet');
+            const openTotalValueEl = document.getElementById('openTotalValue');
+            if (openTotalValueEl) {
+                openTotalValueEl.textContent = `Valore: ${formatMoney(openMarketValueTotal)}`;
+            }
             if (openDailyNetEl) {
                 const oSign = openUnrealizedTotal >= 0 ? '+' : '';
                 openDailyNetEl.textContent = `${oSign}${formatMoney(openUnrealizedTotal)}`;
