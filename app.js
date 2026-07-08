@@ -7363,17 +7363,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
 
-            // Precarica i dati storici per TUTTI i simboli richiesti per popolare il radar
-            // Usiamo una IIFE asincrona per spaziere le chiamate ed evitare errori 429 (Too Many Requests) su Finnhub
+            // Assicuriamoci che l'asset corrente sia caricato prioritariamente e subito
+            preloadHistory(assetPairSelect.value);
+
+            // Precarica i dati storici in background per popolare il radar.
+            // Usiamo un semaforo per evitare loop sovrapposti (che causavano lag) e 
+            // misuriamo il tempo per applicare il delay solo se c'è stata chiamata di rete.
+            if (window.isFinnhubSyncingLoop) return;
+            window.isFinnhubSyncingLoop = true;
+
             (async () => {
-                // Assicuriamoci che l'asset corrente sia caricato prioritariamente e subito
-                await preloadHistory(assetPairSelect.value);
                 for (const sym of requiredSubs) {
                     if (sym !== assetPairSelect.value) {
+                        const before = Date.now();
                         await preloadHistory(sym);
-                        await new Promise(r => setTimeout(r, 200));
+                        const elapsed = Date.now() - before;
+                        // Applica il delay di 200ms solo se ci ha messo più di 50ms (segno di chiamata di rete reale)
+                        if (elapsed > 50) await new Promise(r => setTimeout(r, 200));
                     }
                 }
+                window.isFinnhubSyncingLoop = false;
             })();
         }
 
