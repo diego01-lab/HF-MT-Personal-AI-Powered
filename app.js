@@ -5942,7 +5942,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateDashboard();
         }
 
-        let _lastRenderedHistoryJSON = null;
+        var _lastRenderedHistoryJSON = null;
         function renderHistory() {
             if (!tradeListEl) return;
             
@@ -7397,7 +7397,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         function updateMarketRadarTarget(symbol) { return; }
-        const processRadarTick = window.RadarManager ? window.RadarManager.processRadarTick : () => {};
+        function processRadarTick(sym, price, now, type) {
+            if (window.RadarManager && typeof window.RadarManager.processRadarTick === 'function') {
+                window.RadarManager.processRadarTick(sym, price, now, type);
+            }
+        }
         // triggerRadarSignal is encapsulated inside radar.js
         
         let sharedAudioCtx = null;
