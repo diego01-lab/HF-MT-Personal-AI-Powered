@@ -3062,7 +3062,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             let invest = base * (pct / 100);
-            if (invest < 5 && base >= 5) invest = 5;
+            // Alpaca (Broker) e crypto/fractional richiedono tipicamente un ordine minimo di 10$ di controvalore
+            // Alziamo il limite minimo hardcoded da 5 a 10 se ci sono almeno 10$ disponibili.
+            if (invest < 10 && base >= 10) invest = 10;
 
             return invest;
         }
@@ -5692,6 +5694,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         investUsd = safeFunds;
                     }
+                }
+                
+                // Se dopo i tagli l'investimento è sceso sotto i 10$, Alpaca rifiuterà l'ordine.
+                // Annulliamo subito per evitare l'errore API (cost basis must be >= 10).
+                if (investUsd > 0 && investUsd < 10) {
+                    orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
+                    console.warn(`[BROKER] Importo finale troppo basso (${investUsd.toFixed(2)}$) per ${sym}: minimo richiesto da Alpaca è 10$.`);
+                    botNotify('min_order_10', tr('bot_skip_min10', `Fondi liberi insufficienti (${investUsd.toFixed(2)}$). Alpaca richiede almeno 10$ per ordine.`), 'warning', 30000);
+                    return;
                 }
             }
 
