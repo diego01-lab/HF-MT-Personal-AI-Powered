@@ -9,7 +9,8 @@ window.AlpacaRealManager = (function() {
     let keyId = null;
     let secretKey = null;
 
-    const BASE_URL = 'https://api.alpaca.markets';
+    // Use proxy in web browser to avoid CORS/403 issues
+    const BASE_URL = !!(window.Capacitor) ? 'https://api.alpaca.markets' : '/proxy/alpaca-live';
     
     let activeSubs = new Set();
     let callbacks = {};

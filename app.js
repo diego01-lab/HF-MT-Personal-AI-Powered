@@ -2037,7 +2037,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Anti-bleed UI: durante fn le funzioni di rendering possono aver scritto
             // nel DOM i valori del contesto in background; ri-renderizza subito i
             // valori del contesto ATTIVO appena ripristinato.
-            try { updateWalletUI(); } catch (_) { }
+            try { updateWalletUI(); if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) { }
         }
         // ─── Totale portafoglio multi-broker (header) ───
         // Il valore nella barra di stato è la SOMMA degli equity di tutti i broker:

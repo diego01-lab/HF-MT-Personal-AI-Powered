@@ -9,7 +9,8 @@ window.AlpacaPaperManager = (function() {
     let keyId = null;
     let secretKey = null;
 
-    const BASE_URL = 'https://paper-api.alpaca.markets';
+    // Use proxy in web browser to avoid CORS/403 issues
+    const BASE_URL = !!(window.Capacitor) ? 'https://paper-api.alpaca.markets' : '/proxy/alpaca';
     
     let activeSubs = new Set();
     let callbacks = {};
