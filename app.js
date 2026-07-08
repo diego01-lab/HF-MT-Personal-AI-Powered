@@ -7531,6 +7531,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         console.log(`[PRELOAD] ${symbol}: caricati ${slicedData.length} punti utili via Finnhub.`);
                         return slicedData;
                     }
+                } else if (res.status === 403) {
+                    window.finnhubForbidden = true;
+                    localStorage.setItem('finnhub_candles_forbidden', 'true');
+                    console.warn(`[FINNHUB] Endpoint Premium (403) raggiunto per ${symbol}. Fallback su stream attivati per gli asset restanti.`);
                 }
             } catch (e) {
                 console.warn(`[FINNHUB PRELOAD] Fallito per ${symbol}`);
