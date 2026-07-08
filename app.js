@@ -5942,8 +5942,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateDashboard();
         }
 
+        let _lastRenderedHistoryJSON = null;
         function renderHistory() {
             if (!tradeListEl) return;
+            
+            const currentJSON = JSON.stringify(tradeHistory);
+            if (_lastRenderedHistoryJSON === currentJSON) return;
+            _lastRenderedHistoryJSON = currentJSON;
+
             tradeListEl.innerHTML = '';
             if (tradeHistory.length === 0) {
                 tradeListEl.innerHTML = `<div class="empty-state">${tr('waiting_trades', 'In attesa di operazioni...')}</div>`;
