@@ -8066,3 +8066,55 @@ function createNotificationContainer() {
     document.body.appendChild(container);
     return container;
 }
+
+// FLUSH EVENT LISTENER
+
+    const btnFlush = document.getElementById('btnFlushCapital');
+    if (btnFlush) {
+        btnFlush.addEventListener('click', () => {
+            if (getBrokerCtx() !== 'fh') return;
+            if (confirm('Sei sicuro di voler azzerare il portafoglio Finnhub? Verranno ripristinati il capitale iniziale (1000) e cancellati tutti i trade e la cronologia locale.')) {
+                // Rimuovi contesto locale Finnhub
+                localStorage.removeItem('sim_ctx_fh');
+                localStorage.removeItem('broker_deposited_fh');
+                
+                // Rimuovi variabili globali che potrebbero fare da fallback
+                localStorage.removeItem('sim_trading_capital');
+                localStorage.removeItem('sim_session_initial_capital');
+                localStorage.removeItem('sim_total_pnl');
+                localStorage.removeItem('sim_executed_trades');
+                localStorage.removeItem('sim_win_trades');
+                localStorage.removeItem('sim_gross_profit');
+                localStorage.removeItem('sim_gross_loss');
+                localStorage.removeItem('sim_trade_history');
+                localStorage.removeItem('sim_active_positions');
+                localStorage.removeItem('sim_global_commissions');
+                
+                // Reset della memoria dell'applicazione
+                sessionInitialCapital = 1000;
+                tradingCapital = 1000;
+                totalPnL = 0;
+                activePositions = {};
+                tradeHistory = [];
+                executedTrades = 0;
+                winTrades = 0;
+                grossProfit = 0;
+                grossLoss = 0;
+                globalTotalRealizedPnL = 0;
+                globalCommissions = 0;
+                window.__trueRealizedPnL = 0;
+                window.__globalCommissions = 0;
+                
+                // Ricarica tutto tramite il framework stesso
+                if (typeof switchBrokerTarget === 'function') switchBrokerTarget('fh', true);
+                
+                alert('Portafoglio Finnhub azzerato con successo!');
+                
+                // Fallback forzato aggiornamenti se switchBrokerTarget non basta
+                if (typeof updatePerformanceUI === 'function') updatePerformanceUI();
+                if (typeof renderOpenPositions === 'function') renderOpenPositions();
+                if (typeof renderHistory === 'function') renderHistory();
+            }
+        });
+    }
+
