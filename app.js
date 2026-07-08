@@ -369,7 +369,8 @@ window.hasAnyBrokerKey = function () {
         const badge = (id, ok) => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.textContent = ok ? '✓ Collegato' : 'Da configurare';
+            const t = translations[currentLang] || translations.IT || {};
+            el.textContent = ok ? '✓ ' + (t.onb_connected || 'Collegato') : (t.onb_todo || 'Da configurare');
             el.classList.toggle('ok', ok);
         };
         badge('onbStatusFinnhub', k.fh);
@@ -954,6 +955,27 @@ function updateLanguage() {
         'disclaimerAcceptBtn': 'disclaimer_accept',
         'disclaimerCheckLabel': 'disclaimer_checkbox',
         'lblLegalNotes': 'legal_notes_title',
+        // --- Nuovi inserimenti ---
+        'lblSubtitleFrancaLogin': 'subtitle_franca',
+        'lblSubtitleFrancaApp': 'subtitle_franca',
+        'lblSubtitleFrancaModal': 'subtitle_franca',
+        'lblLoginPlatform': 'login_platform',
+        'lblLoginInst': 'login_instruction',
+        'lblLegalConsent': 'login_consent_text',
+        'lblGuestBtn': 'login_guest_btn',
+        'lblLoginFooter': 'login_footer',
+        'lblOnbTitle': 'onb_title',
+        'lblOnbDesc': 'onb_desc',
+        'lblOnbFinnhubCats': 'onb_fh_cats',
+        'lblOnbAlpacaPaperCats': 'onb_ap_cats',
+        'lblOnbAlpacaLiveCats': 'onb_al_cats',
+        'lblPaypalSubtitle': 'paypal_subtitle',
+        'lblNoKeysAlpacaPaper': 'no_keys',
+        'lblNoKeysAlpacaLive': 'no_keys',
+        'onbBtnFinnhub': 'btn_configure',
+        'onbBtnAlpacaPaper': 'btn_configure',
+        'onbBtnAlpacaLive': 'btn_configure',
+        'onbEnterBtn': 'onb_enter_btn',
     };
 
     for (let id in elementMaps) {
@@ -8087,7 +8109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 style="width: 100%; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); font-size: 0.65rem; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: all 0.2s;"
                                 onmouseover="this.style.background='rgba(239,68,68,0.2)'"
                                 onmouseout="this.style.background='rgba(239,68,68,0.1)'">
-                                ANNULLA
+                                ${t.btn_cancel ? t.btn_cancel.toUpperCase() : 'ANNULLA'}
                             </button>
                         </div>
                     </div>
