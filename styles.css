@@ -3172,7 +3172,7 @@ html.no-gsi .g_id_signin {
    visibile solo in modalità broker — il JS aggiunge .has-pending alla griglia
    e le colonne si ridimensionano da 6 a 7 mantenendo larghezze identiche */
 .dashboard-grid.has-pending {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: 0.95fr 1.35fr 1.35fr 0.95fr 1fr 0.9fr 0.9fr;
 }
 
 /* Modalità broker (7 colonne desktop → pannelli più stretti): in Gestione
@@ -3187,10 +3187,25 @@ html.no-gsi .g_id_signin {
         padding: 8px 10px !important;
     }
     .dashboard-grid.has-pending .wallet-card .capital-item > div:last-child {
-        font-size: 0.8rem !important;
+        font-size: 1rem !important;
     }
     .dashboard-grid.has-pending .wallet-card .capital-item > div:first-child {
-        font-size: 0.6rem !important;
+        font-size: 0.65rem !important;
+    }
+    /* Manteniamo grandi i valori PNL ed evitiamo il rimpicciolimento automatico */
+    .dashboard-grid.has-pending .wallet-card #boxPnlDaily > div:last-child,
+    .dashboard-grid.has-pending .wallet-card #boxPnlCommissions > div:last-child {
+        font-size: 1.6rem !important;
+    }
+    .dashboard-grid.has-pending .wallet-card #boxPnlDaily > div:first-child,
+    .dashboard-grid.has-pending .wallet-card #boxPnlCommissions > div:first-child {
+        font-size: 0.85rem !important;
+    }
+    .dashboard-grid.has-pending .wallet-card #boxPnlNet > div:last-child {
+        font-size: 2.2rem !important;
+    }
+    .dashboard-grid.has-pending .wallet-card #boxPnlNet > div:first-child {
+        font-size: 0.85rem !important;
     }
 }
 
