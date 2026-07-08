@@ -7809,11 +7809,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 return true;
             } catch (e) {
-                if (e.message && e.message.includes('account is not allowed to short')) {
+                const msg = e.message ? e.message.toLowerCase() : '';
+                if (msg.includes('account is not allowed to short')) {
                     window.__alpacaShortNotAllowed = true;
                     localStorage.setItem('alpacaShortNotAllowed', 'true');
                     console.warn("[ALPACA] Account non abilitato allo short. Disattivazione vendite allo scoperto.");
                     showNotification(`L'account Alpaca non permette vendite allo scoperto (SHORT). Imposta la direzione su "Solo LONG".`, "warning");
+                } else if (msg.includes('insufficient balance') || msg.includes('insufficient buying power') || msg.includes('cost basis must be')) {
+                    console.warn(`[ALPACA] Ordine rifiutato per fondi insufficienti (possibile desincronizzazione temporanea). Dettaglio: ${e.message}`);
+                    showNotification(`Alpaca: Fondi temporaneamente insufficienti per eseguire l'ordine.`, "warning");
                 } else {
                     console.error("[ALPACA] Errore ordine:", e);
                     showNotification(`Alpaca Errore: ${e.message}`, "error");
