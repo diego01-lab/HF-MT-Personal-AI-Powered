@@ -8090,30 +8090,8 @@ function createNotificationContainer() {
                 localStorage.removeItem('sim_active_positions');
                 localStorage.removeItem('sim_global_commissions');
                 
-                // Reset della memoria dell'applicazione
-                sessionInitialCapital = 1000;
-                tradingCapital = 1000;
-                totalPnL = 0;
-                activePositions = {};
-                tradeHistory = [];
-                executedTrades = 0;
-                winTrades = 0;
-                grossProfit = 0;
-                grossLoss = 0;
-                globalTotalRealizedPnL = 0;
-                globalCommissions = 0;
-                window.__trueRealizedPnL = 0;
-                window.__globalCommissions = 0;
-                
-                // Ricarica tutto tramite il framework stesso
-                if (typeof switchBrokerTarget === 'function') switchBrokerTarget('fh', true);
-                
-                alert('Portafoglio Finnhub azzerato con successo!');
-                
-                // Fallback forzato aggiornamenti se switchBrokerTarget non basta
-                if (typeof updatePerformanceUI === 'function') updatePerformanceUI();
-                if (typeof renderOpenPositions === 'function') renderOpenPositions();
-                if (typeof renderHistory === 'function') renderHistory();
+                // Ricarica la pagina per azzerare completamente la memoria e riavviare l'app pulita
+                window.location.reload();
             }
         });
     }
