@@ -772,6 +772,9 @@ let lastRenderedPositionsStr = '';
 let portfolioBalance = 0;
 let tradingCapital = 0;
 let globalTotalRealizedPnL = 0;
+let globalCommissions = 0;
+window.__globalCommissions = 0;
+window.__trueRealizedPnL = 0;
 let sessionInitialCapital = NaN;
 let currentPrice = 0;
 let previousPrice = 0;
@@ -6380,6 +6383,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             const unrealizedPnLEl = document.getElementById('unrealizedPnL');
 
             const sessionRevenueEl = document.getElementById('sessionRevenue');
+            const commissionsDisplayEl = document.getElementById('commissionsDisplay');
+            const capitalCommissionsDisplayEl = document.getElementById('capitalCommissionsDisplay');
+            const totalNetPnLEl = document.getElementById('totalNetPnL');
+            
+            if (commissionsDisplayEl) {
+                commissionsDisplayEl.textContent = `-${formatMoney(window.__globalCommissions || 0)}`;
+            }
+            if (capitalCommissionsDisplayEl) {
+                capitalCommissionsDisplayEl.textContent = `-${formatMoney(window.__globalCommissions || 0)}`;
+            }
+            if (totalNetPnLEl) {
+                const net = window.__trueRealizedPnL || 0;
+                const sign = net >= 0 ? '+' : '';
+                totalNetPnLEl.textContent = `${sign}${formatMoney(net)}`;
+                totalNetPnLEl.style.color = net > 0 ? '#10b981' : net < 0 ? '#ef4444' : '#fff';
+            }
             const sessionROIEl = document.getElementById('sessionROI');
 
             if (totalTradesEl) totalTradesEl.textContent = totalTrades;
@@ -6391,11 +6410,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 perfOpenCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
             }
 
-            // PnL Globale (Mostrato nel box "PNL TOTALE" della Gestione Capitale)
+            // PnL Realizzato (Mostrato nel box PnL Realizzato Totale in Pannello Prestazioni)
             if (totalPnLEl) {
-                const sign = totalPnL >= 0 ? '+' : '';
-                totalPnLEl.textContent = `${sign}${formatMoney(totalPnL)}`;
-                totalPnLEl.style.color = totalPnL > 0 ? '#10b981' : totalPnL < 0 ? '#ef4444' : '#fff';
+                const sign = totalRealizedPnL >= 0 ? '+' : '';
+                totalPnLEl.textContent = `${sign}${formatMoney(totalRealizedPnL)}`;
+                totalPnLEl.style.color = totalRealizedPnL > 0 ? '#10b981' : totalRealizedPnL < 0 ? '#ef4444' : '#fff';
             }
 
             // PnL Non Realizzato
