@@ -3226,6 +3226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Header: SOMMA degli equity di tutti i broker (multi-dashboard)
                 if (typeof updateGlobalPortfolioHeader === 'function') updateGlobalPortfolioHeader();
                 if ($('availableMargin')) $('availableMargin').textContent = formatMoney(tradingCapital);
+                if ($('totalInvested')) $('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
                 
                 const dep = getDepositedTotal(getBrokerCtx(), testEquity);
                 const globalPnl = testEquity - dep;
@@ -6277,13 +6278,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (grossLossEl) grossLossEl.textContent = `${totalGrossLoss > 0 ? '-' : ''}${formatMoney(totalGrossLoss)}`;
             if (winningTradesCountEl) winningTradesCountEl.textContent = totalWinningTrades;
             if (losingTradesCountEl) losingTradesCountEl.textContent = totalLosingTrades;
+            if (breakevenTradesCountEl) breakevenTradesCountEl.textContent = totalBreakevenTrades;
 
-            // Entrate Storico
-            if (sessionRevenueEl) {
-                const sign = totalRealizedPnL >= 0 ? '+' : '';
-                sessionRevenueEl.textContent = `${sign}${formatMoney(totalRealizedPnL)}`;
-                sessionRevenueEl.style.color = totalRealizedPnL >= 0 ? '#10b981' : '#ef4444';
-            }
+
 
             // Riepilogo Netto Cronologia
             const historyDailyNetEl = document.getElementById('historyDailyNet');
