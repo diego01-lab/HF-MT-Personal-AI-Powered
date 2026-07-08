@@ -5678,6 +5678,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (brokerViewActive()) {
                 const isCryptoSym = sym.includes('USDT');
+
+                // Alpaca non supporta posizioni SHORT sulle Crypto
+                if (isCryptoSym && type === 'SHORT') {
+                    orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
+                    console.warn(`[BROKER] Alpaca non supporta posizioni SHORT sulle Crypto. Ordine ${sym} annullato.`);
+                    if (isBotActive) {
+                        botNotify('noshortcrypto', tr('bot_skip_shortcrypto', `Alpaca non permette lo SHORT sulle Crypto: operazione su ${sym} saltata.`), 'info', 30000);
+                        bumpSkipped('reject');
+                    }
+                    return;
+                }
+
                 const brokerFunds = isCryptoSym ? availableCash : availableMargin;
                 const safeFunds = Math.max(0, brokerFunds) * 0.95; // buffer 5% di sicurezza
                 if (investUsd > safeFunds) {
