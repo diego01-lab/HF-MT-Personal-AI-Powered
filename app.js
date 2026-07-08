@@ -4434,13 +4434,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (_historySyncInFlight) { _historySyncQueued = true; return; }
             _historySyncInFlight = true;
             try {
-                // Recupera gli ultimi 50 FILL (esecuzioni) per popolare la cronologia
-                const url = `${src.base}/v2/account/activities/FILL?direction=desc&page_size=50`;
-                const response = await fetch(url, {
-                    headers: { 'apca-api-key-id': src.key, 'apca-api-secret-key': src.secret }
-                });
-                if (response.ok) {
-                    const activities = await response.json();
+                // Recupera fino a 1000 FILL storici per popolare tutta la cronologia (10 pagine da 100)
+                let activities = [];
+                let pageToken = '';
+                for (let i = 0; i < 10; i++) {
+                    const url = `${src.base}/v2/account/activities/FILL?direction=desc&page_size=100${pageToken ? '&page_token=' + pageToken : ''}`;
+                    const response = await fetch(url, {
+                        headers: { 'apca-api-key-id': src.key, 'apca-api-secret-key': src.secret }
+                    });
+                    if (!response.ok) break;
+                    const chunk = await response.json();
+                    if (!chunk || chunk.length === 0) break;
+                    activities = activities.concat(chunk);
+                    if (chunk.length < 100) break; // Ultima pagina
+                    pageToken = chunk[chunk.length - 1].id;
+                }
+                
+                if (activities.length > 0) {
                     // Cambio modalità durante la richiesta: non contaminare la modalità test
                     // né mescolare i dati Paper/Reale
                     if (!brokerViewActive() || getBrokerHttp().live !== src.live) return;
@@ -5944,6 +5954,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         var _lastRenderedHistoryJSON = null;
         function renderHistory() {
+            const historyCountBadge = document.getElementById('historyCountBadge');
+            if (historyCountBadge) {
+                const count = tradeHistory.length;
+                historyCountBadge.textContent = count;
+                historyCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
+            }
             if (!tradeListEl) return;
             
             const currentJSON = JSON.stringify(tradeHistory);
@@ -5957,8 +5973,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const fragment = document.createDocumentFragment();
-            // Mostra al massimo le ultime 100 operazioni per evitare colli di bottiglia nel rendering (DOM troppo grande)
-            const visibleHistory = tradeHistory.slice(-100);
+            // Mostra tutto lo storico
+            const visibleHistory = tradeHistory;
             visibleHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
                 if (!trade || !trade.sym || trade.sym === 'undefined') return;
@@ -6206,6 +6222,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const sessionROIEl = document.getElementById('sessionROI');
 
             if (totalTradesEl) totalTradesEl.textContent = totalTrades;
+
+            const perfOpenCountBadge = document.getElementById('perfOpenCountBadge');
+            if (perfOpenCountBadge) {
+                const count = Object.keys(activePositions).length;
+                perfOpenCountBadge.textContent = count;
+                perfOpenCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
+            }
 
             // PnL Realizzato (Storico)
             if (totalPnLEl) {
@@ -7655,6 +7678,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.cancelAlpacaOrder = cancelAlpacaOrder;
 
         function renderPendingOrders(orders) {
+            const pendingOrdersCountBadge = document.getElementById('pendingOrdersCountBadge');
+            if (pendingOrdersCountBadge) {
+                const count = orders ? orders.length : 0;
+                pendingOrdersCountBadge.textContent = count;
+                pendingOrdersCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
+            }
             const container = document.getElementById('pendingOrdersContainer');
             const list = document.getElementById('pendingOrdersList');
             const countEl = document.getElementById('cnt-PENDING');
