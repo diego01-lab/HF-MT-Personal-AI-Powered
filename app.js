@@ -766,6 +766,7 @@ let brokerEntryBasis = {};
 // Normalizza i simboli per confrontare fill Alpaca (BTC/USD o BTCUSD) e simboli interni (BTCUSDT)
 function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); }
 let activePositions = {};
+let autoBuyPending = null;
 let lastRenderedPositionsStr = '';
 let portfolioBalance = 0;
 let tradingCapital = 0;
@@ -2770,7 +2771,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 delete activePositions[sym];
             }
         }
-        let autoBuyPending = null;
 
         // --- Session Timer persistence ---
         // Il timer di sessione parte sempre da 0 all'apertura/refresh dell'app
