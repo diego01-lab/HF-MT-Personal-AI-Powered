@@ -4366,6 +4366,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!brokerViewActive()) return;
                 
                 let anyChanges = false;
+                const currentSymbols = new Set(positions.map(p => p.symbol));
+                
                 for (const pos of positions) {
                     const sym = pos.symbol;
                     const isLong = pos.side === 'long';
@@ -4386,6 +4388,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                             confidence: 50,
                             openTime: Date.now()
                         };
+                        anyChanges = true;
+                    }
+                }
+                
+                // Rimuovi le posizioni fantasma chiuse sul broker
+                for (const sym in activePositions) {
+                    if (!currentSymbols.has(sym) && !closingAssets.has(sym)) {
+                        delete activePositions[sym];
                         anyChanges = true;
                     }
                 }
