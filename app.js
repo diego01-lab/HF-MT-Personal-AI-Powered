@@ -5439,17 +5439,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // gira in un ciclo di rischio separato e NON è toccato da questo filtro.
                     if (pos.type === 'LONG') {
                         const unrealizedPct = pos.entryPrice ? (price / pos.entryPrice - 1) * 100 : 0;
+                        const netBreakeven = getNetBreakevenPct(sym);
                         const reversal = (signal === 'SELL' && confidence >= 60) || (net <= -2 && !isBullTrend);
                         const strongReversal = (signal === 'SELL' && confidence >= 75) || (net <= -4 && !isBullTrend);
-                        if (canReverse && reversal && (strongReversal || unrealizedPct >= 0)) {
+                        if (canReverse && reversal && (strongReversal || unrealizedPct >= netBreakeven)) {
                             console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
                             closeTrade(sym, price, 'AI_REVERSAL');
                         }
                     } else if (pos.type === 'SHORT') {
                         const unrealizedPct = pos.entryPrice ? (pos.entryPrice / price - 1) * 100 : 0;
+                        const netBreakeven = getNetBreakevenPct(sym);
                         const reversal = (signal === 'BUY' && confidence >= 60) || (net >= 2 && !isBearTrend);
                         const strongReversal = (signal === 'BUY' && confidence >= 75) || (net >= 4 && !isBearTrend);
-                        if (canReverse && reversal && (strongReversal || unrealizedPct >= 0)) {
+                        if (canReverse && reversal && (strongReversal || unrealizedPct >= netBreakeven)) {
                             console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
                             closeTrade(sym, price, 'AI_REVERSAL');
                         }
@@ -5545,6 +5547,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     openTrade('SHORT', price, sym);
                 }
             }
+        }
+
+        // Helper: Restituisce la stima dei costi percentuali di commissione + spread
+        function getNetBreakevenPct(sym) {
+            if (sym.includes('USDT')) return 0.40; // Crypto: fee Alpaca ~0.25% + buffer spread
+            if (sym.includes('OANDA')) return 0.05; // Forex: solo spread implicito
+            return 0.15; // Azioni: fee assenti, ma calcoliamo 0.15% di scivolamento/spread
         }
 
         // Main strategy dispatcher — motore tecnico locale (RSI + EMA + MACD + BB) o fallback EMA
@@ -6624,7 +6633,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 ? (livePrice <= pos.peakPrice - trailingDistance)
                                 : (livePrice >= pos.peakPrice + trailingDistance);
 
-                            if (isReversing && unrealizedPct > 0.1 && !pos.isActuallyClosing && !closePending) {
+                            const netBreakeven = getNetBreakevenPct(sym);
+                            if (isReversing && unrealizedPct >= netBreakeven && !pos.isActuallyClosing && !closePending) {
                                 console.log(`[AI RISK] Trailing SL su ${sym}. Peak: ${pos.peakPrice.toFixed(4)}, Attuale: ${livePrice.toFixed(4)}, ATR: ${currentATR.toFixed(4)}`);
                                 closeTrade(sym, livePrice, 'TRAILING_SL');
                                 continue;
@@ -6653,8 +6663,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         pos.breakevenArmed = true;
                         console.log(`[RISK] ${sym} oltre +${BREAKEVEN_ARM_PCT}%: stop spostato a break-even (il trade non può più chiudere in perdita).`);
                     }
-                    if (pos.breakevenArmed && unrealizedPct <= 0.05 && !pos.isActuallyClosing && !closePending) {
-                        console.log(`[RISK] ${sym} ritracciato al break-even (${unrealizedPct.toFixed(2)}%): chiudo a pari per proteggere il capitale.`);
+                    const netBreakeven = getNetBreakevenPct(sym);
+                    if (pos.breakevenArmed && unrealizedPct <= netBreakeven && !pos.isActuallyClosing && !closePending) {
+                        console.log(`[RISK] ${sym} ritracciato al break-even (${unrealizedPct.toFixed(2)}% vs ${netBreakeven}% stimati): chiudo a pari per proteggere il capitale al netto delle fee.`);
                         closeTrade(sym, livePrice, 'BREAKEVEN');
                         continue;
                     }
