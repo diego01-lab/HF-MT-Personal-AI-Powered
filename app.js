@@ -770,6 +770,7 @@ let autoBuyPending = null;
 let lastRenderedPositionsStr = '';
 let portfolioBalance = 0;
 let tradingCapital = 0;
+let globalTotalRealizedPnL = 0;
 let sessionInitialCapital = NaN;
 let currentPrice = 0;
 let previousPrice = 0;
@@ -3229,7 +3230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if ($('totalInvested')) $('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
                 
                 const dep = getDepositedTotal(getBrokerCtx(), testEquity);
-                const realizedPnl = testEquity - dep - unrealizedTotal;
+                const realizedPnl = globalTotalRealizedPnL;
                 if ($('sessionRevenue')) {
                     $('sessionRevenue').textContent = `${realizedPnl >= 0 ? '+' : ''}${formatMoney(realizedPnl)}`;
                     $('sessionRevenue').style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
@@ -3291,7 +3292,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // PnL Realizzato (Lifetime)
             if (sessionRevenueEl) {
                 const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
-                const realizedPnl = tradingCapital - dep - displayUnreal;
+                const realizedPnl = globalTotalRealizedPnL;
                 const sign = realizedPnl >= 0 ? '+' : '';
                 sessionRevenueEl.textContent = `${sign}${formatMoney(realizedPnl)}`;
                 sessionRevenueEl.style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
@@ -3300,7 +3301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // ROI Realizzato (Lifetime ROI)
             if (sessionROIEl) {
                 const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
-                const realizedPnl = tradingCapital - dep - displayUnreal;
+                const realizedPnl = globalTotalRealizedPnL;
                 const pct = (dep > 0) ? (realizedPnl / dep) * 100 : 0;
                 sessionROIEl.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                 sessionROIEl.style.color = pct >= 0 ? '#10b981' : '#ef4444';
@@ -6254,6 +6255,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 totalRealizedPnL = trueRealizedPnL;
             }
 
+            globalTotalRealizedPnL = totalRealizedPnL;
             const totalPnLEl = document.getElementById('totalPnL');
             const winRateEl = document.getElementById('winRate');
             const grossProfitEl = document.getElementById('grossProfit');
