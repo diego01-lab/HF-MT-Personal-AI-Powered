@@ -743,7 +743,8 @@ window.capitalMode = 'off';
 // All'AVVIO nessuna connessione parte da sola, anche con le chiavi configurate:
 // è l'UTENTE a scegliere quali collegare (leve sotto i LED, o attivando la
 // scheda di un broker — anche quella è una scelta esplicita).
-window.__connAllowed = { fh: false, alp: false, capd: false };
+// UPDATE: Su richiesta esplicita, Finnhub viene attivato di default all'avvio.
+window.__connAllowed = { fh: localStorage.getItem('sim_use_finnhub') !== 'false', alp: false, capd: false };
 let finnhubApiKey = localStorage.getItem('finnhub_api_key') || '';
 // Ricorda se Finnhub ha già restituito 403 sulle candles (piano gratuito): evita di riprovare a ogni avvio
 window.finnhubForbidden = localStorage.getItem('finnhub_candles_forbidden') === 'true';
