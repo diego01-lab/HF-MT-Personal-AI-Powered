@@ -4389,8 +4389,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const entryPrice = parseFloat(pos.avg_entry_price || 0) || 0;
 
                     activePositions[sym] = activePositions[sym] || {};
-                    activePositions[sym].brokerUnrealizedPnL = parseFloat(pos.unrealized_pl || 0);
-                    activePositions[sym].brokerMarketValue = Math.abs(parseFloat(pos.market_value || 0));
                     if (!activePositions[sym].type) {
                         activePositions[sym] = {
                             type: isLong ? 'LONG' : 'SHORT',
