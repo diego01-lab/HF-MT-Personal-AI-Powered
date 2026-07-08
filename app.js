@@ -767,6 +767,7 @@ let brokerEntryBasis = {};
 // Normalizza i simboli per confrontare fill Alpaca (BTC/USD o BTCUSD) e simboli interni (BTCUSDT)
 function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); }
 let activePositions = {};
+let tradeCooldowns = {};
 let autoBuyPending = null;
 let lastRenderedPositionsStr = '';
 let portfolioBalance = 0;
@@ -1690,7 +1691,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Stop a break-even: quando una posizione raggiunge questo profitto %,
         // lo stop sale al prezzo d'ingresso — da lì in poi il trade non può più
         // chiudere in perdita (aggiustamento "solo-stringere", mai allargare).
-        const BREAKEVEN_ARM_PCT = 1.0;
+        const BREAKEVEN_ARM_PCT = 0.8;
         const restrictedAssets = new Set(); // Per evitare di riprovare preload su asset che danno 403
 
         // --- State variables (Loaded from global scope) ---
@@ -2169,9 +2170,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (rev && unrealizedPct > 0.1) { closeTrade(sym, livePrice, 'TRAILING_SL'); continue; }
                     }
                 }
-                // Break-even armato a +1% (stessa logica del motore principale)
+                // Break-even armato a +0.8% (stessa logica del motore principale)
                 if (!pos.breakevenArmed && unrealizedPct >= BREAKEVEN_ARM_PCT) pos.breakevenArmed = true;
-                if (pos.breakevenArmed && unrealizedPct <= 0.05) { closeTrade(sym, livePrice, 'BREAKEVEN'); continue; }
+                if (pos.breakevenArmed && unrealizedPct <= (getNetBreakevenPct(sym) + 0.05)) { closeTrade(sym, livePrice, 'BREAKEVEN'); continue; }
                 if (unrealizedPct >= effTP) { closeTrade(sym, livePrice, 'TP'); continue; }
                 if (effSL > 0 && unrealizedPct <= -effSL) { closeTrade(sym, livePrice, 'SL'); continue; }
             }
@@ -5280,6 +5281,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (stratCooldown[cdKey] && now - stratCooldown[cdKey] < STRAT_COOLDOWN_MS) return;
                 stratCooldown[cdKey] = now;
 
+                // POST-TRADE COOLDOWN (3 minuti) per evitare l'overtrading
+                if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < 180000) return;
+
                 // --- Calcolo Indicatori ---
                 const rsi = calculateRSI(history, Math.min(14, history.length - 1));
                 const ema12 = calculateEMA(history, Math.min(12, history.length));
@@ -5297,6 +5301,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const pct10 = history.length >= 11 ? (price / history[history.length - 11] - 1) * 100 : 0;
 
                 if (!rsi || !ema12 || !ema26 || !bb) return;
+
+                // FILTRO VOLATILITA' (ATR): Se il mercato è piatto, ignoriamo i segnali per non pagare commissioni
+                const atr = calculateATR(history, Math.min(14, history.length));
+                const atrPct = atr ? (atr / price) * 100 : 1;
+                if (!activePositions[sym] && atrPct < 0.15) {
+                    return; // Mercato piatto, no trade
+                }
 
                 // --- Sistema a Punti base (bullish/bearish) ---
                 let bullScore = 0, bearScore = 0;
@@ -5946,6 +5957,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Anti-duplicazione: se una chiusura broker è in corso/appena inviata, non ripetere
             if (reason !== 'MANUAL' && Date.now() - (recentlyClosed[sym] || 0) < 30000) return;
             pos.isActuallyClosing = true;
+
+            // Applica il cooldown post-trade
+            const cdKey = (window.__ctxOverride ? window.__ctxOverride + ':' : '') + sym;
+            tradeCooldowns[cdKey] = Date.now();
 
             const pnl = pos.type === 'LONG'
                 ? (price - pos.entryPrice) * pos.amount
