@@ -497,10 +497,10 @@
                             </div>
                             <div style="text-align: right;">
                                 <div id="sessionROI"
-                                    data-tooltip="Rendimento percentuale della sessione corrente rispetto alla chiusura precedente."
+                                    data-tooltip="Rendimento percentuale totale rispetto al capitale versato."
                                     style="font-size: 1.1rem; font-weight: 800; color: #10b981;">+0.00%</div>
                                 <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;"
-                                    id="lblRoiDaily">ROI Giornaliero</div>
+                                    id="lblRoiDaily">ROI Totale</div>
                             </div>
                         </div>
 
@@ -524,7 +524,7 @@
                         <div class="capital-grid"
                             style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                             <div class="capital-item glass-panel" id="boxInitialCap"
-                                data-tooltip="Valore del portafoglio all'inizio della sessione o alla chiusura del giorno precedente."
+                                data-tooltip="Capitale di partenza o totale dei versamenti per questo broker."
                                 style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
                                 <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
                                     id="lblInitialCapTitle">Capitale Iniziale</div>
@@ -574,10 +574,10 @@
                                 </div>
                             </div>
                             <div class="capital-item glass-panel" id="boxPnlDaily"
-                                data-tooltip="Guadagno o perdita totale generata nella sessione corrente (Realized + Unrealized)."
+                                data-tooltip="Guadagno o perdita totale generata su questo broker (Realized + Unrealized)."
                                 style="grid-column: span 2; padding: 12px; border-radius: 10px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.1); cursor: help;">
                                 <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
-                                    id="lblPnlDaily">PnL Giornaliero</div>
+                                    id="lblPnlDaily">PnL Totale</div>
                                 <div id="sessionRevenue" style="font-size: 1.1rem; font-weight: 800; color: #10b981;">
                                     $0.00</div>
                             </div>
@@ -649,12 +649,12 @@
 
                         <!-- Session Budget Cap (test mode only) -->
                         <div id="sessionBudgetContainer" style="margin-top: 14px;"
-                            data-tooltip="Limita il capitale totale che il bot può impiegare in questa sessione. Solo in modalità Test.">
+                                data-tooltip="Limita il capitale totale che il bot può impiegare prima di fermarsi. Solo in modalità Test.">
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                                 <label id="lblSessionBudget"
                                     style="font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; cursor: help;">💼
-                                    Budget Sessione ($)</label>
+                                    Budget Totale ($)</label>
                                 <span id="sessionBudgetStatus"
                                     style="font-size: 0.65rem; color: #f59e0b; font-weight: 600;"></span>
                             </div>
@@ -681,7 +681,7 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                             <div style="display: flex; align-items: center; gap: 10px;" id="boxPerfPanel"
-                                data-tooltip="Analisi delle performance operative e finanziarie in tempo reale per la sessione corrente.">
+                                data-tooltip="Analisi delle performance operative e finanziarie dello storico.">
                                 <div class="panel-icon"
                                     style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6; padding: 8px; border-radius: 8px;">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -707,7 +707,7 @@
                                 style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
                                 <span
                                     style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
-                                    id="lblTradesToday">Operazioni Oggi</span>
+                                    id="lblTradesToday">Totale Operazioni</span>
                                 <div id="totalTrades" style="font-size: 1.4rem; font-weight: 800; color: #fff;">0</div>
                             </div>
                             <div class="stat-card-mini glass-panel" id="boxWinRate"
@@ -742,9 +742,9 @@
                             style="background: rgba(0,0,0,0.3); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 24px;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);"
                                 id="boxPnlRealized"
-                                data-tooltip="Profitto o perdita netta derivante dalle posizioni già chiuse oggi.">
+                                data-tooltip="Profitto o perdita netta derivante dalle posizioni già chiuse.">
                                 <span style="font-size: 0.75rem; color: var(--text-secondary); cursor: help;"
-                                    id="lblPnlRealized">PnL Realizzato (Oggi)</span>
+                                    id="lblPnlRealized">PnL Realizzato Totale</span>
                                 <span id="totalPnL"
                                     style="font-size: 0.9rem; font-weight: 800; color: #fff;">$0.00</span>
                             </div>
@@ -1006,7 +1006,7 @@
                                     style="display:none; font-size:0.66rem; font-weight:600; color:#f59e0b; margin-bottom:8px; padding:4px 8px; background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.25); border-radius:6px;">
                                     ⏭️ <span id="skippedLabel">Saltate</span>: <b id="skippedTotal">0</b>
                                     <span id="skippedBreakdown"
-                                        style="color:var(--text-secondary); font-weight:500;"></span>
+                                       <span style="color: var(--text-secondary); font-size: 0.85rem;" id="lblTradesToday">Totale Operazioni</span>
                                 </div>
                                 <div class="pos-tabs">
                                     <button class="pos-tab" data-cat="CRYPTO" id="posTabCrypto"
@@ -1053,14 +1053,14 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                             <h2 id="lblHistoryTitle"
-                                data-tooltip="Storico di tutte le operazioni chiuse in questa sessione"
+                                data-tooltip="Storico di tutte le operazioni chiuse per questo broker"
                                 style="margin:0; display:flex; align-items:center;">
                                 Cronologia
                             </h2>
                             <!-- Colonna a destra: tasto Cancella SOPRA il valore totale delle operazioni -->
                             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
                                 <button id="btnClearHistory"
-                                    data-tooltip="Resetta statistiche e cronologia della sessione"
+                                    data-tooltip="Resetta statistiche e cronologia"
                                     style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:#ef4444; border-radius:6px; padding:4px 10px; font-size:0.72rem; cursor:pointer; white-space:nowrap;">🗑️
                                     Reset</button>
                                 <span id="historyDailyNet"

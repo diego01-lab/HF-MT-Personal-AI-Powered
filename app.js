@@ -4235,8 +4235,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem('sim_portfolio_balance', portfolioBalance);
             localStorage.setItem('sim_trading_capital', tradingCapital);
 
-            // Il capitale iniziale per il calcolo PnL del giorno è la chiusura precedente
-            sessionInitialCapital = (typeof window.brokerLastEquity === "number" && isFinite(window.brokerLastEquity)) ? window.brokerLastEquity : tradingCapital;
+            // Il capitale iniziale per il calcolo PnL è il totale versato storicamente (baseline fissa)
+            sessionInitialCapital = getDepositedTotal(getBrokerCtx(), tradingCapital);
             localStorage.setItem('sim_session_initial_capital', sessionInitialCapital.toString());
 
             totalPnL = tradingCapital - sessionInitialCapital;
@@ -6127,27 +6127,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         function updateDashboard() {
-            // Parser robusto per le date (identico a renderHistory) per evitare di ignorare vecchi formati
-            const parseDate = (d) => {
-                if (!d) return new Date();
-                if (typeof d === 'number') return new Date(d);
-                if (typeof d === 'string' && d.includes(':') && !d.includes('-') && !d.includes('T')) {
-                    const now = new Date();
-                    const parts = d.split(':');
-                    now.setHours(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2] || 0));
-                    return now;
-                }
-                const parsed = new Date(d);
-                return isNaN(parsed.getTime()) ? new Date() : parsed;
-            };
-
-            // Ricalcolo Dinamico Statistiche Giornaliere (Oggi)
-            const todayStr = new Date().toLocaleDateString();
-            let dailyTrades = 0;
-            let dailyWins = 0;
-            let dailyGrossProfit = 0;
-            let dailyGrossLoss = 0;
-            let dailyPnL = 0;
+            // Ricalcolo Dinamico Statistiche
+            let totalTrades = 0;
+            let totalWins = 0;
+            let totalGrossProfit = 0;
+            let totalGrossLoss = 0;
+            let totalRealizedPnL = 0;
 
             tradeHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
