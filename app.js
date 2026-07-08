@@ -6177,6 +6177,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 openUnrealizedTotal += pnl;
             }
+
+            if (brokerViewActive()) {
+                // Sostituiamo il PnL Realizzato (calcolato sulla limitata cronologia API degli ultimi 50 trade)
+                // con il valore matematico assoluto dell'account (Equity - Depositi Iniziali - PnL Non Realizzato).
+                // Questo rende i pannelli "Prestazioni" e "Gestione Capitale" perfettamente coerenti con il Capitale Attuale.
+                totalRealizedPnL = totalPnL - openUnrealizedTotal;
+            }
+
             const totalPnLEl = document.getElementById('totalPnL');
             const winRateEl = document.getElementById('winRate');
             const grossProfitEl = document.getElementById('grossProfit');
