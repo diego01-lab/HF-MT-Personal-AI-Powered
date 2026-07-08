@@ -5882,6 +5882,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Scala l'importo realmente impegnato (qty arrotondata × prezzo), non l'intento
                     const actualCost = qtyVal * price;
                     tradingCapital -= actualCost;
+                    
+                    // Decurta subito i fondi Alpaca locali per prevenire ordini "a raffica"
+                    // che superino la marginazione reale prima del prossimo ciclo di sync
+                    if (typeof availableMargin !== 'undefined') {
+                        availableMargin = Math.max(0, availableMargin - actualCost);
+                    }
+                    if (isCrypto && typeof availableCash !== 'undefined') {
+                        availableCash = Math.max(0, availableCash - actualCost);
+                    }
 
                     // --- BUDGET SESSIONE ---
                     sessionBudgetUsed += actualCost;
