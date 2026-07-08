@@ -4884,10 +4884,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (!data && assetPairSelect && assetPairSelect.value === symbol) {
                     // Se entrambi i preload falliscono (es. storico non disponibile su free tier o no keys),
                     // recuperiamo almeno l'ultimo prezzo per resettare la Y-axis del grafico ed evitare $0.0000
-                    const fhKeyEl = document.getElementById('fhKey');
-                    if (fhKeyEl && fhKeyEl.value) {
+                    if (finnhubApiKey) {
                         try {
-                            const qRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${fhKeyEl.value}`);
+                            const qRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${finnhubApiKey}`);
                             if (qRes.ok) {
                                 const qData = await qRes.json();
                                 if (qData && qData.c) {
@@ -7478,9 +7477,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         async function tryFinnhubPreload(symbol) {
-            const fhKeyEl = document.getElementById('fhKey');
-            if (!fhKeyEl || !fhKeyEl.value) return null;
-            const key = fhKeyEl.value;
+            if (!finnhubApiKey) return null;
+            const key = finnhubApiKey;
             const assetType = getAssetType(symbol);
             try {
                 let endpoint = 'stock/candle';
