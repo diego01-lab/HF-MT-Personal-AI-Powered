@@ -7463,7 +7463,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 else if (assetType === 'CRYPTO') endpoint = 'crypto/candle';
                 
                 const to = Math.floor(Date.now() / 1000);
-                const from = to - (100 * 60); // 100 minuti
+                // Richiediamo gli ultimi 4 giorni per scavalcare in sicurezza i weekend/festività
+                // a prescindere dallo stato attuale (aperto/chiuso) del mercato.
+                const from = to - (4 * 24 * 60 * 60); 
                 
                 const url = `https://finnhub.io/api/v1/${endpoint}?symbol=${encodeURIComponent(symbol)}&resolution=1&from=${from}&to=${to}&token=${key}`;
                 const res = await fetch(url);
@@ -7477,9 +7479,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 open: data.o[i], high: data.h[i], low: data.l[i], close: data.c[i]
                             });
                         }
-                        bgPriceHistories[symbol] = data.c;
-                        console.log(`[PRELOAD] ${symbol}: caricati ${data.t.length} punti via Finnhub.`);
-                        return historicalData;
+                        // Tagliamo per mostrare solo le ultime 100 candele (l'equivalente di 100 minuti attivi)
+                        const slicedData = historicalData.slice(-100);
+                        bgPriceHistories[symbol] = data.c.slice(-100);
+                        console.log(`[PRELOAD] ${symbol}: caricati ${slicedData.length} punti utili via Finnhub.`);
+                        return slicedData;
                     }
                 }
             } catch (e) {
