@@ -3221,33 +3221,33 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Equity = cash disponibile + posizioni aperte + PnL non realizzato
                 const testEquity = tradingCapital + investedTotal + unrealizedTotal;
                 const $ = id => document.getElementById(id);
-                if ($('tradingCapital')) $('tradingCapital').textContent = formatMoney(testEquity);
-                if ($('initialCapital')) $('initialCapital').textContent = formatMoney(sessionInitialCapital);
-                if ($('walletBalanceSide')) $('walletBalanceSide').textContent = formatMoney(tradingCapital);
+                if (document.getElementById('tradingCapital')) document.getElementById('tradingCapital').textContent = formatMoney(testEquity);
+                if (document.getElementById('initialCapital')) document.getElementById('initialCapital').textContent = formatMoney(sessionInitialCapital);
+                if (document.getElementById('walletBalanceSide')) document.getElementById('walletBalanceSide').textContent = formatMoney(tradingCapital);
                 // Header: SOMMA degli equity di tutti i broker (multi-dashboard)
                 if (typeof updateGlobalPortfolioHeader === 'function') updateGlobalPortfolioHeader();
-                if ($('availableMargin')) $('availableMargin').textContent = formatMoney(tradingCapital);
-                if ($('totalInvested')) $('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
+                if (document.getElementById('availableMargin')) document.getElementById('availableMargin').textContent = formatMoney(tradingCapital);
+                if (document.getElementById('totalInvested')) document.getElementById('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
                 
                 const dep = getDepositedTotal(getBrokerCtx(), testEquity);
                 const realizedPnl = globalTotalRealizedPnL;
-                if ($('sessionRevenue')) {
-                    $('sessionRevenue').textContent = `${realizedPnl >= 0 ? '+' : ''}${formatMoney(realizedPnl)}`;
-                    $('sessionRevenue').style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
+                if (document.getElementById('sessionRevenue')) {
+                    document.getElementById('sessionRevenue').textContent = `${realizedPnl >= 0 ? '+' : ''}${formatMoney(realizedPnl)}`;
+                    document.getElementById('sessionRevenue').style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
                 }
-                if ($('sessionROI')) {
+                if (document.getElementById('sessionROI')) {
                     const pct = dep > 0 ? (realizedPnl / dep) * 100 : 0;
-                    $('sessionROI').textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-                    $('sessionROI').style.color = pct >= 0 ? '#10b981' : '#ef4444';
+                    document.getElementById('sessionROI').textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+                    document.getElementById('sessionROI').style.color = pct >= 0 ? '#10b981' : '#ef4444';
                 }
-                if ($('unrealizedPnL')) {
-                    $('unrealizedPnL').textContent = `${unrealizedTotal >= 0 ? '+' : ''}${formatMoney(unrealizedTotal)}`;
-                    $('unrealizedPnL').style.color = unrealizedTotal >= 0 ? '#60a5fa' : '#ef4444';
+                if (document.getElementById('unrealizedPnL')) {
+                    document.getElementById('unrealizedPnL').textContent = `${unrealizedTotal >= 0 ? '+' : ''}${formatMoney(unrealizedTotal)}`;
+                    document.getElementById('unrealizedPnL').style.color = unrealizedTotal >= 0 ? '#60a5fa' : '#ef4444';
                 }
-                if ($('openDailyNet')) {
+                if (document.getElementById('openDailyNet')) {
                     const oSign = unrealizedTotal >= 0 ? '+' : '';
-                    $('openDailyNet').textContent = `${oSign}${formatMoney(unrealizedTotal)}`;
-                    $('openDailyNet').style.color = unrealizedTotal > 0 ? '#10b981' : unrealizedTotal < 0 ? '#ef4444' : '#fff';
+                    document.getElementById('openDailyNet').textContent = `${oSign}${formatMoney(unrealizedTotal)}`;
+                    document.getElementById('openDailyNet').style.color = unrealizedTotal > 0 ? '#10b981' : unrealizedTotal < 0 ? '#ef4444' : '#fff';
                 }
                 // Box storiche Versato/Attuale: formula lifetime (versato + P&L
                 // realizzato storico + non realizzato corrente) per i contesti locali
@@ -3313,10 +3313,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 unrealizedPnLEl.textContent = `${sign}${formatMoney(displayUnreal)}`;
                 unrealizedPnLEl.style.color = displayUnreal >= 0 ? '#60a5fa' : '#ef4444';
             }
-            if ($('openDailyNet')) {
+            if (document.getElementById('openDailyNet')) {
                 const oSign = displayUnreal >= 0 ? '+' : '';
-                $('openDailyNet').textContent = `${oSign}${formatMoney(displayUnreal)}`;
-                $('openDailyNet').style.color = displayUnreal > 0 ? '#10b981' : displayUnreal < 0 ? '#ef4444' : '#fff';
+                document.getElementById('openDailyNet').textContent = `${oSign}${formatMoney(displayUnreal)}`;
+                document.getElementById('openDailyNet').style.color = displayUnreal > 0 ? '#10b981' : displayUnreal < 0 ? '#ef4444' : '#fff';
             }
 
             // Update invest preview (Alpaca Mode)
