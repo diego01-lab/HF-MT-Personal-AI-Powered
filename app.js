@@ -6391,11 +6391,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 perfOpenCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
             }
 
-            // PnL Realizzato (Storico)
+            // PnL Globale (Mostrato nel box "PNL TOTALE" della Gestione Capitale)
             if (totalPnLEl) {
-                const sign = totalRealizedPnL >= 0 ? '+' : '';
-                totalPnLEl.textContent = `${sign}${formatMoney(totalRealizedPnL)}`;
-                totalPnLEl.style.color = totalRealizedPnL > 0 ? '#10b981' : totalRealizedPnL < 0 ? '#ef4444' : '#fff';
+                const sign = totalPnL >= 0 ? '+' : '';
+                totalPnLEl.textContent = `${sign}${formatMoney(totalPnL)}`;
+                totalPnLEl.style.color = totalPnL > 0 ? '#10b981' : totalPnL < 0 ? '#ef4444' : '#fff';
             }
 
             // PnL Non Realizzato
