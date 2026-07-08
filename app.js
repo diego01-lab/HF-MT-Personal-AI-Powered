@@ -6141,16 +6141,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Filtro identico alla cronologia visiva per escludere trade fantasma
                 if (trade.reason === 'BROKER_SYNC' && trade.pnl === 0 && trade.entryPrice === trade.exitPrice) return;
 
-                const tradeDateStr = parseDate(trade.exitTime || trade.time).toLocaleDateString();
-                if (tradeDateStr === todayStr) {
-                    dailyTrades++;
-                    if (trade.pnl > 0) {
-                        dailyWins++;
-                        dailyGrossProfit += trade.pnl;
-                    } else if (trade.pnl < 0) {
-                        dailyGrossLoss += Math.abs(trade.pnl);
-                    }
-                    dailyPnL += trade.pnl;
+                totalTrades++;
+                totalRealizedPnL += trade.pnl;
+                if (trade.pnl > 0) {
+                    totalWins++;
+                    totalGrossProfit += trade.pnl;
+                } else if (trade.pnl < 0) {
+                    totalGrossLoss += Math.abs(trade.pnl);
                 }
             });
 
@@ -6174,13 +6171,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const sessionRevenueEl = document.getElementById('sessionRevenue');
             const sessionROIEl = document.getElementById('sessionROI');
 
-            if (totalTradesEl) totalTradesEl.textContent = dailyTrades;
+            if (totalTradesEl) totalTradesEl.textContent = totalTrades;
 
-            // PnL Realizzato (Oggi)
+            // PnL Realizzato (Storico)
             if (totalPnLEl) {
-                const sign = dailyPnL >= 0 ? '+' : '';
-                totalPnLEl.textContent = `${sign}${formatMoney(dailyPnL)}`;
-                totalPnLEl.style.color = dailyPnL > 0 ? '#10b981' : dailyPnL < 0 ? '#ef4444' : '#fff';
+                const sign = totalRealizedPnL >= 0 ? '+' : '';
+                totalPnLEl.textContent = `${sign}${formatMoney(totalRealizedPnL)}`;
+                totalPnLEl.style.color = totalRealizedPnL > 0 ? '#10b981' : totalRealizedPnL < 0 ? '#ef4444' : '#fff';
             }
 
             // PnL Non Realizzato
@@ -6190,22 +6187,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 unrealizedPnLEl.style.color = openUnrealizedTotal >= 0 ? '#10b981' : '#ef4444';
             }
 
-            if (grossProfitEl) grossProfitEl.textContent = `${dailyGrossProfit > 0 ? '+' : ''}${formatMoney(dailyGrossProfit)}`;
-            if (grossLossEl) grossLossEl.textContent = `${dailyGrossLoss > 0 ? '-' : ''}${formatMoney(dailyGrossLoss)}`;
+            if (grossProfitEl) grossProfitEl.textContent = `${totalGrossProfit > 0 ? '+' : ''}${formatMoney(totalGrossProfit)}`;
+            if (grossLossEl) grossLossEl.textContent = `${totalGrossLoss > 0 ? '-' : ''}${formatMoney(totalGrossLoss)}`;
 
-            // Entrate della sessione (manteniamo totalPnL per coerenza globale o usiamo dailyPnL, usiamo dailyPnL dato che l'utente vuole 'oggi')
+            // Entrate Storico
             if (sessionRevenueEl) {
-                const sign = dailyPnL >= 0 ? '+' : '';
-                sessionRevenueEl.textContent = `${sign}${formatMoney(dailyPnL)}`;
-                sessionRevenueEl.style.color = dailyPnL >= 0 ? '#10b981' : '#ef4444';
+                const sign = totalRealizedPnL >= 0 ? '+' : '';
+                sessionRevenueEl.textContent = `${sign}${formatMoney(totalRealizedPnL)}`;
+                sessionRevenueEl.style.color = totalRealizedPnL >= 0 ? '#10b981' : '#ef4444';
             }
 
             // Riepilogo Netto Cronologia
             const historyDailyNetEl = document.getElementById('historyDailyNet');
             if (historyDailyNetEl) {
-                const hSign = dailyPnL >= 0 ? '+' : '';
-                historyDailyNetEl.textContent = `${hSign}${formatMoney(dailyPnL)}`;
-                historyDailyNetEl.style.color = dailyPnL > 0 ? '#10b981' : dailyPnL < 0 ? '#ef4444' : '#fff';
+                const hSign = totalRealizedPnL >= 0 ? '+' : '';
+                historyDailyNetEl.textContent = `${hSign}${formatMoney(totalRealizedPnL)}`;
+                historyDailyNetEl.style.color = totalRealizedPnL > 0 ? '#10b981' : totalRealizedPnL < 0 ? '#ef4444' : '#fff';
             }
 
             // Riepilogo Netto Latente (Posizioni Aperte)
@@ -6217,14 +6214,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (sessionROIEl) {
-                // Il ROI può rimanere basato sul capitale iniziale del giorno
-                const roi = (sessionInitialCapital > 0) ? (dailyPnL / sessionInitialCapital) * 100 : 0;
+                const roi = (sessionInitialCapital > 0) ? (totalRealizedPnL / sessionInitialCapital) * 100 : 0;
                 sessionROIEl.textContent = `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`;
                 sessionROIEl.style.color = roi >= 0 ? '#10b981' : '#ef4444';
             }
 
             if (winRateEl) {
-                const winRate = dailyTrades > 0 ? ((dailyWins / dailyTrades) * 100).toFixed(1) : 0;
+                const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : 0;
                 winRateEl.textContent = `${winRate}%`;
             }
 
