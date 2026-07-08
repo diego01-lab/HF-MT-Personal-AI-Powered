@@ -4877,6 +4877,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 if (data && assetPairSelect && assetPairSelect.value === symbol) {
                     ChartManager.setHistoricalData(data);
+                    const lastPrice = data[data.length - 1].close;
+                    currentPrice = lastPrice;
+                    if (typeof updatePriceUI === 'function') updatePriceUI();
                     console.log(`[CHART] Main series popolata (lazy switch) per ${symbol}`);
                 }
             };
