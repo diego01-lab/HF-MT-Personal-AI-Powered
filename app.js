@@ -5398,6 +5398,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
                     }
                     if (signal === 'SELL' && confidence >= 65 && isBearTrend && totalEvidence >= 6) {
+                        // Evitiamo spam log/skip counter: Alpaca non supporta SHORT crypto. Ignoriamo silenziosamente.
+                        if (brokerViewActive() && sym.includes('USDT')) return;
+
                         console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
                         const tpInput = document.getElementById('botTargetProfit');
@@ -5521,7 +5524,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Qui gestiamo solo l'APERTURA di nuovi trade
             if (!pos) {
                 if (isBullishCross) openTrade('LONG', price, sym);
-                else if (isBearishCross) openTrade('SHORT', price, sym);
+                else if (isBearishCross) {
+                    // Evitiamo spam: Alpaca non supporta SHORT crypto
+                    if (brokerViewActive() && sym.includes('USDT')) return;
+                    openTrade('SHORT', price, sym);
+                }
             }
         }
 
@@ -5681,16 +5688,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Alpaca non supporta posizioni SHORT sulle Crypto
                 if (isCryptoSym && type === 'SHORT') {
-                    if (!window.__shortCryptoCooldown) window.__shortCryptoCooldown = {};
-                    if (!window.__shortCryptoCooldown[sym] || Date.now() > window.__shortCryptoCooldown[sym]) {
-                        window.__shortCryptoCooldown[sym] = Date.now() + 60000;
+                    // Avvisa solo se è un'azione manuale, i bot lo ignorano a monte per non spammare
+                    if (!isBotActive) {
                         console.warn(`[BROKER] Alpaca non supporta posizioni SHORT sulle Crypto. Ordine ${sym} annullato.`);
-                        if (isBotActive) {
-                            botNotify('noshortcrypto', tr('bot_skip_shortcrypto', `Alpaca non permette lo SHORT sulle Crypto: operazione su ${sym} saltata.`), 'info', 30000);
-                            bumpSkipped('reject');
-                        }
+                        if (typeof showNotification === 'function') showNotification('Alpaca non permette lo SHORT sulle Crypto: operazione annullata.', 'warning');
                     }
-                    return; // NON settiamo orderRejectCooldown globale per non bloccare eventuali segnali LONG successivi
+                    return; 
                 }
 
                 const brokerFunds = isCryptoSym ? availableCash : availableMargin;
