@@ -718,49 +718,6 @@
 
                         <div class="stats-grid-modern"
                             style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-                            <div class="stat-card-mini glass-panel" id="boxTradesToday"
-                                data-tooltip="Numero totale di esecuzioni (buy/sell) completate nella giornata."
-                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
-                                <span
-                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
-                                    id="lblTradesToday">Totale Operazioni</span>
-                                <div id="totalTrades" style="font-size: 1.4rem; font-weight: 800; color: #fff;">0</div>
-                            </div>
-                            <div class="stat-card-mini glass-panel" id="boxWinRate"
-                                data-tooltip="Percentuale di operazioni chiuse in profitto rispetto al totale."
-                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
-                                <span
-                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
-                                    id="lblWinRateTitle">Win Rate</span>
-                                <div id="winRate" style="font-size: 1.4rem; font-weight: 800; color: #8b5cf6;">0%</div>
-                            </div>
-                            <div class="stat-card-mini glass-panel" id="boxGrossProfit"
-                                data-tooltip="Somma totale dei guadagni derivanti dalle sole operazioni chiuse in attivo."
-                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
-                                <span
-                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
-                                    id="lblGrossProfitTitle">Profitto Lordo</span>
-                                <div id="grossProfit" style="font-size: 1.1rem; font-weight: 700; color: #10b981;">$0.00
-                                </div>
-                            </div>
-                            <div class="stat-card-mini glass-panel" id="boxCommissions"
-                                data-tooltip="Somma delle commissioni pagate al broker calcolata."
-                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
-                                <span
-                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
-                                    id="lblCommissionsTitle">Commissioni</span>
-                                <div id="commissionsDisplay" style="font-size: 1.4rem; font-weight: 800; color: #f59e0b;">$0.00
-                                </div>
-                            </div>
-                            <div class="stat-card-mini glass-panel" id="boxGrossLoss"
-                                data-tooltip="Somma totale delle perdite derivanti dalle sole operazioni chiuse in passivo."
-                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
-                                <span
-                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
-                                    id="lblGrossLossTitle">Perdita Lorda</span>
-                                <div id="grossLoss" style="font-size: 1.1rem; font-weight: 700; color: #ef4444;">$0.00
-                                </div>
-                            </div>
                             <div class="stat-card-mini glass-panel" id="boxWinningTrades"
                                 data-tooltip="Numero totale di operazioni chiuse in profitto."
                                 style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
@@ -785,6 +742,50 @@
                                     id="lblBreakevenTradesTitle">Operazioni in Pareggio</span>
                                 <div id="breakevenTradesCount" style="font-size: 1.4rem; font-weight: 800; color: #94a3b8;">0</div>
                             </div>
+                            <div class="stat-card-mini glass-panel" id="boxTradesToday"
+                                data-tooltip="Numero totale di esecuzioni (buy/sell) completate nella giornata."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblTradesToday">Totale Operazioni</span>
+                                <div id="totalTrades" style="font-size: 1.4rem; font-weight: 800; color: #fff;">0</div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxGrossProfit"
+                                data-tooltip="Somma totale dei guadagni derivanti dalle sole operazioni chiuse in attivo."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblGrossProfitTitle">Profitto Lordo</span>
+                                <div id="grossProfit" style="font-size: 1.1rem; font-weight: 700; color: #10b981;">$0.00
+                                </div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxGrossLoss"
+                                data-tooltip="Somma totale delle perdite derivanti dalle sole operazioni chiuse in passivo."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblGrossLossTitle">Perdita Lorda</span>
+                                <div id="grossLoss" style="font-size: 1.1rem; font-weight: 700; color: #ef4444;">$0.00
+                                </div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxCommissions"
+                                data-tooltip="Somma delle commissioni pagate al broker calcolata."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblCommissionsTitle">Commissioni</span>
+                                <div id="commissionsDisplay" style="font-size: 1.4rem; font-weight: 800; color: #f59e0b;">$0.00
+                                </div>
+                            </div>
+                            <div class="stat-card-mini glass-panel" id="boxWinRate"
+                                data-tooltip="Percentuale di operazioni chiuse in profitto rispetto al totale."
+                                style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
+                                <span
+                                    style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
+                                    id="lblWinRateTitle">Win Rate</span>
+                                <div id="winRate" style="font-size: 1.4rem; font-weight: 800; color: #8b5cf6;">0%</div>
+                            </div>
+
                         </div>
 
                         <div class="pnl-summary-card glass-panel"
