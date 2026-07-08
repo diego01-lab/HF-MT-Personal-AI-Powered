@@ -2473,6 +2473,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             tabs.forEach(t => t.addEventListener('click', () => applyBrokerSwitch(t.dataset.stage)));
             window.syncBrokerTabsUI = function (stage) {
                 tabs.forEach(t => t.classList.toggle('active', String(stage) === String(t.dataset.stage)));
+                // Mostra il pulsante Flush solo se siamo su Finnhub (stage 0)
+                const btnFlush = document.getElementById('btnFlushCapital');
+                if (btnFlush) {
+                    btnFlush.style.display = (String(stage) === '0') ? 'inline-block' : 'none';
+                }
             };
             // FASE D1: puntino verde sulle schede con bot ATTIVO (memoria per scheda)
             const STAGE_CTX = { 0: 'fh', 1: 'alp', 2: 'alrt', 3: 'capd', 4: 'capl' };
