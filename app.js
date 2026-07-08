@@ -6182,7 +6182,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Sostituiamo il PnL Realizzato (calcolato sulla limitata cronologia API degli ultimi 50 trade)
                 // con il valore matematico assoluto dell'account (Equity - Depositi Iniziali - PnL Non Realizzato).
                 // Questo rende i pannelli "Prestazioni" e "Gestione Capitale" perfettamente coerenti con il Capitale Attuale.
-                totalRealizedPnL = totalPnL - openUnrealizedTotal;
+                const trueRealizedPnL = totalPnL - openUnrealizedTotal;
+                
+                // Per evitare incongruenze matematiche nel Pannello Prestazioni,
+                // riversiamo la discrepanza ("gap" storico non caricato) nel Profitto Lordo o Perdita Lorda.
+                const gap = trueRealizedPnL - totalRealizedPnL;
+                if (gap > 0) {
+                    totalGrossProfit += gap;
+                } else if (gap < 0) {
+                    totalGrossLoss += Math.abs(gap);
+                }
+                
+                totalRealizedPnL = trueRealizedPnL;
             }
 
             const totalPnLEl = document.getElementById('totalPnL');
