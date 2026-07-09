@@ -7778,7 +7778,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const _dk = getBrokerHttp();
                     if (_dk.key && _dk.secret) { // Allow preload even on Finnhub tab
                         const alpacaSym = symbol.replace('USDT', '/USD');
-                        const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${alpacaSym}&timeframe=1Min&limit=100`;
+                        const _nowIso = new Date().toISOString();
+                        const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${alpacaSym}&timeframe=1Min&limit=100&end=${_nowIso}`;
                         const res = await fetch(url, {
                             headers: { 'apca-api-key-id': _dk.key, 'apca-api-secret-key': _dk.secret }
                         });
@@ -7897,7 +7898,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let alpacaUrl, responseKey;
                 if (assetType === 'CRYPTO') {
                     responseKey = symbol.replace('USDT', '/USD');
-                    alpacaUrl = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(responseKey)}&timeframe=1Min&limit=100`;
+                    const nowIsoCrypto = new Date().toISOString();
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(responseKey)}&timeframe=1Min&limit=100&end=${nowIsoCrypto}`;
                 } else {
                     responseKey = symbol;
                     const nowIso = new Date().toISOString();
