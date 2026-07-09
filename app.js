@@ -5466,7 +5466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const totalEvidence = bullScore + bearScore;
 
                     // APERTURA
-                    if (signal === 'BUY' && confidence >= 60 && isBullTrend && totalEvidence >= 4) {
+                    if (signal === 'BUY' && confidence >= 60 && isBullTrend && totalEvidence >= 3) {
                         console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
                         const tpInput = document.getElementById('botTargetProfit');
@@ -5476,7 +5476,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
                     }
-                    if (signal === 'SELL' && confidence >= 60 && isBearTrend && totalEvidence >= 4) {
+                    if (signal === 'SELL' && confidence >= 60 && isBearTrend && totalEvidence >= 3) {
                         // Evitiamo spam log/skip counter: Alpaca non supporta SHORT crypto. Ignoriamo silenziosamente.
                         if (brokerViewActive() && sym.includes('USDT')) return;
 
@@ -5526,8 +5526,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (decision.signal === 'BUY' || decision.signal === 'SELL') {
                 lastEngineSignal = { sym, signal: decision.signal, confidence: decision.confidence, time: now };
             }
-            // Throttling: non aggiornare la UI del radar per lo stesso simbolo più di una volta al secondo
-            if (lastRadarUpdate[sym] && now - lastRadarUpdate[sym] < 1000) return;
+            // Throttling: non aggiornare la UI del radar per lo stesso simbolo più di una volta al secondo (abbassato a 500ms per evitare race conditions con STRAT_COOLDOWN)
+            if (lastRadarUpdate[sym] && now - lastRadarUpdate[sym] < 500) return;
             lastRadarUpdate[sym] = now;
 
             const type = getAssetType(sym);
