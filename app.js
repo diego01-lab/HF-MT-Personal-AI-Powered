@@ -4570,7 +4570,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let activities = [];
                 let pageToken = '';
                 const cacheKey = src.live ? 'live' : 'paper';
-                window.__alpacaActivitiesCache = window.__alpacaActivitiesCache || {};
+                let savedCache = {};
+                try { savedCache = JSON.parse(localStorage.getItem('alpaca_activities_cache')) || {}; } catch(e){}
+                window.__alpacaActivitiesCache = window.__alpacaActivitiesCache || savedCache;
                 const cached = window.__alpacaActivitiesCache[cacheKey] || [];
                 const latestCachedId = cached.length > 0 ? cached[0].id : null;
 
@@ -4603,6 +4605,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 activities = activities.concat(cached);
                 if (activities.length > 1000) activities = activities.slice(0, 1000);
                 window.__alpacaActivitiesCache[cacheKey] = activities;
+                try { localStorage.setItem('alpaca_activities_cache', JSON.stringify(window.__alpacaActivitiesCache)); } catch(e){}
                 
                 if (activities.length > 0) {
                     // Cambio modalità durante la richiesta: non contaminare la modalità test
@@ -7865,8 +7868,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     responseKey = symbol;
                     const nowIso = new Date().toISOString();
-                    const startIso = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
-                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=1Min&limit=100&start=${startIso}&end=${nowIso}&feed=iex`;
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=1Min&limit=100&end=${nowIso}&feed=iex`;
                 }
 
                 const aRes = await fetch(alpacaUrl, {
