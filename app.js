@@ -2106,37 +2106,45 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!el) return;
             const parts = [];
             let total = 0;
-            for (const ctx of LOCAL_CTXS) {
-                // Nel totale entrano solo i portafogli REALMENTE in uso: FH sempre;
-                // Capital Demo/Reale solo se le chiavi sono configurate, se il loro
-                // motore è armato o se il contesto è già stato usato (snapshot).
-                // Senza questa regola i default a $1000 dei contesti mai toccati
-                // gonfiavano il totale.
-                if (ctx !== 'fh') {
-                    const keysOk = (ctx === 'capd')
-                        ? !!(capDemoKey && capDemoIdent && capDemoPass)
-                        : !!(capLiveKey && capLiveIdent && capLivePass);
-                    let used = false;
-                    try { used = !!localStorage.getItem('sim_ctx_' + ctx) || !!botActiveByCtx[ctx]; } catch (_) { }
-                    if (!keysOk && !used) continue;
-                }
-                const eq = ctxEquityLocal(ctx);
-                total += eq;
-                parts.push(`${ctx.toUpperCase()}: ${formatMoney(eq)}`);
-            }
+            
+            // SOMMA SOLO PORTAFOGLI REALI (ALRT e CAPL)
             const known = window.__equityByCtx || {};
-            for (const b of ['alp', 'alrt']) {
+            for (const b of ['alrt', 'capl']) {
                 if (typeof known[b] === 'number' && known[b] > 0) {
                     total += known[b];
-                    parts.push(`${b.toUpperCase()}: ${formatMoney(known[b])}`);
+                    parts.push(`${b.toUpperCase()}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(known[b])}`);
                 }
             }
-            el.textContent = formatMoney(total);
-            // Dettaglio per-broker consultabile al tocco/hover
+            
+            // Lettura valuta scelta dalla barra (default USD)
+            const currencySel = document.getElementById('topBarCurrencySelector');
+            const targetCurrency = currencySel ? currencySel.value : 'USD';
+            
+            // Calcolo tasso di conversione dai prezzi in tempo reale (Finnhub/Capital Forex)
+            let rate = 1;
+            if (targetCurrency === 'EUR') rate = globalPrices['EURUSD'] ? (1 / globalPrices['EURUSD']) : (1 / 1.08);
+            else if (targetCurrency === 'GBP') rate = globalPrices['GBPUSD'] ? (1 / globalPrices['GBPUSD']) : (1 / 1.25);
+            else if (targetCurrency === 'CHF') rate = globalPrices['USDCHF'] || 0.88;
+            else if (targetCurrency === 'JPY') rate = globalPrices['USDJPY'] || 150.0;
+            
+            const convertedTotal = total * rate;
+
+            // Formatta SOLO come numero (il simbolo è nella combo box)
+            const formatted = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(convertedTotal);
+            el.textContent = formatted;
+            
             const wrap = el.closest('.header-portfolio');
-            if (wrap) wrap.setAttribute('data-tooltip', 'Totale multi-broker — ' + parts.join(' · '));
+            if (wrap) wrap.setAttribute('data-tooltip', 'Totale Portafogli Reali — ' + (parts.length > 0 ? parts.join(' · ') : 'Nessun conto reale collegato'));
         }
         window.updateGlobalPortfolioHeader = updateGlobalPortfolioHeader;
+        
+        // Aggiungi listener per ricalcolare subito al cambio di valuta
+        document.addEventListener('DOMContentLoaded', () => {
+            const topBarSel = document.getElementById('topBarCurrencySelector');
+            if (topBarSel) {
+                topBarSel.addEventListener('change', updateGlobalPortfolioHeader);
+            }
+        });
 
         // Categorie tradabili per contesto (matrice broker, indipendente dal ctx attivo)
         function ctxSupportsCategory(ctx, type) {

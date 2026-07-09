@@ -271,7 +271,14 @@
             <div class="header-portfolio">
                 <div class="header-portfolio-label" id="lblPortfolio">Equity Account</div>
                 <div style="display: flex; align-items: center; gap: 5px;">
-                    <div class="header-portfolio-balance" id="walletBalance">$0.00</div>
+                    <select id="topBarCurrencySelector" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 4px; padding: 2px 4px; font-size: 0.7rem; font-weight: 600; cursor: pointer; outline: none;">
+                        <option value="USD">$</option>
+                        <option value="EUR">€</option>
+                        <option value="GBP">£</option>
+                        <option value="CHF">CHF</option>
+                        <option value="JPY">¥</option>
+                    </select>
+                    <div class="header-portfolio-balance" id="walletBalance">0.00</div>
                 </div>
             </div>
             <div class="broker-controls"
