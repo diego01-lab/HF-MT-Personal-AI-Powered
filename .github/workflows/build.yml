@@ -93,7 +93,7 @@ jobs:
       - name: Build iOS App
         working-directory: ./ios/App
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator -derivedDataPath build
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -derivedDataPath build
       
       - name: Upload iOS Build
         uses: actions/upload-artifact@v4
