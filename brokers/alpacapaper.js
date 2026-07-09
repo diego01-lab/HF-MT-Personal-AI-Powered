@@ -2,19 +2,19 @@
  * Gestore delle connessioni WebSocket ai dati Alpaca (Market Data)
  * Gestisce separatamente i flussi Stocks (IEX) e Crypto (v1beta3)
  */
-window.AlpacaPaperManager = (function() {
+window.AlpacaPaperManager = (function () {
     let wsStocks = null;
     let wsCrypto = null;
-    
+
     let keyId = null;
     let secretKey = null;
 
     // Use proxy in web browser to avoid CORS/403 issues
     const BASE_URL = !!(window.Capacitor) ? 'https://paper-api.alpaca.markets' : '/proxy/alpaca';
-    
+
     let activeSubs = new Set();
     let callbacks = {};
-    
+
     let cryptoWsFailed = false;
     let cryptoWsErrCount = 0;
 
@@ -41,10 +41,10 @@ window.AlpacaPaperManager = (function() {
     function connectStocks() {
         if (!keyId || !secretKey) return;
         if (wsStocks && wsStocks.readyState <= 1) return; // CONNECTING or OPEN
-        
+
         console.log("[AlpacaDataManager] Connessione Stocks (IEX)...");
         wsStocks = new WebSocket('wss://stream.data.alpaca.markets/v2/iex');
-        
+
         wsStocks.onopen = () => {
             console.log("[AlpacaDataManager] Stocks Connesso. Invio Auth.");
             wsStocks.send(JSON.stringify({
@@ -79,7 +79,7 @@ window.AlpacaPaperManager = (function() {
                     const price = msg.T === 't' ? msg.p
                         : (msg.bp > 0 && msg.ap > 0 ? (msg.bp + msg.ap) / 2 : (msg.ap || msg.bp));
                     if (!price || price <= 0) return;
-                    
+
                     if (callbacks.onPriceUpdate) callbacks.onPriceUpdate(sym, price, Date.now(), 'STOCK');
                 } else if (msg.T === 'error') {
                     console.error("[AlpacaDataManager] Errore da server Stocks:", msg.msg);
@@ -147,7 +147,7 @@ window.AlpacaPaperManager = (function() {
                     const price = msg.T === 't' ? msg.p
                         : (msg.bp > 0 && msg.ap > 0 ? (msg.bp + msg.ap) / 2 : (msg.ap || msg.bp));
                     if (!price || price <= 0) return;
-                    
+
                     if (callbacks.onPriceUpdate) callbacks.onPriceUpdate(sym, price, Date.now(), 'CRYPTO');
                 }
             });
@@ -172,7 +172,7 @@ window.AlpacaPaperManager = (function() {
 
     function syncSubscriptions() {
         const requiredSubs = new Set(callbacks.getRequiredSymbols ? callbacks.getRequiredSymbols() : []);
-        
+
         let stocksToSub = [];
         let stocksToUnsub = [];
         let cryptoToSub = [];
@@ -219,7 +219,7 @@ window.AlpacaPaperManager = (function() {
                 }
                 return alpacaSym;
             });
-            
+
             if (cryptoToSub.length > 0) wsCrypto.send(JSON.stringify({ action: 'subscribe', trades: formatCrypto(cryptoToSub) }));
             if (cryptoToUnsub.length > 0) wsCrypto.send(JSON.stringify({ action: 'unsubscribe', trades: formatCrypto(cryptoToUnsub) }));
         }
@@ -265,7 +265,7 @@ window.AlpacaPaperManager = (function() {
 
     async function createOrder(symbol, qty, side, type = 'market', tif = 'day') {
         if (!keyId || !secretKey) return null;
-        
+
         let alpacaSym = symbol.replace('.OANDA', '').trim();
         if (alpacaSym.includes(':')) alpacaSym = alpacaSym.split(':')[1];
         if (alpacaSym.includes('USDT')) alpacaSym = alpacaSym.replace('USDT', '/USD');
@@ -283,7 +283,7 @@ window.AlpacaPaperManager = (function() {
                 }
             }
             if (openOrders.length > 0) await new Promise(resolve => setTimeout(resolve, 600));
-        } catch(e) { console.warn("[AlpacaPaperManager] Errore cancellazione ordini preventivi:", e); }
+        } catch (e) { console.warn("[AlpacaPaperManager] Errore cancellazione ordini preventivi:", e); }
 
         let finalTif = tif;
         if (alpacaSym.includes('/') || alpacaSym.includes('BTC') || alpacaSym.includes('ETH')) finalTif = 'gtc';
@@ -294,6 +294,7 @@ window.AlpacaPaperManager = (function() {
             type: type,
             time_in_force: finalTif
         };
+        console.log("[ALPACA ORDER DEBUG] Body:", JSON.stringify(body));
 
         const response = await fetch(`${BASE_URL}/v2/orders`, {
             method: 'POST',
@@ -306,14 +307,15 @@ window.AlpacaPaperManager = (function() {
         });
 
         if (!response.ok) {
-            const errTxt = await response.text();
-            throw new Error(errTxt);
+            const errText = await response.text();
+            console.error(`[ALPACA] Errore creazione ordine (Status: ${response.status}):`, errText);
+            throw new Error(`Alpaca Order failed: ${response.status} - ${errText}`);
         }
-        
+
         return await response.json();
     }
 
-    
+
     async function closePosition(symbol) {
         if (!keyId || !secretKey) return;
         const res = await fetch(`${BASE_URL}/v2/positions/${encodeURIComponent(symbol)}`, {
@@ -325,13 +327,13 @@ window.AlpacaPaperManager = (function() {
 
     let cryptoErrCount = 0;
 
-    return { 
-        init, 
+    return {
+        init,
         setKeys,
-        connectStocks, 
+        connectStocks,
         connectCrypto,
-        disconnect, 
-        syncSubscriptions, 
+        disconnect,
+        syncSubscriptions,
         isStocksConnected,
         isCryptoConnected,
         getAccount,

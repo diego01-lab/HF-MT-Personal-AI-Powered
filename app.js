@@ -1,3 +1,27 @@
+// --- Global Rate Limiter for Alpaca (Intercepts 429 and throttles) ---
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+    const isAlpaca = url.includes('/proxy/alpaca') || url.includes('api.alpaca.markets');
+    
+    if (isAlpaca && window.__alpacaGlobalBackoff && Date.now() < window.__alpacaGlobalBackoff) {
+        return new Response('{"code":42910000,"message":"rate limit exceeded (local throttle)"}', {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
+    const res = await originalFetch.apply(this, args);
+
+    if (isAlpaca && res.status === 429) {
+        console.warn("[ALPACA] Rate limit hit 429! Avvio backoff globale di 10 secondi.");
+        window.__alpacaGlobalBackoff = Date.now() + 10000;
+    }
+
+    return res;
+};
+
 // --- Global User Interaction Tracker (to fix AudioContext autoplay warnings) ---
 window.userHasInteracted = false;
 const markInteraction = () => { window.userHasInteracted = true; };
@@ -4284,8 +4308,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // SHORT aperti — i proventi delle vendite allo scoperto gonfiano il
             // cash ma NON sono spendibili. Il limite reale per le crypto è
             // non_marginable_buying_power (è quello che Alpaca verifica sui buy).
-            let cVal = parseFloat(data.non_marginable_buying_power);
-            if (!isFinite(cVal)) cVal = parseFloat(data.cash || 0);
+            let cVal = parseFloat(data.cash);
+            let nbpVal = parseFloat(data.non_marginable_buying_power);
+            if (isFinite(nbpVal) && nbpVal < cVal) cVal = nbpVal;
+            if (!isFinite(cVal)) cVal = 0;
             if (cVal < 0) cVal = 0;
             availableCash = cVal;
 
@@ -5915,9 +5941,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return;
                 }
 
+                // Prenotazione preventiva fondi (Previene Race Conditions asincrone su burst multipli)
+                if (isCrypto && typeof availableCash !== 'undefined') {
+                    availableCash = Math.max(0, availableCash - actualCost);
+                } else if (typeof availableMargin !== 'undefined') {
+                    availableMargin = Math.max(0, availableMargin - actualCost);
+                }
+
                 if (qtyVal > 0) {
                     const orderOk = await alpacaCreateOrder(type === 'LONG' ? 'buy' : 'sell', alpacaSym, qtyVal.toString());
                     if (!orderOk) {
+                        // Restituzione fondi in caso di ordine rifiutato
+                        if (isCrypto && typeof availableCash !== 'undefined') {
+                            availableCash += actualCost;
+                        } else if (typeof availableMargin !== 'undefined') {
+                            availableMargin += actualCost;
+                        }
+                        
                         // Ordine rifiutato dal broker: NON scalare capitale né budget di sessione,
                         // altrimenti il budget si esaurisce con ordini mai eseguiti.
                         orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
@@ -5928,17 +5968,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // --- GESTIONE CAPITALE ---
                     // Scala l'importo realmente impegnato (qty arrotondata × prezzo), non l'intento
-                    const actualCost = qtyVal * price;
                     tradingCapital -= actualCost;
                     
-                    // Decurta subito i fondi Alpaca locali per prevenire ordini "a raffica"
-                    // che superino la marginazione reale prima del prossimo ciclo di sync
-                    if (typeof availableMargin !== 'undefined') {
-                        availableMargin = Math.max(0, availableMargin - actualCost);
-                    }
-                    if (isCrypto && typeof availableCash !== 'undefined') {
-                        availableCash = Math.max(0, availableCash - actualCost);
-                    }
+                    // (I fondi Alpaca locali sono già stati decurtati preventivamente)
 
                     // --- BUDGET SESSIONE ---
                     sessionBudgetUsed += actualCost;
@@ -6073,12 +6105,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         if (qty > 0) {
                             const limitPrice = pos.type === 'LONG' ? price * 0.999 : price * 1.001;
+                            let limitStr;
+                            if (limitPrice < 0.0001) limitStr = limitPrice.toFixed(8);
+                            else if (limitPrice < 0.01) limitStr = limitPrice.toFixed(6);
+                            else if (limitPrice < 1) limitStr = limitPrice.toFixed(4);
+                            else limitStr = limitPrice.toFixed(sym.includes('USDT') || sym.includes('OANDA') || sym.includes('CRYPTO') || sym.endsWith('USD') ? 4 : 2);
+
                             const fallbackBody = {
                                 symbol: alpacaSym.replace('OANDA:', '').replace('_', '/'),
                                 qty: qty.toString(),
                                 side: side,
                                 type: 'limit',
-                                limit_price: limitPrice.toFixed(sym.includes('USDT') || sym.includes('OANDA') ? 4 : 2),
+                                limit_price: limitStr,
                                 time_in_force: (alpacaSym.includes('/') || alpacaSym.endsWith('USD') || alpacaSym.endsWith('USDT') || sym.includes('CRYPTO')) ? 'gtc' : 'day',
                                 extended_hours: true
                             };
