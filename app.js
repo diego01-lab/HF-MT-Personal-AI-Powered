@@ -1,26 +1,62 @@
-// --- Global Rate Limiter for Alpaca (Intercepts 429 and throttles) ---
-const originalFetch = window.fetch;
-window.fetch = async function(...args) {
-    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
-    const isAlpaca = url.includes('/proxy/alpaca') || url.includes('api.alpaca.markets');
-    
-    if (isAlpaca && window.__alpacaGlobalBackoff && Date.now() < window.__alpacaGlobalBackoff) {
-        return new Response('{"code":42910000,"message":"rate limit exceeded (local throttle)"}', {
-            status: 429,
-            statusText: 'Too Many Requests',
-            headers: { 'Content-Type': 'application/json' }
+// --- Global Alpaca Request Queue (serialized with spacing & exponential backoff) ---
+(function() {
+    const _origFetch = window.fetch;
+    const ALPACA_MIN_GAP_MS = 250;      // min ms between consecutive Alpaca API calls
+    const ALPACA_MAX_BACKOFF_MS = 15000; // max backoff on repeated 429s
+    let _queue = [];
+    let _processing = false;
+    let _lastCallTime = 0;
+    let _backoffMs = 0;                  // current exponential backoff (0 = none)
+    let _consecutive429 = 0;
+
+    function _isAlpacaREST(url) {
+        return url.includes('/proxy/alpaca') || (url.includes('api.alpaca.markets') && !url.includes('stream.data'));
+    }
+
+    async function _processQueue() {
+        if (_processing || _queue.length === 0) return;
+        _processing = true;
+        while (_queue.length > 0) {
+            const { args, resolve, reject } = _queue.shift();
+            // Enforce minimum gap + any active backoff
+            const waitUntil = _lastCallTime + ALPACA_MIN_GAP_MS + _backoffMs;
+            const delay = waitUntil - Date.now();
+            if (delay > 0) await new Promise(r => setTimeout(r, delay));
+
+            try {
+                const res = await _origFetch.apply(window, args);
+                _lastCallTime = Date.now();
+                if (res.status === 429) {
+                    _consecutive429++;
+                    _backoffMs = Math.min(ALPACA_MAX_BACKOFF_MS, 1000 * Math.pow(2, _consecutive429 - 1));
+                    console.warn(`[ALPACA QUEUE] 429 hit (#${_consecutive429}). Backoff: ${_backoffMs}ms. Queue depth: ${_queue.length}`);
+                } else {
+                    if (_consecutive429 > 0) console.log(`[ALPACA QUEUE] Recovered from 429 backoff.`);
+                    _consecutive429 = 0;
+                    _backoffMs = 0;
+                }
+                resolve(res);
+            } catch (e) {
+                _lastCallTime = Date.now();
+                reject(e);
+            }
+        }
+        _processing = false;
+    }
+
+    window.fetch = function(...args) {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+        if (!_isAlpacaREST(url)) return _origFetch.apply(this, args);
+        // Enqueue Alpaca REST calls
+        return new Promise((resolve, reject) => {
+            _queue.push({ args, resolve, reject });
+            _processQueue();
         });
-    }
+    };
 
-    const res = await originalFetch.apply(this, args);
-
-    if (isAlpaca && res.status === 429) {
-        console.warn("[ALPACA] Rate limit hit 429! Avvio backoff globale di 10 secondi.");
-        window.__alpacaGlobalBackoff = Date.now() + 10000;
-    }
-
-    return res;
-};
+    // Expose for debugging
+    window.__alpacaQueue = { get depth() { return _queue.length; }, get backoff() { return _backoffMs; } };
+})();
 
 // --- Global User Interaction Tracker (to fix AudioContext autoplay warnings) ---
 window.userHasInteracted = false;
@@ -4303,17 +4339,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Margine Libero (Buying Power)
             availableMargin = parseFloat(data.buying_power);
-            // Cash: Alpaca consente ordini Crypto SOLO con cash effettivamente
-            // disponibile (non margin). ATTENZIONE: data.cash è ingannevole con
-            // SHORT aperti — i proventi delle vendite allo scoperto gonfiano il
-            // cash ma NON sono spendibili. Il limite reale per le crypto è
-            // non_marginable_buying_power (è quello che Alpaca verifica sui buy).
             let cVal = parseFloat(data.cash);
             let nbpVal = parseFloat(data.non_marginable_buying_power);
             if (isFinite(nbpVal) && nbpVal < cVal) cVal = nbpVal;
             if (!isFinite(cVal)) cVal = 0;
             if (cVal < 0) cVal = 0;
-            availableCash = cVal;
+            
+            const marginVal = parseFloat(data.buying_power);
+            
+            window.__lastAlpacaDeduction = window.__lastAlpacaDeduction || 0;
+            if (Date.now() - window.__lastAlpacaDeduction < 10000) {
+                // Previene sovrascritture con dati vecchi dal polling subito dopo un ordine
+                availableCash = Math.min(typeof availableCash !== 'undefined' ? availableCash : Infinity, cVal);
+                availableMargin = Math.min(typeof availableMargin !== 'undefined' ? availableMargin : Infinity, marginVal);
+            } else {
+                availableCash = cVal;
+                availableMargin = marginVal;
+            }
 
             localStorage.setItem('sim_portfolio_balance', portfolioBalance);
             localStorage.setItem('sim_trading_capital', tradingCapital);
@@ -5838,6 +5880,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             console.log(`[OPEN TRADE] ${type} ${sym} @ ${formatMoney(price, 4, 4)} | investUsd=${formatMoney(investUsd)} | libero=${formatMoney(tradingCapital)}`);
 
+            // --- STAGGERING GLOBALE ALPACA ---
+            // Limita la frequenza degli ordini a ~2.5 al secondo globalmente per evitare 429
+            window.__lastAlpacaAction = window.__lastAlpacaAction || 0;
+            if (Date.now() - window.__lastAlpacaAction < 400) {
+                orderRejectCooldown[sym] = Date.now() + Math.random() * 2000;
+                return;
+            }
+            window.__lastAlpacaAction = Date.now();
+
             if (investUsd <= 0.05) {
                 if (!isCapitalExhausted) {
                     console.warn(`[SYSTEM] Capitale esaurito. Il bot entra in modalità ATTESA fino al prossimo rientro di fondi.`);
@@ -5944,8 +5995,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Prenotazione preventiva fondi (Previene Race Conditions asincrone su burst multipli)
                 if (isCrypto && typeof availableCash !== 'undefined') {
                     availableCash = Math.max(0, availableCash - actualCost);
+                    window.__lastAlpacaDeduction = Date.now();
                 } else if (typeof availableMargin !== 'undefined') {
                     availableMargin = Math.max(0, availableMargin - actualCost);
+                    window.__lastAlpacaDeduction = Date.now();
                 }
 
                 if (qtyVal > 0) {
@@ -6015,6 +6068,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!pos || pos.isActuallyClosing) return;
             // Anti-duplicazione: se una chiusura broker è in corso/appena inviata, non ripetere
             if (reason !== 'MANUAL' && Date.now() - (recentlyClosed[sym] || 0) < 30000) return;
+            
+            if (reason !== 'MANUAL' && brokerViewActive() && !pos.simulated) {
+                window.__lastAlpacaAction = window.__lastAlpacaAction || 0;
+                if (Date.now() - window.__lastAlpacaAction < 400) {
+                    recentlyClosed[sym] = Date.now() - 30000 + Math.random() * 2000;
+                    return;
+                }
+                window.__lastAlpacaAction = Date.now();
+            }
+
             pos.isActuallyClosing = true;
 
             // Applica il cooldown post-trade
@@ -6940,7 +7003,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // LOOP IN BACKGROUND PER AGGIORNARE LE POSIZIONI APERTE
         // Ciclo dedicato di gestione rischio (TP/SL/trailing/hedging): qui manageRisk
         // resta true, così le posizioni sotto soglia vengono comunque gestite.
-        setInterval(() => renderOpenPositions(true), 500);
+        setInterval(() => renderOpenPositions(true), 1500);
 
         var lastPriceUITime = 0;
         function updatePriceUI() {
@@ -7949,13 +8012,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Sync conto Paper: SOLO in ALP (non in ALrt, dove si sincronizza il conto REALE,
             // altrimenti i dati paper sovrascriverebbero il portafoglio live).
             if (useAlpacaBroker && !window.liveMonitorActive) checkAlpacaConnection();
-        }, 3000);
+        }, 10000);
 
         // Sync del conto Alpaca REALE (stadio ALrt): conto, posizioni, ordini e
         // storico — stessa logica Paper, ora OPERATIVA (trading con denaro reale).
         setInterval(() => {
             if (window.liveMonitorActive) checkAlpacaLiveConnection();
-        }, 3000);
+        }, 10000);
 
         // Chiamata immediata singola allo startup
         if (useAlpacaBroker && !window.liveMonitorActive) {
