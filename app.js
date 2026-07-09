@@ -5753,6 +5753,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
+            // Diversificazione per categoria: distribuisce le posizioni equamente tra le categorie attive.
+            // Si calcola quante categorie hanno almeno un asset monitorato, poi si limita ogni categoria
+            // a floor(maxPositionsLimit / numCategorie) posizioni (almeno 1 per categoria).
+            if (isBotActive) {
+                const symCat = getAssetType(sym);
+                // Conta le categorie che hanno almeno 1 asset nel bgPriceHistories (quindi monitorato)
+                const activeCats = new Set();
+                Object.keys(bgPriceHistories).forEach(s => {
+                    if (bgPriceHistories[s] && bgPriceHistories[s].length > 0) activeCats.add(getAssetType(s));
+                });
+                const numCats = Math.max(1, activeCats.size);
+                const maxPerCat = Math.max(1, Math.floor(maxPositionsLimit / numCats));
+                // Conta le posizioni aperte per questa categoria
+                const catOpenCount = Object.values(activePositions).filter(p => getAssetType(p.sym || '') === symCat).length;
+                if (catOpenCount >= maxPerCat && openCount > 0) {
+                    if (Date.now() % 15000 < 500) {
+                        console.warn(`[BOT] Diversificazione: categoria ${symCat} già a quota (${catOpenCount}/${maxPerCat}). Aspetto apertura in altra categoria.`);
+                    }
+                    return;
+                }
+            }
+
+
             // Controllo Budget di Sessione
             const budgetLimit = getSessionBudgetLimit();
             if (budgetLimit > 0 && sessionBudgetUsed >= budgetLimit) {
