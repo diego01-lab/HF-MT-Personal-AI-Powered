@@ -1356,15 +1356,6 @@ function renderCategorySelection() {
         container.appendChild(label);
     });
 
-    // Nota informativa per Finnhub
-    const note = document.createElement('div');
-    note.style.gridColumn = '1 / -1';
-    note.style.fontSize = '0.65rem';
-    note.style.color = '#f59e0b';
-    note.style.marginTop = '4px';
-    note.style.opacity = '0.8';
-    note.textContent = t.need_finnhub;
-    container.appendChild(note);
 }
 
 function renderAssetSelector() {
@@ -6333,8 +6324,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const fragment = document.createDocumentFragment();
-            // Mostra tutto lo storico
-            const visibleHistory = tradeHistory;
+            // Ottimizzazione performance: mostra solo le ultime 100 operazioni per evitare blocchi UI
+            const visibleHistory = tradeHistory.slice(-100).reverse();
             visibleHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
                 if (!trade || !trade.sym || trade.sym === 'undefined') return;
@@ -6379,6 +6370,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const type = getAssetType(tradeSym);
                 const icons = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' };
                 const icon = icons[type] || '💰';
+                const catLabels = { 'CRYPTO': 'Crypto', 'STOCK': 'Azione', 'FOREX': 'Forex', 'COMMODITY': 'Commodity' };
+                const catLabel = catLabels[type] || 'Asset';
 
                 const durationMs = trade.exitTime && trade.entryTime ? trade.exitTime - trade.entryTime : 0;
                 const durationStr = formatDuration(durationMs);
@@ -6403,7 +6396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Layout impilato: sta nella larghezza della colonna senza scrollbar orizzontale
                 row.innerHTML = `
                     <div class="trade-row-top">
-                        <span class="trade-side" title="${typeTip}">${icon} ${trade.type} <span class="trade-sym">${escHtml(trade.sym)}</span></span>
+                        <span class="trade-side" title="${typeTip}">${icon} <span style="opacity: 0.7; font-size: 0.7rem; font-weight: normal; margin-right: 4px;">${catLabel}</span> ${trade.type} <span class="trade-sym">${escHtml(trade.sym)}</span></span>
                         <span class="trade-pnl ${pnlClass}">${pnlSign}${formatMoney(trade.pnl, 2, 4)} <small>${pnlSign}${pnlPct.toFixed(2)}%</small></span>
                     </div>
                     <div class="trade-leg">
