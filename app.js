@@ -5330,9 +5330,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // FILTRO VOLATILITA' (ATR): Se il mercato è piatto, ignoriamo i segnali per non pagare commissioni
                 const atr = calculateATR(history, Math.min(14, history.length));
                 const atrPct = atr ? (atr / price) * 100 : 1;
-                if (!activePositions[sym] && atrPct < 0.15) {
-                    return; // Mercato piatto, no trade
-                }
+                // Disabilitato per HFT Scalper (il radar smetteva di aggiornarsi perché il filtro bloccava quasi tutti i tick)
+                // if (!activePositions[sym] && atrPct < 0.15) {
+                //     return; // Mercato piatto, no trade
+                // }
 
                 // --- Sistema a Punti base (bullish/bearish) ---
                 let bullScore = 0, bearScore = 0;
