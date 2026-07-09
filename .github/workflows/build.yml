@@ -1,0 +1,101 @@
+name: Build Android and iOS Packages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Prepare web directory
+        run: |
+          mkdir -p www
+          cp -r *.js *.html *.css *.json www/ 2>/dev/null || true
+          cp -r brokers www/brokers 2>/dev/null || true
+          # Note: Adjust the build step if a bundler like webpack/vite is used.
+          # Right now it seems to be plain JS/HTML files in the root.
+
+      - name: Install Capacitor CLI
+        run: npm install -g @capacitor/cli
+
+      - name: Add Android Platform
+        run: |
+          npm i @capacitor/android
+          npx cap add android || echo "Android platform already added"
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Build Android APK
+        working-directory: ./android
+        run: ./gradlew assembleDebug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Prepare web directory
+        run: |
+          mkdir -p www
+          cp -r *.js *.html *.css *.json www/ 2>/dev/null || true
+          cp -r brokers www/brokers 2>/dev/null || true
+
+      - name: Install Capacitor CLI
+        run: npm install -g @capacitor/cli
+
+      - name: Add iOS Platform
+        run: |
+          npm i @capacitor/ios
+          npx cap add ios || echo "iOS platform already added"
+
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      - name: Build iOS App
+        working-directory: ./ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator -derivedDataPath build
+      
+      - name: Upload iOS Build
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-build
+          path: ios/App/build/Build/Products/Debug-iphonesimulator/App.app

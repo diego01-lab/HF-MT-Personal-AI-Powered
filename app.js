@@ -745,11 +745,11 @@ window.capitalMode = 'off';
 // è l'UTENTE a scegliere quali collegare (leve sotto i LED, o attivando la
 // scheda di un broker — anche quella è una scelta esplicita).
 // UPDATE: Su richiesta esplicita, Finnhub viene attivato di default all'avvio.
-window.__connAllowed = { fh: localStorage.getItem('sim_use_finnhub') !== 'false', alp: false, capd: false };
+window.__connAllowed = { fh: false, alp: false, capd: false };
 let finnhubApiKey = localStorage.getItem('finnhub_api_key') || '';
 // Ricorda se Finnhub ha già restituito 403 sulle candles (piano gratuito): evita di riprovare a ogni avvio
 window.finnhubForbidden = localStorage.getItem('finnhub_candles_forbidden') === 'true';
-let useFinnhubData = localStorage.getItem('sim_use_finnhub') !== 'false';
+let useFinnhubData = false;
 let bgFinnhubWs = null;
         const wsThrottleMap = {};
 let bgAlpacaWs = null;
@@ -1906,7 +1906,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!LOCAL_CTXS.includes(ctx)) return;
             const s = {
                 sessionInitialCapital, tradingCapital, totalPnL, activePositions,
-                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed, skippedCounters
+                tradeHistory, executedTrades, winTrades, grossProfit, grossLoss, sessionBudgetUsed, skippedCounters,
+                globalCommissions
             };
             ctxLive[ctx] = s; // FASE D2: tiene fresco anche lo stato in-memory
             try { localStorage.setItem('sim_ctx_' + ctx, JSON.stringify(s)); } catch (_) { }
@@ -1924,7 +1925,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tradingCapital = TEST_DEFAULT_CAPITAL;
                 totalPnL = 0; activePositions = {}; tradeHistory = [];
                 executedTrades = 0; winTrades = 0; grossProfit = 0; grossLoss = 0;
-                sessionBudgetUsed = 0;
+                sessionBudgetUsed = 0; globalCommissions = 0;
             } else {
                 sessionInitialCapital = !isNaN(parseFloat(s.sessionInitialCapital)) ? parseFloat(s.sessionInitialCapital) : TEST_DEFAULT_CAPITAL;
                 tradingCapital = !isNaN(parseFloat(s.tradingCapital)) ? parseFloat(s.tradingCapital) : TEST_DEFAULT_CAPITAL;
@@ -1936,6 +1937,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 grossProfit = parseFloat(s.grossProfit) || 0;
                 grossLoss = parseFloat(s.grossLoss) || 0;
                 sessionBudgetUsed = parseFloat(s.sessionBudgetUsed) || 0;
+                globalCommissions = parseFloat(s.globalCommissions) || 0;
                 skippedCounters = s.skippedCounters || { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 };
             }
             isCapitalExhausted = false;
@@ -3691,10 +3693,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 syncKeysWithServer(true); // Save to server
                 apiModal.classList.add('hidden');
                 apiErrorMsg.textContent = '';
-                initBackgroundConnections();
-                connectToMarket(assetPairSelect.value);
-                // Nuova chiave Finnhub: le categorie in modalità FH diventano disponibili
-                if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
+                applyBrokerSwitch(0);
             });
         }
 
@@ -3764,24 +3763,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 syncKeysWithServer(true); // Salva persistentemente nel keys.json
 
                 alpacaModal.classList.add('hidden');
-                // La modalità si controlla dal toggle in sidebar: qui salviamo solo le chiavi.
-                // Se il broker è già attivo, riavvia le connessioni con le nuove chiavi.
-                if (useAlpacaBroker) {
-                    const el = document.getElementById('armALP');
-                    if (el) {
-                        if (!el.checked) {
-                            el.checked = true;
-                            el.dispatchEvent(new Event('change'));
-                        } else {
-                            // Se era già spuntato (raro), forziamo il riavvio manuale
-                            window.__connAllowed.alp = true;
-                            checkAlpacaConnection();
-                            initAlpacaDataWs();
-                            initAlpacaCryptoWs();
-                        }
-                    }
-                }
                 showNotification("Chiavi Alpaca salvate.", "success");
+                applyBrokerSwitch(1);
             });
         }
 
@@ -3812,8 +3795,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 localStorage.setItem('alpaca_live_secret_key', alpacaLiveSecretKey);
                 syncKeysWithServer(true);
                 if (alpacaLiveModal) alpacaLiveModal.classList.add('hidden');
-                checkAlpacaLiveConnection();
                 showNotification(tr('live_keys_saved', 'Chiavi Alpaca Trading (reale) salvate.'), 'success');
+                applyBrokerSwitch(2);
             });
         }
 
@@ -4084,7 +4067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 capSession.demo = null; // nuove credenziali → nuova sessione
                 dModal.classList.add('hidden');
                 showNotification('Chiavi Capital.com Demo salvate.', 'success');
-                if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
+                applyBrokerSwitch(3);
             });
             const saveL = document.getElementById('saveCapitalLiveBtn');
             if (saveL) saveL.addEventListener('click', () => {
@@ -4097,7 +4080,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 capSession.live = null;
                 lModal.classList.add('hidden');
                 showNotification('Chiavi Capital.com (reale) salvate.', 'success');
-                if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
+                applyBrokerSwitch(4);
             });
 
             // Test connessione: crea una sessione con i valori inseriti (non salvati)
@@ -6162,10 +6145,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     updateDashboard();
                 } else {
                     // TEST/SIMULATE: contabilità locale completa
-                    tradingCapital += (pos.invested + pnl);
+                    const feePct = getNetBreakevenPct(sym);
+                    const notional = pos.entryPrice * pos.amount;
+                    const feeCost = notional * (feePct / 100);
+                    globalCommissions += feeCost;
+                    
+                    const pnlNetto = pnl - feeCost;
+                    tradingCapital += (pos.invested + pnlNetto);
                     updateWalletUI();
 
-                    if (pnl > 0) playCashSound(); else playLossSound();
+                    if (pnlNetto > 0) playCashSound(); else playLossSound();
 
                     sessionBudgetUsed -= pos.invested;
                     if (sessionBudgetUsed < 0) sessionBudgetUsed = 0;
@@ -6469,37 +6458,39 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
+            let currentCommissions = 0;
             if (brokerViewActive()) {
                 // Sostituiamo il PnL Realizzato calcolato matematicamente per far quadrare i conti
                 const trueRealizedPnL = totalPnL - openUnrealizedTotal;
                 const gap = trueRealizedPnL - totalRealizedPnL;
                 
-                let globalCommissions = 0;
                 if (gap < -0.01) {
                     // Se abbiamo perso più di quanto dicono i trade, la differenza sono le commissioni
-                    globalCommissions = Math.abs(gap);
+                    currentCommissions = Math.abs(gap);
                 }
-                
-                // Per avere una matematica PERFETTA a schermo:
-                // PNL TOTALE (Lordo) = totalRealizedPnL (la somma dei trade in cronologia)
-                // COMMISSIONI = globalCommissions
-                // PNL NETTO = PNL TOTALE - COMMISSIONI
-                const calculatedNetPnL = totalRealizedPnL - globalCommissions;
-                
-                // Allineiamo il Capitale Iniziale per garantire che:
-                // Equity Attuale (tradingCapital) = Capitale Iniziale + PNL Netto + Unrealized
-                const adjustedInitialCapital = tradingCapital - calculatedNetPnL - openUnrealizedTotal;
-                if (adjustedInitialCapital > 0) {
-                    sessionInitialCapital = adjustedInitialCapital;
-                    const initialCapitalEl = document.getElementById('initialCapital');
-                    if (initialCapitalEl) initialCapitalEl.textContent = '$' + formatMoney(sessionInitialCapital);
-                }
-                
-                // Per far combaciare l'Equity Attuale, modifichiamo solo visivamente il PNL NETTO
-                // in modo che corrisponda al calcolo esatto della UI
-                window.__trueRealizedPnL = calculatedNetPnL;
-                window.__globalCommissions = globalCommissions;
+            } else {
+                currentCommissions = globalCommissions;
             }
+
+            // Per avere una matematica PERFETTA a schermo:
+            // PNL TOTALE (Lordo) = totalRealizedPnL (la somma dei trade in cronologia)
+            // COMMISSIONI = currentCommissions
+            // PNL NETTO = PNL TOTALE - COMMISSIONI
+            const calculatedNetPnL = totalRealizedPnL - currentCommissions;
+            
+            // Allineiamo il Capitale Iniziale per garantire che:
+            // Equity Attuale (tradingCapital) = Capitale Iniziale + PNL Netto + Unrealized
+            const adjustedInitialCapital = tradingCapital - calculatedNetPnL - openUnrealizedTotal;
+            if (adjustedInitialCapital > 0) {
+                sessionInitialCapital = adjustedInitialCapital;
+                const initialCapitalEl = document.getElementById('initialCapital');
+                if (initialCapitalEl) initialCapitalEl.textContent = '$' + formatMoney(sessionInitialCapital);
+            }
+            
+            // Per far combaciare l'Equity Attuale, modifichiamo solo visivamente il PNL NETTO
+            // in modo che corrisponda al calcolo esatto della UI
+            window.__trueRealizedPnL = calculatedNetPnL;
+            window.__globalCommissions = currentCommissions;
 
             globalTotalRealizedPnL = totalRealizedPnL;
             const totalPnLEl = document.getElementById('totalPnL');
@@ -7881,6 +7872,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     showNotification(`Alpaca: Ordine eseguito con successo!`, "success");
                 }
+                setTimeout(() => { if (typeof syncAlpacaOrders === 'function') syncAlpacaOrders(); }, 500);
                 return true;
             } catch (e) {
                 const msg = e.message ? e.message.toLowerCase() : '';
