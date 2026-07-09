@@ -778,7 +778,7 @@ let isBotActive = false;
 let isCapitalExhausted = false;
 let sessionBudgetUsed = 0;
 let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
-let isManualMode = localStorage.getItem('sim_trading_mode') !== 'auto'; // Default a manuale dopo reset
+let isManualMode = true; // Il bot parte sempre FERMO ad ogni avvio — l'utente deve avviarlo manualmente
 let useAlpacaBroker = false; // L'app parte SEMPRE in test mode; il broker si attiva solo dal toggle
 let alpacaKeyId = localStorage.getItem('alpaca_key_id') || '';
 let alpacaSecretKey = localStorage.getItem('alpaca_secret_key') || '';
@@ -1943,9 +1943,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // statistiche sono salvati/ripristinati per contesto quando si cambia scheda.
         // I contesti alp/alrt restano sincronizzati live da Alpaca (fonte autorevole).
         var LOCAL_CTXS = ['fh', 'capd', 'capl'];
-        // FASE D1: stato bot ON/OFF ricordato PER SCHEDA nella sessione corrente.
-        // Il bot non parte mai da solo all'avvio dell'app (tutte le schede OFF);
-        // tornando su una scheda dove era ON, riparte automaticamente.
+        // FASE D1: stato bot ON/OFF ricordato PER SCHEDA nella sessione corrente (in-memory only).
+        // Il bot NON viene mai riattivato automaticamente tra sessioni/ricaricamenti:
+        // l'utente deve sempre avviarlo manualmente premendo ▶ Start Bot.
         var botActiveByCtx = { 
             fh: false, 
             alp: false, 
