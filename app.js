@@ -8134,7 +8134,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 style="width: 100%; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); font-size: 0.65rem; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: all 0.2s;"
                                 onmouseover="this.style.background='rgba(239,68,68,0.2)'"
                                 onmouseout="this.style.background='rgba(239,68,68,0.1)'">
-                                ${t.btn_cancel ? t.btn_cancel.toUpperCase() : 'ANNULLA'}
+                                ${tr('btn_cancel', 'ANNULLA').toUpperCase()}
                             </button>
                         </div>
                     </div>
