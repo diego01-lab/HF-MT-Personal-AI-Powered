@@ -1701,7 +1701,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // --- Motore Tecnico & Radar State ---
         const stratCooldown = {};
-        const STRAT_COOLDOWN_MS = 3000;
+        const STRAT_COOLDOWN_MS = 1000;
         // Reinforcement Learning: mezza-vita della memoria per-asset (le
         // penalità/bonus si dimezzano ogni 3 ore invece di durare per sempre)
         const RL_HALF_LIFE_MS = 3 * 3600 * 1000;
@@ -5318,8 +5318,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (stratCooldown[cdKey] && now - stratCooldown[cdKey] < STRAT_COOLDOWN_MS) return;
                 stratCooldown[cdKey] = now;
 
-                // POST-TRADE COOLDOWN (3 minuti) per evitare l'overtrading
-                if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < 30000) return;
+                // POST-TRADE COOLDOWN (5 secondi) per evitare l'overtrading
+                if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < 5000) return;
 
                 // --- Calcolo Indicatori ---
                 const rsi = calculateRSI(history, Math.min(14, history.length - 1));
@@ -5518,8 +5518,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (decision.signal === 'BUY' || decision.signal === 'SELL') {
                 lastEngineSignal = { sym, signal: decision.signal, confidence: decision.confidence, time: now };
             }
-            // Throttling: non aggiornare la UI del radar per lo stesso simbolo più di una volta ogni 2 secondi
-            if (lastRadarUpdate[sym] && now - lastRadarUpdate[sym] < 2000) return;
+            // Throttling: non aggiornare la UI del radar per lo stesso simbolo più di una volta al secondo
+            if (lastRadarUpdate[sym] && now - lastRadarUpdate[sym] < 1000) return;
             lastRadarUpdate[sym] = now;
 
             const type = getAssetType(sym);
