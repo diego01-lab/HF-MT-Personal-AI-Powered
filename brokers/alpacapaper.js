@@ -268,6 +268,7 @@ window.AlpacaPaperManager = (function() {
         
         let alpacaSym = symbol.replace('.OANDA', '').trim();
         if (alpacaSym.includes(':')) alpacaSym = alpacaSym.split(':')[1];
+        if (alpacaSym.includes('USDT')) alpacaSym = alpacaSym.replace('USDT', '/USD');
         if (alpacaSym.includes('_')) {
             alpacaSym = alpacaSym.replace('_', '/');
         } else if (alpacaSym.length === 6 && !alpacaSym.includes('/')) {
@@ -287,7 +288,7 @@ window.AlpacaPaperManager = (function() {
         let finalTif = tif;
         if (alpacaSym.includes('/') || alpacaSym.includes('BTC') || alpacaSym.includes('ETH')) finalTif = 'gtc';
         const body = {
-            symbol: symbol,
+            symbol: alpacaSym,
             qty: qty.toString(),
             side: side.toLowerCase(),
             type: type,

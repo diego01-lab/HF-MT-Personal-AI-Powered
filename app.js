@@ -7276,10 +7276,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             alpacaCryptoAuthenticated = true;
                             window.alpacaCryptoWsFailed = false; // Reset: il WS funziona!
                             window.__cryptoWsErrCount = 0; // azzera il conteggio errori
-                            // Se c'era un polling attivo, lo stoppiamo
-                            if (alpacaPollingInterval) {
-                                clearInterval(alpacaPollingInterval);
-                                alpacaPollingInterval = null;
+                            // Se c'era un polling attivo, NON lo stoppiamo (il WS gratuito Alpaca Crypto è spesso muto)
+                            if (!alpacaPollingInterval) {
+                                startAlpacaPolling();
                             }
                             syncAlpacaDataSubscriptions();
                         } else if (msg.T === 't' || msg.T === 'q') { // Trade o Quote (bid/ask)
@@ -7338,11 +7337,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("[ALPACA] Polling attivo (WebSocket non disponibile). Intervallo: 3s.");
             alpacaPollingInterval = setInterval(async () => {
                 // Se il WS si è ristabilito, ferma il polling
-                if (alpacaCryptoAuthenticated && bgAlpacaCryptoWs?.readyState === WebSocket.OPEN) {
-                    clearInterval(alpacaPollingInterval);
-                    alpacaPollingInterval = null;
-                    return;
-                }
+                // FASE C: rimosso il blocco che fermava il polling, serve come fallback per i WebSocket muti.
                 // FASE C: il polling si ferma solo se mancano le chiavi (feed dati puro)
                 if (!getBrokerHttp().key) {
                     clearInterval(alpacaPollingInterval);
@@ -7350,11 +7345,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return;
                 }
 
-                // Batch poll dei prezzi crypto via REST
+                // Batch poll dei prezzi crypto via REST usando QUOTES (più frequenti dei trades)
                 const cryptoSyms = VALID_SYMBOLS.CRYPTO;
                 const alpacaSyms = cryptoSyms.map(s => s.replace('USDT', '/USD')).join(',');
-                // latest/trades: prezzo dell'ultimo scambio reale (piu' reattivo della chiusura barra 1-min)
-                const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/latest/trades?symbols=${encodeURIComponent(alpacaSyms)}`;
+                // latest/quotes: restituisce bid/ask. Molto più reattivo su Alpaca Paper rispetto ai trades
+                const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/latest/quotes?symbols=${encodeURIComponent(alpacaSyms)}`;
 
                 try {
                     const res = await fetch(url, {
@@ -7363,10 +7358,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (res.ok) {
                         const data = await res.json();
                         const now = Date.now();
-                        if (data.trades) {
-                            for (const aSym in data.trades) {
+                        if (data.quotes) {
+                            for (const aSym in data.quotes) {
                                 const botSym = aSym.replace('/USD', 'USDT');
-                                const price = data.trades[aSym].p; // Prezzo ultimo trade
+                                const q = data.quotes[aSym];
+                                const price = (q.bp > 0 && q.ap > 0) ? (q.bp + q.ap) / 2 : (q.ap || q.bp);
+                                if (!price || price <= 0) continue;
+                                
                                 globalPrices[botSym] = price;
                                 updateBackgroundHistoryAndStrategy(botSym, price, now, 'CRYPTO', 'sim');
                                 processRadarTick(botSym, price, now, 'CRYPTO'); // Aggiorna anche il Radar
@@ -7380,7 +7378,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) {
                     // Errori di rete: silenzioso, riproveremo al prossimo tick
                 }
-            }, 3000); // 3 secondi: bilanciamento tra reattività e rate limit
+            }, 2000); // 2 secondi: altissima reattività senza sfondare i rate limits (200 req/min)
         }
 
         function isMarketOpen(type) {
