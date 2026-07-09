@@ -1066,12 +1066,10 @@
                             <div class="pos-tabs-header">
                                 <h3 id="openPosTitle"
                                     data-tooltip="Asset attualmente in portafoglio con guadagno/perdita calcolato in tempo reale (Unrealized PnL)."
-                                    style="font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; gap: 6px; flex-wrap: wrap;">
-                                    Posizioni Aperte <span id="perfOpenCountBadge" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 10px; margin-left: 2px; display: none;">0</span>
-                                    <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
-                                        <span id="openTotalValue" style="font-size: 0.75rem; font-weight: 500; padding: 2px 6px; background: rgba(255,255,255,0.05); border-radius: 6px; color: #cbd5e1;" data-tooltip="Valore di mercato totale (Market Value)">Valore: $0.00</span>
-                                        <span id="openDailyNet" style="font-size: 1.0rem; font-weight: 800; padding: 2px 6px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff;">$0.00</span>
-                                    </div>
+                                    style="font-size: 0.9rem; margin-bottom: 8px; display:flex; align-items:center; flex-wrap: wrap;">
+                                    <span id="lblOpenPosText">Posizioni Aperte</span> <span id="perfOpenCountBadge" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 10px; margin-left: 6px; display: none;">0</span>
+                                    <span id="openDailyNet" style="font-size: 1.0rem; font-weight: 800; padding: 2px 6px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin-left: 6px;">$0.00</span>
+                                    <span id="openTotalValue" style="font-size: 0.75rem; font-weight: 500; padding: 2px 6px; background: rgba(255,255,255,0.05); border-radius: 6px; color: #cbd5e1; margin-left: auto;" data-tooltip="Valore di mercato totale (Market Value)">Valore: $0.00</span>
                                 </h3>
                                 <!-- Contatore posizioni SALTATE dal bot (e perché): mostra a colpo d'occhio
                                      quante mosse la strategia ha voluto ma il broker non ha eseguito
@@ -1109,13 +1107,13 @@
                         style="padding: 16px; border-color: #f59e0b; display: none;">
                         <div class="pos-tabs-header">
                             <h3 id="pendingOrdersTitle"
-                                style="color: #f59e0b; display: flex; align-items: center; gap: 8px; font-size: 0.9rem;">
+                                style="color: #f59e0b; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin-bottom: 0;">
                                 <span class="dot"
                                     style="background: #f59e0b; width: 8px; height: 8px; border-radius: 50%;"></span>
-                                <span id="lblPendingOrdersText">Ordini (Alpaca) <span id="pendingOrdersCountBadge" style="font-size: 0.8rem; background: rgba(245,158,11,0.2); padding: 2px 6px; border-radius: 10px; margin-left: 8px; display: none;">0</span></span>
+                                <span id="lblPendingOrdersText">Ordini in Attesa</span>
+                                <span class="pos-count" id="cnt-PENDING"
+                                    style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: auto;">0</span>
                             </h3>
-                            <span class="pos-count" id="cnt-PENDING"
-                                style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">0</span>
                         </div>
                         <div id="pendingOrdersList" class="open-positions-list" style="flex: 1; max-height: none;">
                             <div class="open-position empty" id="lblNoPendingOrders">Nessun ordine in attesa</div>
@@ -1126,20 +1124,21 @@
                     <div class="history-card glass-panel glow panel-cell" style="margin: 0;">
 
                         <div
-                            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <h2 id="lblHistoryTitle"
                                 data-tooltip="Storico di tutte le operazioni chiuse per questo broker"
-                                style="margin:0; display:flex; align-items:center;">
-                                Cronologia <span id="historyCountBadge" style="font-size: 0.8rem; background: rgba(96,165,250,0.2); padding: 2px 6px; border-radius: 10px; margin-left: 8px; display: none;">0</span>
+                                style="margin:0; display:flex; align-items:center; gap: 6px;">
+                                <span id="lblHistoryText">Cronologia</span>
+                                <span id="historyCountBadge" style="font-size: 0.8rem; background: rgba(96,165,250,0.2); padding: 2px 6px; border-radius: 10px; display: none;">0</span>
+                                <span id="historyDailyNet"
+                                    style="font-size: 1.1rem; font-weight: 800; padding: 2px 8px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin-left: 4px;">$0.00</span>
                             </h2>
                             <!-- Colonna a destra: tasto Cancella SOPRA il valore totale delle operazioni -->
                             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
                                 <button id="btnClearHistory"
                                     data-tooltip="Resetta statistiche e cronologia"
-                                    style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:#ef4444; border-radius:6px; padding:4px 10px; font-size:0.72rem; cursor:pointer; white-space:nowrap;">🗑️
-                                    Reset</button>
-                                <span id="historyDailyNet"
-                                    style="font-size: 1.1rem; font-weight: 800; padding: 2px 8px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff;">$0.00</span>
+                                    style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); color:#ef4444; border-radius:6px; padding:4px 10px; font-size:0.72rem; cursor:pointer; white-space:nowrap; display: none;">🗑️
+                                    Cancella</button>
                             </div>
                         </div>
                         <div class="history-header">

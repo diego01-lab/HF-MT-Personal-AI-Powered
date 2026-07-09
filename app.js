@@ -939,7 +939,7 @@ function updateLanguage() {
         'lblGrossLoss': 'gross_loss',
         'lblTotalPnL': 'total_pnl',
         'lblAlgoLogic': 'algo_logic',
-        'openPosTitle': 'open_pos',
+        'lblOpenPosText': 'open_pos',
         'btnBuy': 'buy_long',
         'btnSell': 'sell_short',
         'btnClose': 'close_pos',
@@ -962,7 +962,7 @@ function updateLanguage() {
         'lblOpMargin': 'op_margin',
         'lblRealTimePrice': 'realtime_price',
         'lblExecutedTrades': 'executed_trades',
-        'lblHistoryTitle': 'history_title',
+        'lblHistoryText': 'history_title',
         'btnClearHistory': 'clear_history',
         'lblTradeSide': 'trade_side',
         'lblTradePrice': 'trade_price',
@@ -1066,11 +1066,6 @@ function updateLanguage() {
                         // Keep the icon (first part of innerHTML if exists or hardcoded)
                         const iconMap = { 'lblCatCrypto': '🔸', 'lblCatStock': '📈', 'lblCatForex': '💱', 'lblCatCommodity': '⛽' };
                         el.textContent = (iconMap[id] || '') + ' ' + translatedText;
-                    } else if (id === 'lblHistoryTitle' || id === 'openPosTitle') {
-                        const spans = el.querySelectorAll('span');
-                        let spansHTML = '';
-                        spans.forEach(s => spansHTML += s.outerHTML);
-                        el.innerHTML = translatedText + ' ' + spansHTML;
                     } else {
                         if (id.startsWith('lblLogic') || id === 'lblAppDesc' || id === 'lblEduOnly' || translatedText.includes('<')) {
                             el.innerHTML = translatedText;
@@ -6297,6 +6292,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         function renderHistory() {
             if (window.__ctxOverride) return;
             const historyCountBadge = document.getElementById('historyCountBadge');
+            const btnClearHistory = document.getElementById('btnClearHistory');
+            if (btnClearHistory) {
+                btnClearHistory.style.display = brokerViewActive() ? 'none' : 'inline-block';
+            }
             
             let validHistoryCount = 0;
             tradeHistory.forEach(trade => {

@@ -184,7 +184,7 @@ window.ChartManager = (function() {
         
         if (!chartUpdatePending) {
             chartUpdatePending = true;
-            // Throttle rendering at 250ms (4 FPS) to prevent requestAnimationFrame violations
+            // Throttle rendering at 50ms (20 FPS) for smoother real-time chart updates
             setTimeout(() => {
                 requestAnimationFrame(() => {
                     chartUpdatePending = false;
@@ -193,7 +193,7 @@ window.ChartManager = (function() {
                         candleSeries.update(currentCandle);
                     } catch(e) {}
                 });
-            }, 250);
+            }, 50);
         }
     }
 
