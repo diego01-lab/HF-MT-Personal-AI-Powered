@@ -1770,7 +1770,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Anti-churn: età minima di una posizione prima che un segnale opposto
         // possa chiuderla (le inversioni nei primi secondi sono quasi sempre
         // rumore e il giro apri-chiudi brucia lo spread)
-        const MIN_REVERSAL_AGE_MS = 15000;
+        const MIN_REVERSAL_AGE_MS = 60000;
         // Cooldown per simbolo dopo un rifiuto ordine del broker: il bot non
         // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
         const orderRejectCooldown = {};
@@ -1778,7 +1778,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Stop a break-even: quando una posizione raggiunge questo profitto %,
         // lo stop sale al prezzo d'ingresso — da lì in poi il trade non può più
         // chiudere in perdita (aggiustamento "solo-stringere", mai allargare).
-        const BREAKEVEN_ARM_PCT = 0.8;
+        const BREAKEVEN_ARM_PCT = 1.5;
         const restrictedAssets = new Set(); // Per evitare di riprovare preload su asset che danno 403
 
         // --- State variables (Loaded from global scope) ---
@@ -5513,8 +5513,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
                     const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
                     
-                    // SL HFT: diamo respiro per il rumore di fondo (circa un terzo della banda, minimo 0.15%)
-                    let dynamicSL = Math.min(5.0, Math.max(0.15, (volatilityPct / 3)));
+                    const minSL = sym.includes('USDT') ? 0.75 : 0.25;
+                    // SL HFT: diamo respiro per il rumore di fondo
+                    let dynamicSL = Math.min(5.0, Math.max(minSL, (volatilityPct / 3)));
                     
                     // Considera i costi di commissione: TP deve almeno coprire i costi + un po' di margine
                     const netBreakeven = getNetBreakevenPct(sym); 
@@ -5524,7 +5525,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     let dynamicTP = Math.min(15.0, Math.max(minTarget, (dynamicSL * 1.5)));
                     
                     // Se la volatilità è bassissima, forza SL a ridosso per non rimanere incastrati
-                    if (dynamicTP === minTarget) dynamicSL = Math.max(0.10, minTarget / 1.5);
+                    if (dynamicTP === minTarget) dynamicSL = Math.max(minSL, minTarget / 1.5);
 
                     // Filtro evidenza minima: HFT mode -> bastano 4 punti per aprire trade rapidi
                     const totalEvidence = bullScore + bearScore;
@@ -5669,7 +5670,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Helper: Restituisce la stima dei costi percentuali di commissione + spread
         function getNetBreakevenPct(sym) {
-            if (sym.includes('USDT')) return 0.40; // Crypto: fee Alpaca ~0.25% + buffer spread
+            if (sym.includes('USDT')) return 0.65; // Crypto: fee Alpaca ~0.25% * 2 + spread
             if (sym.includes('OANDA')) return 0.05; // Forex: solo spread implicito
             return 0.15; // Azioni: fee assenti, ma calcoliamo 0.15% di scivolamento/spread
         }
@@ -6775,9 +6776,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const bb = calculateBollingerBands(h, Math.min(20, h.length));
                         if (bb && bb.middle) {
                             const volPct = ((bb.upper - bb.lower) / bb.middle) * 100;
-                            const newSL = Math.min(5.0, Math.max(0.5, volPct / 2));
+                            const minSL = sym.includes('USDT') ? 0.75 : 0.25;
+                            const newSL = Math.min(5.0, Math.max(minSL, volPct / 2));
                             pos.dynamicSL = newSL;
-                            pos.dynamicTP = Math.min(15.0, Math.max(1.0, newSL * 1.5));
+                            pos.dynamicTP = Math.min(15.0, Math.max(getNetBreakevenPct(sym) + 0.15, newSL * 1.5));
                         }
                     }
                 }
@@ -6803,11 +6805,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
 
                         if (currentATR && currentATR > 0 && pos.peakPrice) {
-                            // Trailing stop più STRETTO (1.0×ATR, prima 1.5×): blocca il
-                            // profitto su ritracci più piccoli dal massimo raggiunto, così si
-                            // "mette in cascina" prima invece di restituire il guadagno. Resta
-                            // attivo solo in profitto (unrealizedPct > 0.1) → non chiude in perdita.
-                            const trailingDistance = currentATR * 1.0;
+                            // Trailing stop: la distanza deve ignorare il rumore (ATR su 1s è troppo basso).
+                            // Applichiamo un minimo % legato all'asset.
+                            // Resta attivo solo in profitto (unrealizedPct > 0.1) → non chiude in perdita.
+                            const minTrailingPct = sym.includes('USDT') ? 0.005 : 0.002;
+                            const trailingDistance = Math.max(currentATR * 5.0, livePrice * minTrailingPct);
                             const isReversing = pos.type === 'LONG'
                                 ? (livePrice <= pos.peakPrice - trailingDistance)
                                 : (livePrice >= pos.peakPrice + trailingDistance);
