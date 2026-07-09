@@ -879,6 +879,7 @@ function updateLanguage() {
         'lblSettingsTitle': 'settings_title',
         'lblAppVolume': 'app_volume',
         'lblSoundOnOff': 'sound_on_off',
+        'lblMuteNotifications': 'mute_notifications',
         'lblAppInfoRow': 'app_info_row',
         'triTipFh': 'tri_tip_fh',
         'triTipAlp': 'tri_tip_alp',
@@ -3030,6 +3031,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
             updateSoundUI();
+        }
+
+        // --- Silenzia Notifiche ---
+        const chkMuteNotif = document.getElementById('chkMuteNotifications');
+        window.__muteNotifications = localStorage.getItem('sim_mute_notifications') === 'true';
+        if (chkMuteNotif) {
+            chkMuteNotif.checked = window.__muteNotifications;
+            chkMuteNotif.addEventListener('change', () => {
+                window.__muteNotifications = chkMuteNotif.checked;
+                localStorage.setItem('sim_mute_notifications', chkMuteNotif.checked);
+            });
         }
 
         function playCashSound() {
@@ -8251,6 +8263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function showNotification(message, type = 'success') {
+    if (window.__muteNotifications) return;
     const container = document.getElementById('notificationContainer') || createNotificationContainer();
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
