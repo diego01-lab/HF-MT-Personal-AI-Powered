@@ -854,6 +854,9 @@ let grossProfit = parseFloat(localStorage.getItem('sim_gross_profit')) || 0;
 // sim_test_*, oppure il ramo broker da sim_trade_history. Qui solo inizializzazione.
 let tradeHistory = [];
 let grossLoss = parseFloat(localStorage.getItem('sim_gross_loss')) || 0;
+// Flag persistente: l'account Alpaca non è abilitato allo short.
+// Caricato subito all'avvio così le strategie lo leggono correttamente sin dal primo tick.
+window.__alpacaShortNotAllowed = localStorage.getItem('alpacaShortNotAllowed') === 'true';
 
 function updateLanguage() {
     if (!translations || (!translations[currentLang] && !translations.IT)) {
@@ -5531,8 +5534,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
                     }
                     if (signal === 'SELL' && confidence >= 60 && isBearTrend && totalEvidence >= 3) {
-                        // Evitiamo spam log/skip counter: Alpaca non supporta SHORT crypto. Ignoriamo silenziosamente.
-                        if (brokerViewActive() && sym.includes('USDT')) return;
+                        // Non tentare SHORT se: broker Alpaca attivo E (crypto USDT O account non abilitato allo scoperto)
+                        if (brokerViewActive() && (sym.includes('USDT') || window.__alpacaShortNotAllowed)) return;
 
                         console.log(`💎 [CONFIRMED SELL] ${sym} | Conf: ${confidence}% | Trend: BEAR | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
@@ -5650,8 +5653,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!pos) {
                 if (isBullishCross) openTrade('LONG', price, sym);
                 else if (isBearishCross) {
-                    // Evitiamo spam: Alpaca non supporta SHORT crypto
-                    if (brokerViewActive() && sym.includes('USDT')) return;
+                    // Non tentare SHORT se: broker Alpaca attivo E (crypto USDT O account non abilitato allo scoperto)
+                    if (brokerViewActive() && (sym.includes('USDT') || window.__alpacaShortNotAllowed)) return;
                     openTrade('SHORT', price, sym);
                 }
             }
