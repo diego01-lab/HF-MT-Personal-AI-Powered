@@ -7425,13 +7425,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                             updateBackgroundHistoryAndStrategy(sym, price, now, 'CRYPTO', 'binance');
                             processRadarTick(sym, price, now, 'CRYPTO');
                         } else if (msg.T === 'error') {
-                            console.warn("[ALPACA CRYPTO WS] Errore server:", msg.msg);
-                            // Se l'autenticazione fallisce, passa al polling
-                            if (msg.msg && (msg.msg.includes('auth') || msg.msg.includes('unauthorized'))) {
+                            // "invalid syntax" è un errore benigno di Alpaca quando il payload di
+                            // sottoscrizione era vuoto o malformato (es. array vuoto di simboli).
+                            // Lo logghiamo solo in modo silenzioso per non allarmare la console.
+                            const isAuth = msg.msg && (msg.msg.includes('auth') || msg.msg.includes('unauthorized'));
+                            if (isAuth) {
+                                console.warn('[ALPACA CRYPTO WS] Autenticazione fallita:', msg.msg);
                                 window.alpacaCryptoWsFailed = true;
                                 bgAlpacaCryptoWs = null;
                                 alpacaCryptoAuthenticated = false;
                                 startAlpacaPolling();
+                            } else {
+                                console.debug('[ALPACA CRYPTO WS] Messaggio server non critico:', msg.msg);
                             }
                         }
                     });
@@ -7827,13 +7832,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         async function tryFinnhubPreload(symbol) {
             const assetType = getAssetType(symbol);
+            // forex/candle e commodity/candle sono endpoint Premium Finnhub (403 garantito su piano gratuito).
+            // Saltiamo silenziosamente senza fare la chiamata HTTP per evitare spam di errori 403.
+            if (assetType === 'FOREX' || assetType === 'COMMODITY') return null;
             if (window.finnhubForbidden && assetType !== 'CRYPTO') return null;
             if (!finnhubApiKey) return null;
             const key = finnhubApiKey;
             try {
                 let endpoint = 'stock/candle';
-                if (assetType === 'FOREX' || assetType === 'COMMODITY') endpoint = 'forex/candle';
-                else if (assetType === 'CRYPTO') endpoint = 'crypto/candle';
+                if (assetType === 'CRYPTO') endpoint = 'crypto/candle';
                 
                 const to = Math.floor(Date.now() / 1000);
                 // Richiediamo gli ultimi 4 giorni per scavalcare in sicurezza i weekend/festività
