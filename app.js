@@ -1708,7 +1708,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Anti-churn: età minima di una posizione prima che un segnale opposto
         // possa chiuderla (le inversioni nei primi secondi sono quasi sempre
         // rumore e il giro apri-chiudi brucia lo spread)
-        const MIN_REVERSAL_AGE_MS = 90000;
+        const MIN_REVERSAL_AGE_MS = 15000;
         // Cooldown per simbolo dopo un rifiuto ordine del broker: il bot non
         // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
         const orderRejectCooldown = {};
@@ -5307,7 +5307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 stratCooldown[cdKey] = now;
 
                 // POST-TRADE COOLDOWN (3 minuti) per evitare l'overtrading
-                if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < 180000) return;
+                if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < 30000) return;
 
                 // --- Calcolo Indicatori ---
                 const rsi = calculateRSI(history, Math.min(14, history.length - 1));
@@ -5427,18 +5427,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!pos) {
                     // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
                     const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
-                    // SL: diamo respiro per il rumore di fondo (circa metà della banda, minimo 0.5%, max 5%)
-                    const dynamicSL = Math.min(5.0, Math.max(0.5, (volatilityPct / 2)));
-                    // TP: Risk/Reward ratio di 1:1.5
-                    const dynamicTP = Math.min(15.0, Math.max(1.0, (dynamicSL * 1.5)));
+                    
+                    // SL HFT: diamo respiro per il rumore di fondo (circa un terzo della banda, minimo 0.15%)
+                    let dynamicSL = Math.min(5.0, Math.max(0.15, (volatilityPct / 3)));
+                    
+                    // Considera i costi di commissione: TP deve almeno coprire i costi + un po' di margine
+                    const netBreakeven = getNetBreakevenPct(sym); 
+                    const minTarget = netBreakeven + 0.15; // deve guadagnare netto 0.15% minimo
+                    
+                    // TP: Risk/Reward ratio di 1:1.5, con pavimento scalping
+                    let dynamicTP = Math.min(15.0, Math.max(minTarget, (dynamicSL * 1.5)));
+                    
+                    // Se la volatilità è bassissima, forza SL a ridosso per non rimanere incastrati
+                    if (dynamicTP === minTarget) dynamicSL = Math.max(0.10, minTarget / 1.5);
 
-                    // Filtro evidenza minima: con pochi punti totali la "confidenza"
-                    // percentuale è ingannevole (3 punti contro 0 = 100% ma è un
-                    // segnale debolissimo). Servono almeno 6 punti complessivi.
+                    // Filtro evidenza minima: HFT mode -> bastano 4 punti per aprire trade rapidi
                     const totalEvidence = bullScore + bearScore;
 
                     // APERTURA
-                    if (signal === 'BUY' && confidence >= 65 && isBullTrend && totalEvidence >= 6) {
+                    if (signal === 'BUY' && confidence >= 60 && isBullTrend && totalEvidence >= 4) {
                         console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
                         const tpInput = document.getElementById('botTargetProfit');
@@ -5448,7 +5455,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
                     }
-                    if (signal === 'SELL' && confidence >= 65 && isBearTrend && totalEvidence >= 6) {
+                    if (signal === 'SELL' && confidence >= 60 && isBearTrend && totalEvidence >= 4) {
                         // Evitiamo spam log/skip counter: Alpaca non supporta SHORT crypto. Ignoriamo silenziosamente.
                         if (brokerViewActive() && sym.includes('USDT')) return;
 
@@ -5467,28 +5474,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // (rumore) e il segnale contrario deve essere convinto (>= 60%).
                     const posAgeMs = pos.openTime ? (now - pos.openTime) : Infinity;
                     const canReverse = posAgeMs >= MIN_REVERSAL_AGE_MS;
-                    // OPZIONE A (filtro anti-inversione): su un'inversione DEBOLE con posizione
-                    // in PERDITA NON chiudiamo (evita di realizzare piccole perdite su flip
-                    // incerti = churn). Chiudiamo per inversione solo se: il segnale contrario
-                    // è FORTE (≥75% o evidenza netta doppia), OPPURE la posizione è almeno a
-                    // pari (breakeven+). Il taglio delle perdite vere resta allo STOP-LOSS, che
-                    // gira in un ciclo di rischio separato e NON è toccato da questo filtro.
+                    // OPZIONE A (filtro anti-inversione): DISATTIVATO per HFT Scalper.
+                    // Vogliamo flippare rapidamente se il segnale cambia.
                     if (pos.type === 'LONG') {
-                        const unrealizedPct = pos.entryPrice ? (price / pos.entryPrice - 1) * 100 : 0;
-                        const netBreakeven = getNetBreakevenPct(sym);
                         const reversal = (signal === 'SELL' && confidence >= 60) || (net <= -2 && !isBullTrend);
-                        const strongReversal = (signal === 'SELL' && confidence >= 75) || (net <= -4 && !isBullTrend);
-                        if (canReverse && reversal && (strongReversal || unrealizedPct >= netBreakeven)) {
-                            console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
+                        if (canReverse && reversal) {
+                            console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione HFT (Net:${net})`);
                             closeTrade(sym, price, 'AI_REVERSAL');
                         }
                     } else if (pos.type === 'SHORT') {
-                        const unrealizedPct = pos.entryPrice ? (pos.entryPrice / price - 1) * 100 : 0;
-                        const netBreakeven = getNetBreakevenPct(sym);
                         const reversal = (signal === 'BUY' && confidence >= 60) || (net >= 2 && !isBearTrend);
-                        const strongReversal = (signal === 'BUY' && confidence >= 75) || (net >= 4 && !isBearTrend);
-                        if (canReverse && reversal && (strongReversal || unrealizedPct >= netBreakeven)) {
-                            console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione (Net:${net}, PnL:${unrealizedPct.toFixed(2)}%, forte:${strongReversal})`);
+                        if (canReverse && reversal) {
+                            console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione HFT (Net:${net})`);
                             closeTrade(sym, price, 'AI_REVERSAL');
                         }
                     }
