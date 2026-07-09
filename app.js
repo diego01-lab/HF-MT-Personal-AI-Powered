@@ -2679,6 +2679,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }, 0);
                     return; // esce subito dal gestore 'change'
                 }
+            } else if (stage === 0) {
+                if (window.capitalMode !== 'off') window.capitalMode = 'off';
+                setTradingMode(false);
+                const el = document.getElementById('armFH');
+                if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
+                if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
+                // Senza chiave Finnhub in FH non arrivano dati: avvisa e apri il modale.
+                if (!finnhubApiKey) {
+                    showNotification(tr('finnhub_key_required',
+                        'Configura la chiave Finnhub per ricevere i dati in modalità Test (FH).'), 'error');
+                    const mdl = document.getElementById('apiModal');
+                    if (mdl) mdl.classList.remove('hidden');
+                }
             } else if (stage === 1) {
                 // Solo Alpaca Paper: servono le chiavi paper
                 if (!alpacaKeyId || !alpacaSecretKey) {
@@ -2692,6 +2705,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     setTradingMode(true); // spegne Finnhub, accende Paper
                     const el = document.getElementById('armALP');
                     if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
+                    if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
                 }
             } else if (stage === 2) {
                 // ALrt: conto Alpaca REALE — trading OPERATIVO (denaro reale).
@@ -2725,6 +2739,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         setTradingMode(true, { live: true });
                         const el = document.getElementById('armALrt');
                         if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
+                        if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
                         if (brokerTriSwitch) brokerTriSwitch.value = '2';
                         updateTriSwitchLabel(2);
                         showNotification(tr('alrt_live_trading',
@@ -2734,19 +2749,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         handleCtxTransition(prevCtx); // FASE B: salva il contesto locale lasciato
                     }, 0);
                     return; // esce subito dal gestore 'change' (niente [Violation])
-                }
-            } else {
-                // Stadio 0: modalità Test (FH), Finnhub attivo.
-                if (window.capitalMode !== 'off') window.capitalMode = 'off';
-                setTradingMode(false);
-                const el = document.getElementById('armFH');
-                if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
-                // Senza chiave Finnhub in FH non arrivano dati: avvisa e apri il modale.
-                if (!finnhubApiKey) {
-                    showNotification(tr('finnhub_key_required',
-                        'Configura la chiave Finnhub per ricevere i dati in modalità Test (FH).'), 'error');
-                    const mdl = document.getElementById('apiModal');
-                    if (mdl) mdl.classList.remove('hidden');
                 }
             }
             // Riallinea slider + etichetta allo stadio finale (setTradingMode può
@@ -3757,9 +3759,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // La modalità si controlla dal toggle in sidebar: qui salviamo solo le chiavi.
                 // Se il broker è già attivo, riavvia le connessioni con le nuove chiavi.
                 if (useAlpacaBroker) {
-                    checkAlpacaConnection();
-                    initAlpacaDataWs();
-                    initAlpacaCryptoWs();
+                    const el = document.getElementById('armALP');
+                    if (el) {
+                        if (!el.checked) {
+                            el.checked = true;
+                            el.dispatchEvent(new Event('change'));
+                        } else {
+                            // Se era già spuntato (raro), forziamo il riavvio manuale
+                            window.__connAllowed.alp = true;
+                            checkAlpacaConnection();
+                            initAlpacaDataWs();
+                            initAlpacaCryptoWs();
+                        }
+                    }
                 }
                 showNotification("Chiavi Alpaca salvate.", "success");
             });
