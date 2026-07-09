@@ -89,7 +89,7 @@
     "sync_broker": "Sincronizado con Alpaca",
     "sync_test": "Modo Prueba Local — BD Local",
     "no_pending_orders": "Sin órdenes pendientes",
-    "pending_orders_title": "Órdenes Pendientes (Alpaca)",
+    "pending_orders_title": "Órdenes Pendientes",
     "btn_simulate_payment": "Simular Pago (Sin Login)",
     "algo_ai": "IA Avanzada",
     "algo_ema": "EMA Estándar",

@@ -89,7 +89,7 @@
     "sync_broker": "Mit Alpaca synchronisiert",
     "sync_test": "Lokaler Testmodus — Lokale DB",
     "no_pending_orders": "Keine ausstehenden Aufträge",
-    "pending_orders_title": "Ausstehende Aufträge (Alpaca)",
+    "pending_orders_title": "Ausstehende Aufträge",
     "btn_simulate_payment": "Zahlung simulieren (ohne Login)",
     "algo_ai": "Erweiterte KI",
     "algo_ema": "Standard-EMA",

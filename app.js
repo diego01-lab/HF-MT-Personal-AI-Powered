@@ -6396,7 +6396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Layout impilato: sta nella larghezza della colonna senza scrollbar orizzontale
                 row.innerHTML = `
                     <div class="trade-row-top">
-                        <span class="trade-side" title="${typeTip}">${icon} <span style="opacity: 0.7; font-size: 0.7rem; font-weight: normal; margin-right: 4px;">${catLabel}</span> ${trade.type} <span class="trade-sym">${escHtml(trade.sym)}</span></span>
+                        <span class="trade-side" title="${typeTip}">${icon} <strong style="color:var(--text-primary); margin-right:4px; font-size:0.9rem;">${escHtml(trade.sym)}</strong> <span style="opacity: 0.7; font-size: 0.7rem; font-weight: normal; margin-right: 4px;">${catLabel}</span> ${trade.type}</span>
                         <span class="trade-pnl ${pnlClass}">${pnlSign}${formatMoney(trade.pnl, 2, 4)} <small>${pnlSign}${pnlPct.toFixed(2)}%</small></span>
                     </div>
                     <div class="trade-leg">

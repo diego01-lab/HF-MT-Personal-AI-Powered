@@ -89,7 +89,7 @@
     "sync_broker": "Sincronizzato con Alpaca",
     "sync_test": "Modalità Test Locale — DB Locale",
     "no_pending_orders": "Nessun ordine in attesa",
-    "pending_orders_title": "Ordini in Attesa (Alpaca)",
+    "pending_orders_title": "Ordini in Attesa",
     "btn_simulate_payment": "Simula Pagamento (Senza Login)",
     "algo_ai": "AI Avanzata",
     "algo_ema": "EMA Standard",
