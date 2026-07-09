@@ -1618,7 +1618,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const openPositionsListEl = document.getElementById('openPositionsList');
         // Investment controls
         const VALID_SYMBOLS = {
-            CRYPTO: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'MATICUSDT', 'AVAXUSDT', 'LINKUSDT', 'DOTUSDT', 'UNIUSDT', 'LTCUSDT', 'ATOMUSDT'],
+            CRYPTO: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'MATICUSDT', 'AVAXUSDT', 'LINKUSDT', 'DOTUSDT', 'UNIUSDT', 'LTCUSDT', 'ATOMUSDT',
+                     'BTCUSD', 'ETHUSD', 'SOLUSD', 'BCHUSD', 'LTCUSD', 'AAVEUSD', 'LINKUSD', 'UNIUSD', 'BATUSD', 'GRTUSD', 'MKRUSD'],
             STOCK: ['AAPL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'GOOGL', 'META', 'NFLX', 'AMD', 'COIN', 'DIS', 'PYPL', 'BABA', 'NIO', 'INTC'],
             FOREX: ['OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD', 'OANDA:USD_CAD', 'OANDA:NZD_USD', 'OANDA:USD_CHF', 'OANDA:EUR_GBP', 'OANDA:EUR_JPY', 'OANDA:GBP_JPY'],
             COMMODITY: ['OANDA:XAU_USD', 'OANDA:XAG_USD', 'OANDA:BRENT_USD', 'OANDA:WTI_USD', 'OANDA:NATGAS_USD', 'OANDA:COPPER_USD', 'LIT']
