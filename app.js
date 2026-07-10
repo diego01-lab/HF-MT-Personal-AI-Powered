@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.03';
+window.APP_VERSION = 'v.1.0.04';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -478,7 +478,7 @@ async function loadLanguage(lang) {
     if (translations[lang]) return translations[lang]; // già in cache
     try {
         // ?v=N: cache buster — da incrementare quando cambiano le traduzioni
-        const res = await fetch(`languages.${lang.toLowerCase()}.json?v=4`);
+        const res = await fetch(`languages.${lang.toLowerCase()}.json?v=5`);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         translations[lang] = await res.json();
         console.log(`[LANG] Caricato languages.${lang.toLowerCase()}.json (${Object.keys(translations[lang]).length} chiavi)`);
@@ -948,7 +948,7 @@ function updateLanguage() {
         'saveApiBtn': 'btn_save_connect',
         'cancelDepositBtn': 'btn_cancel_back',
         'saveAlpacaBtn': 'btn_save_config',
-        'testAlpacaBtn': 'btn_test_connection',
+        // 'testAlpacaBtn' rimosso dalla mappa: il bottone TEST circolare ha testo fisso "TEST"
         // "Annulla" (non "Chiudi"): btn_close resta ai bottoni chiudi-posizione
         'btnAlpacaClose': 'btn_cancel',
         'lblTestModeTitle': 'test_mode_title',
@@ -3721,6 +3721,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Test connessione Finnhub: verifica la chiave con una quote reale (nessun salvataggio)
+        // Stato colore del bottone TEST circolare dei modali broker:
+        // base = ROSSO (connessione non attiva/fallita), 'busy' = GIALLO
+        // (test in corso), 'ok' = VERDE (connessione riuscita).
+        function setTestBtnState(btn, state) {
+            if (!btn) return;
+            btn.classList.remove('busy', 'ok');
+            if (state === 'busy' || state === 'ok') btn.classList.add(state);
+            btn.disabled = (state === 'busy');
+        }
+
         const testFinnhubBtn = document.getElementById('testFinnhubBtn');
         if (testFinnhubBtn) {
             testFinnhubBtn.addEventListener('click', async () => {
@@ -3729,22 +3739,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showNotification(tr('keys_required_test', 'Inserisci la API Key per il test'), 'error');
                     return;
                 }
-                testFinnhubBtn.textContent = tr('testing', 'Test in corso...');
-                testFinnhubBtn.disabled = true;
+                setTestBtnState(testFinnhubBtn, 'busy');
+                let connOk = false;
                 try {
                     const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=AAPL&token=${encodeURIComponent(k)}`);
                     const data = res.ok ? await res.json().catch(() => null) : null;
                     // Finnhub restituisce {c: prezzo, ...}; con chiave non valida risponde 401/403 o payload vuoto
-                    if (data && typeof data.c === 'number' && data.c > 0) {
-                        showNotification(tr('conn_ok', 'Connessione riuscita: chiave valida.'), 'success');
-                    } else {
-                        showNotification(tr('conn_fail', 'Connessione fallita: chiave non valida o servizio non raggiungibile.'), 'error');
-                    }
+                    connOk = !!(data && typeof data.c === 'number' && data.c > 0);
+                    showNotification(connOk ? tr('conn_ok', 'Connessione riuscita: chiave valida.')
+                        : tr('conn_fail', 'Connessione fallita: chiave non valida o servizio non raggiungibile.'), connOk ? 'success' : 'error');
                 } catch (e) {
                     showNotification(tr('conn_fail', 'Connessione fallita: chiave non valida o servizio non raggiungibile.'), 'error');
                 }
-                testFinnhubBtn.textContent = tr('btn_test_connection', 'Test Connessione');
-                testFinnhubBtn.disabled = false;
+                setTestBtnState(testFinnhubBtn, connOk ? 'ok' : 'fail');
             });
         }
 
@@ -4011,23 +4018,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showNotification(tr('keys_required_test', 'Inserisci API Key e Secret Key per il test'), 'error');
                     return;
                 }
-                testAlpacaLiveBtn.textContent = tr('testing', 'Test in corso...');
-                testAlpacaLiveBtn.disabled = true;
+                setTestBtnState(testAlpacaLiveBtn, 'busy');
+                let connOk = false;
                 try {
                     // Test REALE: legge il conto live (nessuna operazione)
                     const res = await fetch(`${ALPACA_LIVE_BASE}/v2/account`, {
                         headers: { 'apca-api-key-id': k, 'apca-api-secret-key': s }
                     });
-                    if (res.ok) {
-                        showNotification(tr('conn_ok', 'Connessione riuscita: chiavi valide.'), 'success');
-                    } else {
-                        showNotification(tr('conn_fail', 'Connessione fallita: chiavi non valide o servizio non raggiungibile.'), 'error');
-                    }
+                    connOk = res.ok;
+                    showNotification(connOk ? tr('conn_ok', 'Connessione riuscita: chiavi valide.')
+                        : tr('conn_fail', 'Connessione fallita: chiavi non valide o servizio non raggiungibile.'), connOk ? 'success' : 'error');
                 } catch (e) {
                     showNotification(tr('conn_fail', 'Connessione fallita: chiavi non valide o servizio non raggiungibile.'), 'error');
                 }
-                testAlpacaLiveBtn.textContent = tr('btn_test_connection', 'Test Connessione');
-                testAlpacaLiveBtn.disabled = false;
+                setTestBtnState(testAlpacaLiveBtn, connOk ? 'ok' : 'fail');
             });
         }
 
@@ -4304,8 +4308,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             async function testCapital(btn, mode, identEl, keyEl, passEl) {
                 const i = identEl ? identEl.value.trim() : '', k = keyEl ? keyEl.value.trim() : '', p = passEl ? passEl.value.trim() : '';
                 if (!i || !k || !p) { showNotification(tr('keys_required_test', 'Inserisci email, API Key e password per il test'), 'error'); return; }
-                btn.textContent = tr('testing', 'Test in corso...');
-                btn.disabled = true;
+                setTestBtnState(btn, 'busy');
+                let connOk = false;
                 try {
                     const base = mode === 'live' ? CAPITAL_BASES.live : CAPITAL_BASES.demo;
                     const res = await capitalHttp(base, '/api/v1/session', {
@@ -4313,13 +4317,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         headers: { 'X-CAP-API-KEY': k, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ identifier: i, password: p })
                     });
-                    showNotification(res.ok ? tr('conn_ok', 'Connessione riuscita: chiavi valide.')
-                        : tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), res.ok ? 'success' : 'error');
+                    connOk = res.ok;
+                    showNotification(connOk ? tr('conn_ok', 'Connessione riuscita: chiavi valide.')
+                        : tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), connOk ? 'success' : 'error');
                 } catch (e) {
                     showNotification(tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), 'error');
                 }
-                btn.textContent = tr('btn_test_connection', 'Test Connessione');
-                btn.disabled = false;
+                setTestBtnState(btn, connOk ? 'ok' : 'fail');
             }
             const testD = document.getElementById('testCapitalBtn');
             if (testD) testD.addEventListener('click', () => testCapital(testD, 'demo', dIdent, dKey, dPass));
@@ -5004,23 +5008,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showNotification(tr('keys_required_test', 'Inserisci API Key e Secret Key per il test'), 'error');
                     return;
                 }
-                testAlpacaBtn.textContent = tr('testing', 'Test in corso...');
-                testAlpacaBtn.disabled = true;
+                setTestBtnState(testAlpacaBtn, 'busy');
+                let connOk = false;
                 try {
                     // Test REALE contro l'endpoint Paper: legge solo il conto
                     const res = await fetch(`${ALPACA_BASE}/v2/account`, {
                         headers: { 'apca-api-key-id': key, 'apca-api-secret-key': secret }
                     });
-                    if (res.ok) {
-                        showNotification(tr('conn_ok', 'Connessione riuscita: chiavi valide.'), 'success');
-                    } else {
-                        showNotification(tr('conn_fail', 'Connessione fallita: chiavi non valide o servizio non raggiungibile.'), 'error');
-                    }
+                    connOk = res.ok;
+                    showNotification(connOk ? tr('conn_ok', 'Connessione riuscita: chiavi valide.')
+                        : tr('conn_fail', 'Connessione fallita: chiavi non valide o servizio non raggiungibile.'), connOk ? 'success' : 'error');
                 } catch (e) {
                     showNotification(tr('conn_fail', 'Connessione fallita: chiavi non valide o servizio non raggiungibile.'), 'error');
                 }
-                testAlpacaBtn.textContent = tr('btn_test_connection', 'Test Connessione');
-                testAlpacaBtn.disabled = false;
+                setTestBtnState(testAlpacaBtn, connOk ? 'ok' : 'fail');
             });
         }
 

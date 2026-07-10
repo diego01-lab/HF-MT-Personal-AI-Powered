@@ -29,7 +29,7 @@
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"
         integrity="sha384-2Yiz1jBuc53MdRCA3ojcpk7cAoW2uFfKcetY6JKbqUetb537Hq2uPJrqM1Mj2AKx" crossorigin="anonymous"
         defer></script>
-    <link rel="stylesheet" href="styles.css?v=13">
+    <link rel="stylesheet" href="styles.css?v=15">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <meta name="theme-color" content="#0f172a">
@@ -487,8 +487,6 @@
                             data-tooltip="Il radar monitora contemporaneamente tutti i mercati globali">LIVE
                             GLOBALE</span>
                     </div>
-                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 8px 0 12px;" id="radarDesc">
-                        Monitoraggio globale multi-asset attivo...</p>
                     <div id="engineStatus"
                         style="font-size: 0.7rem; color: var(--text-secondary); margin: -6px 0 10px; min-height: 14px;">
                     </div>
@@ -1081,7 +1079,7 @@
                                     data-tooltip="Asset attualmente in portafoglio con guadagno/perdita calcolato in tempo reale (Unrealized PnL)."
                                     style="font-size: 0.8rem; margin-bottom: 8px; display:flex; align-items:center; flex-wrap: nowrap; white-space: nowrap;">
                                     <!-- Ordine uniforme dei 3 pannelli: titolo a sinistra, valore $ al centro, conteggio a destra -->
-                                    <span id="lblOpenPosText">Posizioni Aperte</span>
+                                    <span id="lblOpenPosText">Aperte</span>
                                     <span id="openDailyNet" style="font-size: 0.9rem; font-weight: 800; padding: 2px 4px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin: 0 auto;">$0.00</span>
                                     <span id="openTotalValue" style="display: none;"></span>
                                     <span id="perfOpenCountBadge" style="font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 10px; margin-left: 4px; display: none;">0</span>
@@ -1153,7 +1151,7 @@
                             <div style="display: flex; flex-direction: row; align-items: center; gap: 6px;">
                                 <button id="btnExportHistory"
                                     data-tooltip="Esporta tutta la cronologia in un file CSV"
-                                    style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.35); color:#60a5fa; border-radius:6px; padding:4px 8px; font-size:0.85rem; line-height:1; cursor:pointer;">📥</button>
+                                    style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.35); color:#60a5fa; border-radius:4px; padding:2px 4px; font-size:0.65rem; line-height:1; cursor:pointer;">📥</button>
                             </div>
                         </div>
                         <div class="history-header">
@@ -1310,10 +1308,10 @@
             </ol>
             <input type="text" id="apiKeyInput" placeholder="Inserisci la tua API Key (es. cxyz123...)"
                 class="api-input" />
-            <div class="modal-actions">
-                <button id="testFinnhubBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test Connessione</button>
-                <button id="cancelApiBtn" class="btn btn-secondary" style="flex: 1;">Annulla</button>
-                <button id="saveApiBtn" class="btn btn-primary" style="flex: 2;">Salva</button>
+            <div class="modal-actions" style="align-items: center;">
+                <button id="testFinnhubBtn" class="btn-test-conn" data-tooltip="Test">TEST</button>
+                <button id="cancelApiBtn" class="btn btn-secondary btn-modal-sm">Annulla</button>
+                <button id="saveApiBtn" class="btn btn-primary btn-modal-sm">Salva</button>
             </div>
             <p id="apiErrorMsg" class="error-msg"></p>
         </div>
@@ -1515,8 +1513,6 @@
         <div class="modal-content glass-panel glow">
             <div class="modal-header">
                 <h2 id="lblAlpacaModalTitle" style="color: #60a5fa;">🚀 Configurazione Alpaca Broker</h2>
-                <button class="close-modal"
-                    onclick="document.getElementById('alpacaModal').classList.add('hidden')">&times;</button>
             </div>
             <div class="modal-body">
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
@@ -1554,10 +1550,10 @@
                     </div>
                 </form>
 
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button id="testAlpacaBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test Connessione</button>
-                    <button id="btnAlpacaClose" class="btn-trade" style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('alpacaModal').classList.add('hidden')">Annulla</button>
-                    <button id="saveAlpacaBtn" class="btn-primary" style="flex: 2; background: #60a5fa;">Salva</button>
+                <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                    <button id="testAlpacaBtn" class="btn-test-conn" data-tooltip="Test">TEST</button>
+                    <button id="btnAlpacaClose" class="btn-trade btn-modal-sm" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('alpacaModal').classList.add('hidden')">Annulla</button>
+                    <button id="saveAlpacaBtn" class="btn-primary btn-modal-sm" style="background: #60a5fa;">Salva</button>
                 </div>
             </div>
         </div>
@@ -1568,8 +1564,6 @@
         <div class="modal-content glass-panel glow" style="border-color: rgba(248,113,113,0.45);">
             <div class="modal-header">
                 <h2 id="lblAlpacaLiveModalTitle" style="color: #f87171;">⚠️ Alpaca Trading API (Reale)</h2>
-                <button class="close-modal"
-                    onclick="document.getElementById('alpacaLiveModal').classList.add('hidden')">&times;</button>
             </div>
             <div class="modal-body">
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
@@ -1610,10 +1604,10 @@
                     </div>
                 </form>
 
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button id="testAlpacaLiveBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test Connessione</button>
-                    <button id="btnAlpacaLiveClose" class="btn-trade" style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('alpacaLiveModal').classList.add('hidden')">Annulla</button>
-                    <button id="saveAlpacaLiveBtn" class="btn-primary" style="flex: 2; background: #f87171;">Salva</button>
+                <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                    <button id="testAlpacaLiveBtn" class="btn-test-conn" data-tooltip="Test">TEST</button>
+                    <button id="btnAlpacaLiveClose" class="btn-trade btn-modal-sm" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('alpacaLiveModal').classList.add('hidden')">Annulla</button>
+                    <button id="saveAlpacaLiveBtn" class="btn-primary btn-modal-sm" style="background: #f87171;">Salva</button>
                 </div>
             </div>
         </div>
@@ -1624,8 +1618,6 @@
         <div class="modal-content glass-panel glow" style="border-color: rgba(52,211,153,0.45);">
             <div class="modal-header">
                 <h2 id="lblCapitalModalTitle" style="color: #34d399;">🟢 Configurazione Capital.com Demo</h2>
-                <button class="close-modal"
-                    onclick="document.getElementById('capitalModal').classList.add('hidden')">&times;</button>
             </div>
             <div class="modal-body">
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
@@ -1664,10 +1656,10 @@
                     </div>
                 </form>
 
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button id="testCapitalBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test Connessione</button>
-                    <button id="btnCapitalClose" class="btn-trade" style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('capitalModal').classList.add('hidden')">Annulla</button>
-                    <button id="saveCapitalBtn" class="btn-primary" style="flex: 2; background: #34d399;">Salva</button>
+                <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                    <button id="testCapitalBtn" class="btn-test-conn" data-tooltip="Test">TEST</button>
+                    <button id="btnCapitalClose" class="btn-trade btn-modal-sm" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('capitalModal').classList.add('hidden')">Annulla</button>
+                    <button id="saveCapitalBtn" class="btn-primary btn-modal-sm" style="background: #34d399;">Salva</button>
                 </div>
             </div>
         </div>
@@ -1678,8 +1670,6 @@
         <div class="modal-content glass-panel glow" style="border-color: rgba(248,113,113,0.45);">
             <div class="modal-header">
                 <h2 id="lblCapitalLiveModalTitle" style="color: #f87171;">⚠️ Capital.com Trading (Reale)</h2>
-                <button class="close-modal"
-                    onclick="document.getElementById('capitalLiveModal').classList.add('hidden')">&times;</button>
             </div>
             <div class="modal-body">
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
@@ -1723,10 +1713,10 @@
                     </div>
                 </form>
 
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button id="testCapitalLiveBtn" class="btn-trade btn-test-conn" style="flex: 1; font-size: 0.7rem;">Test Connessione</button>
-                    <button id="btnCapitalLiveClose" class="btn-trade" style="flex: 1; font-size: 0.7rem; background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('capitalLiveModal').classList.add('hidden')">Annulla</button>
-                    <button id="saveCapitalLiveBtn" class="btn-primary" style="flex: 2; background: #f87171;">Salva</button>
+                <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                    <button id="testCapitalLiveBtn" class="btn-test-conn" data-tooltip="Test">TEST</button>
+                    <button id="btnCapitalLiveClose" class="btn-trade btn-modal-sm" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);" onclick="document.getElementById('capitalLiveModal').classList.add('hidden')">Annulla</button>
+                    <button id="saveCapitalLiveBtn" class="btn-primary btn-modal-sm" style="background: #f87171;">Salva</button>
                 </div>
             </div>
         </div>
@@ -1741,7 +1731,7 @@
     <script src="grafico.js?v=2" defer></script>
     <script src="statusbar.js" defer></script>
     <script src="radar.js?v=8" defer></script>
-    <script src="app.js?v=23" defer></script>
+    <script src="app.js?v=25" defer></script>
 </body>
 
 </html>
