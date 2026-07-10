@@ -6953,7 +6953,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <span style="color: var(--text-secondary);">Live: <strong style="color:#60a5fa;" class="pos-live"></strong></span>
                             </div>
                             <div style="font-size: 0.72rem; color: var(--text-secondary);">${tr('value_label', 'Valore')}: <strong style="color:#fff;" class="pos-val"></strong> <span style="opacity:0.6;" class="pos-inv"></span></div>
-                            <div style="font-size: 0.7rem; color: var(--text-secondary);">🎯 TP <strong style="color:#10b981;" class="pos-tp"></strong> · 🛡️ SL <strong style="color:#ef4444;" class="pos-sl"></strong></div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                                <span>🎯 TP <strong style="color:#10b981;" class="pos-tp"></strong></span>
+                                <span>🛡️ SL <strong style="color:#ef4444;" class="pos-sl"></strong></span>
+                            </div>
+                            <div style="font-size: 0.62rem; color: var(--text-secondary); opacity: 0.7; margin-top: 1px;" class="pos-open-datetime"></div>
                         </div>
                         <div style="display: flex; flex-direction: column; align-items: flex-end;">
                             <span style="font-weight: bold; font-size: 1.05rem;" class="pos-pnl-val"></span>
@@ -6998,6 +7002,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateT('.pos-inv', `(Inv: ${formatMoney(invested)})`);
                 updateT('.pos-tp', `${effTP.toFixed(2)}%`);
                 updateT('.pos-sl', effSL > 0 ? `${effSL.toFixed(2)}%` : 'OFF');
+                // Data e ora apertura posizione
+                const openDateStr = pos.openTime
+                    ? new Date(pos.openTime).toLocaleString(uiLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                    : '--';
+                updateT('.pos-open-datetime', `📅 ${openDateStr}`);
 
                 const pnlColor = unrealized >= 0 ? '#10b981' : '#ef4444';
                 updateT('.pos-pnl-val', pnlString); updateC('.pos-pnl-val', pnlColor);
