@@ -3717,7 +3717,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 entryPrice: parseFloat(p.avg_entry_price),
                                 amount: parseFloat(p.qty),
                                 invested: parseFloat(p.cost_basis),
-                                openTime: Date.now(), // Approssimato
+                                openTime: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
                                 fromBroker: true
                             };
                             console.log(`[SYNC] Posizione recuperata da Alpaca: ${botSym}`);
@@ -4531,7 +4531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             lowestPrice: entryPrice,
                             isBot: false,
                             confidence: 50,
-                            openTime: Date.now()
+                            openTime: pos.created_at ? new Date(pos.created_at).getTime() : Date.now()
                         };
                         anyChanges = true;
                     }
