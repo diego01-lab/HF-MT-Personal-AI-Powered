@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.01a';
+window.APP_VERSION = 'v.1.0.02';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -477,7 +477,8 @@ async function loadLanguage(lang) {
     lang = SUPPORTED_LANGS.includes(lang) ? lang : 'IT';
     if (translations[lang]) return translations[lang]; // già in cache
     try {
-        const res = await fetch(`languages.${lang.toLowerCase()}.json`);
+        // ?v=N: cache buster — da incrementare quando cambiano le traduzioni
+        const res = await fetch(`languages.${lang.toLowerCase()}.json?v=4`);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         translations[lang] = await res.json();
         console.log(`[LANG] Caricato languages.${lang.toLowerCase()}.json (${Object.keys(translations[lang]).length} chiavi)`);
@@ -827,6 +828,37 @@ let closingAssets = new Set();
 let brokerEntryBasis = {};
 // Normalizza i simboli per confrontare fill Alpaca (BTC/USD o BTCUSD) e simboli interni (BTCUSDT)
 function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); }
+// Nome asset in forma compatta e leggibile per la UI (ADAUSD, EUR_USD, AAPL):
+// stessa resa in TUTTI i pannelli (Radar, Posizioni, Ordinate, Cronologia).
+function displaySymbol(s) { return (s || '').replace('OANDA:', '').replace('/', '').replace('USDT', 'USD'); }
+// Simbolo interno → formato Alpaca crypto ("BTC/USD"). Difensivo: accetta anche
+// simboli già con slash o senza suffisso USDT. Un solo simbolo malformato nel
+// batch fa rifiutare l'INTERA richiesta quotes con 400 (visto nei log).
+function toAlpacaCryptoSym(s) {
+    s = s || '';
+    if (s.includes('/')) return s;
+    if (s.endsWith('USDT')) return s.slice(0, -4) + '/USD';
+    if (s.endsWith('USD')) return s.slice(0, -3) + '/USD';
+    return s;
+}
+// Prezzo live per un simbolo posizione. Le posizioni sincronizzate dal broker
+// usano i simboli Alpaca (ADAUSD, BTC/USD) mentre i prezzi del feed sono
+// indicizzati con i simboli interni (ADAUSDT): senza queste varianti il lookup
+// falliva e la UI mostrava il prezzo di ENTRATA al posto del Live.
+function getLivePriceFor(sym) {
+    const gp = window.globalPrices;
+    if (!gp) return 0;
+    let p = gp[sym];
+    if (p > 0) return p;
+    const s = (sym || '').replace('/', '');       // BTC/USD → BTCUSD
+    p = gp[s];
+    if (p > 0) return p;
+    if (s.endsWith('USD')) {
+        p = gp[s + 'T'];                           // ADAUSD → ADAUSDT
+        if (p > 0) return p;
+    }
+    return 0;
+}
 let activePositions = {};
 let tradeCooldowns = {};
 let autoBuyPending = null;
@@ -1668,8 +1700,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const openPositionsListEl = document.getElementById('openPositionsList');
         // Investment controls
         const VALID_SYMBOLS = {
+            // SOLO formato interno XXXUSDT: le API Alpaca vogliono "BTC/USD" e la
+            // conversione fa .replace('USDT','/USD'). I simboli in formato misto
+            // (es. 'BCHUSD') restavano malformati e Alpaca rispondeva 400 all'INTERO
+            // batch di quotes → niente prezzi crypto. Per i simboli-posizione senza
+            // slash (ADAUSD dei sync broker) c'è già il fallback in getAssetType.
             CRYPTO: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'MATICUSDT', 'AVAXUSDT', 'LINKUSDT', 'DOTUSDT', 'UNIUSDT', 'LTCUSDT', 'ATOMUSDT',
-                     'BTCUSD', 'ETHUSD', 'SOLUSD', 'BCHUSD', 'LTCUSD', 'AAVEUSD', 'LINKUSD', 'UNIUSD', 'BATUSD', 'GRTUSD', 'MKRUSD'],
+                     'BCHUSDT', 'AAVEUSDT', 'BATUSDT', 'GRTUSDT', 'MKRUSDT'],
             STOCK: ['AAPL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'GOOGL', 'META', 'NFLX', 'AMD', 'COIN', 'DIS', 'PYPL', 'BABA', 'NIO', 'INTC'],
             FOREX: ['OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD', 'OANDA:USD_CAD', 'OANDA:NZD_USD', 'OANDA:USD_CHF', 'OANDA:EUR_GBP', 'OANDA:EUR_JPY', 'OANDA:GBP_JPY'],
             COMMODITY: ['OANDA:XAU_USD', 'OANDA:XAG_USD', 'OANDA:BRENT_USD', 'OANDA:WTI_USD', 'OANDA:NATGAS_USD', 'OANDA:COPPER_USD', 'LIT']
@@ -1858,6 +1895,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const TEST_DEFAULT_CAPITAL = 1000;
         localStorage.removeItem('sim_is_resetting');
         portfolioBalance = Math.round((parseFloat(localStorage.getItem('sim_portfolio_balance')) || 0) * 100) / 100;
+
+        // Portafogli di TEST "usa e getta" (scelta utente): a ogni AVVIO dell'app
+        // i contesti locali (FH / CAP-D) ripartono SEMPRE puliti a $1000 —
+        // posizioni aperte (simulate) e cronologia comprese. Il cambio scheda
+        // durante la sessione NON azzera nulla: il reset avviene solo qui al boot.
+        ['fh', 'capd'].forEach(ctx => {
+            localStorage.removeItem('sim_ctx_' + ctx);
+            localStorage.removeItem('broker_pnl_' + ctx);
+            localStorage.removeItem('broker_deposited_' + ctx);
+        });
+        console.log(`[TEST] Portafogli FH/CAP-D azzerati all'avvio: capitale $${TEST_DEFAULT_CAPITAL}, nessuna posizione, cronologia vuota.`);
 
         if (!useAlpacaBroker) {
             // ===== MODALITÀ TEST: recupera contesto se esiste =====
@@ -2152,7 +2200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             let eq = parseFloat(st.tradingCapital) || 0;
             for (const sym in (st.activePositions || {})) {
                 const p = st.activePositions[sym];
-                const lp = globalPrices[sym] || p.entryPrice;
+                const lp = getLivePriceFor(sym) || p.entryPrice;
                 const unreal = p.type === 'LONG' ? (lp - p.entryPrice) * p.amount : (p.entryPrice - lp) * p.amount;
                 eq += (parseFloat(p.invested) || 0) + unreal;
             }
@@ -2240,7 +2288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             for (const sym in activePositions) {
                 const pos = activePositions[sym];
                 if (!pos || pos.isActuallyClosing) continue;
-                const livePrice = globalPrices[sym] || pos.entryPrice;
+                const livePrice = getLivePriceFor(sym) || pos.entryPrice;
                 if (!livePrice || livePrice <= 0) continue;
                 const unrealizedPct = pos.type === 'LONG'
                     ? (livePrice / pos.entryPrice - 1) * 100
@@ -2519,6 +2567,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 }, 1200);
             }
+            // Box "Sync.": al cambio scheda broker riparte da 0%; nelle modalità
+            // senza sync broker (Finnhub/Capital) il box viene nascosto.
+            setSyncProgress(useBroker ? 0 : null);
             updateStatusDots();
             updateTestLabel();
             updateWalletUI();
@@ -2614,6 +2665,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) { /* variabili feed non ancora inizializzate (startup) */ }
             };
             const revert = (ctx) => { setTimeout(window.syncConnToggles, 150); };
+            // All'avvio di una connessione broker mostra SUBITO la sua scheda
+            // (dashboard): chi collega un broker si aspetta di vederne i dati.
+            // Per i conti REALI (ALrt/CAPrt) resta la conferma di applyBrokerSwitch.
+            const CTX_STAGE = { fh: 0, alp: 1, alrt: 2, capd: 3, capl: 4 };
+            const showBrokerTab = (ctx) => {
+                const cur = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
+                if (cur === ctx) return; // già sulla scheda di questo broker
+                applyBrokerSwitch(CTX_STAGE[ctx]);
+            };
             const handlers = {
                 fh: (on) => {
                     window.__connAllowed.fh = on;
@@ -2623,6 +2683,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         localStorage.setItem('sim_use_finnhub', 'true');
                         initBackgroundConnections();
                         showNotification('Feed Finnhub collegato.', 'success');
+                        showBrokerTab('fh');
                     } else {
                         useFinnhubData = false;
                         localStorage.setItem('sim_use_finnhub', 'false');
@@ -2643,6 +2704,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         startAlpacaPolling();
                         checkAlpacaConnection();
                         showNotification('Collegamento Alpaca attivo (dati + sync conto).', 'success');
+                        showBrokerTab('alp');
                     } else {
                         if (bgAlpacaWs) { try { bgAlpacaWs.close(); } catch (_) { } bgAlpacaWs = null; }
                         if (bgAlpacaCryptoWs) { try { bgAlpacaCryptoWs.close(); } catch (_) { } bgAlpacaCryptoWs = null; }
@@ -2656,7 +2718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alrt: (on) => {
                     if (on && (!alpacaLiveKeyId || !alpacaLiveSecretKey)) { showNotification('Configura le chiavi Alpaca REALI per collegare il monitor ALrt.', 'error'); const m = document.getElementById('alpacaLiveModal'); if (m) m.classList.remove('hidden'); return revert('alrt'); }
                     window.__connWanted.alrt = on;
-                    if (on) { checkAlpacaLiveConnection(); showNotification('Monitor conto Alpaca REALE collegato.', 'success'); }
+                    if (on) { checkAlpacaLiveConnection(); showNotification('Monitor conto Alpaca REALE collegato.', 'success'); showBrokerTab('alrt'); }
                     else showNotification('Monitor conto Alpaca REALE scollegato.', 'info');
                 },
                 capd: (on) => {
@@ -2665,6 +2727,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (!capDemoKey || !capDemoIdent || !capDemoPass) { window.__connAllowed.capd = false; showNotification('Configura le chiavi Capital.com Demo per collegare il feed.', 'error'); const m = document.getElementById('capitalModal'); if (m) m.classList.remove('hidden'); return revert('capd'); }
                         startCapitalPolling();
                         showNotification('Feed Capital.com Demo collegato.', 'success');
+                        showBrokerTab('capd');
                     } else {
                         stopCapitalPolling();
                         showNotification('Feed Capital.com Demo scollegato.', 'info');
@@ -2674,6 +2737,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (on && (!capLiveKey || !capLiveIdent || !capLivePass)) { showNotification('Configura le chiavi Capital.com (reale) per collegare il conto.', 'error'); const m = document.getElementById('capitalLiveModal'); if (m) m.classList.remove('hidden'); return revert('capl'); }
                     window.__connWanted.capl = on;
                     showNotification(on ? 'Conto Capital.com REALE collegato (monitoraggio).' : 'Conto Capital.com REALE scollegato.', on ? 'success' : 'info');
+                    if (on) showBrokerTab('capl');
                 }
             };
             for (const ctx in inputs) {
@@ -2868,7 +2932,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Pulizia Dust all'avvio
         for (let sym in activePositions) {
             const pos = activePositions[sym];
-            const currentPrice = globalPrices[sym] || pos.entryPrice;
+            const currentPrice = getLivePriceFor(sym) || pos.entryPrice;
             if (pos.amount * currentPrice < 1.0) {
                 console.warn(`[STARTUP] Rimosso dust asset: ${sym}`);
                 delete activePositions[sym];
@@ -3287,7 +3351,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             for (let s in activePositions) {
                 const p = activePositions[s];
                 investedTotal += p.invested;
-                const livePrice = globalPrices[s] || p.entryPrice;
+                const livePrice = getLivePriceFor(s) || p.entryPrice;
                 const unreal = p.type === 'LONG'
                     ? (livePrice - p.entryPrice) * p.amount
                     : (p.entryPrice - livePrice) * p.amount;
@@ -3399,7 +3463,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             let hasLocal = false;
             for (let s in activePositions) {
                 const p = activePositions[s];
-                const lp = globalPrices[s] || p.entryPrice;
+                const lp = getLivePriceFor(s) || p.entryPrice;
                 localUnreal += p.type === 'LONG' ? (lp - p.entryPrice) * p.amount : (p.entryPrice - lp) * p.amount;
                 hasLocal = true;
             }
@@ -3717,7 +3781,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 entryPrice: parseFloat(p.avg_entry_price),
                                 amount: parseFloat(p.qty),
                                 invested: parseFloat(p.cost_basis),
-                                openTime: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
+                                // /v2/positions non ha created_at: l'ora reale arriva dai FILL (syncAlpacaHistory)
+                                openTime: p.created_at ? new Date(p.created_at).getTime() : null,
                                 fromBroker: true
                             };
                             console.log(`[SYNC] Posizione recuperata da Alpaca: ${botSym}`);
@@ -4276,6 +4341,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         window.syncAlpacaCryptoAssets = syncAlpacaCryptoAssets;
 
+        // --- Box "Sync." (pannello Connessioni Broker) ---
+        // Mostra la % di avanzamento della sincronizzazione col broker:
+        // 0% avvio → 25% conto → 50% posizioni → 75% ordini → 100% storico.
+        // pct = null nasconde il box (modalità senza broker da sincronizzare).
+        function setSyncProgress(pct) {
+            const box = document.getElementById('syncProgressBox');
+            const val = document.getElementById('syncProgressPct');
+            if (!box || !val) return;
+            if (pct === null) { box.style.display = 'none'; return; }
+            box.style.display = 'flex';
+            val.textContent = `${Math.round(pct)}%`;
+        }
+
         // LED ALrt + sincronizzazione del conto REALE (stadio 2 del tri-switch).
         // Stessa logica della modalità Paper: conto, posizioni, ordini e storico
         // vengono sincronizzati — ma in SOLA LETTURA (nessun ordine, mai).
@@ -4294,6 +4372,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             dot.className = 'status-dot warning'; // giallo durante la verifica
+            setSyncProgress(0);
             try {
                 const res = await fetch(`${ALPACA_LIVE_BASE}/v2/account`, {
                     headers: {
@@ -4309,9 +4388,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!window.liveMonitorActive) return;
                     // Sincronizzazione del portafoglio reale (stessa logica Paper)
                     applyBrokerAccountSnapshot(data);
+                    setSyncProgress(25);
                     await syncAlpacaPositions();
+                    setSyncProgress(50);
                     await syncAlpacaOrders();
+                    setSyncProgress(75);
                     await syncAlpacaHistory();
+                    setSyncProgress(100);
                 } else {
                     dot.className = 'status-dot error';
                     dot.style.backgroundColor = '#ef4444';
@@ -4403,6 +4486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             dot.className = 'status-dot warning'; // Giallo durante il check
+            setSyncProgress(0);
             try {
                 // 1. Verifica Account e Saldo
                 const url = `${ALPACA_BASE}/v2/account`;
@@ -4428,6 +4512,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // Sincronizzazione Capitale Avanzata (Mirroring Alpaca Dashboard)
                     applyBrokerAccountSnapshot(data);
+                    setSyncProgress(25);
 
                     // Ultima equity nota per contesto Alpaca (per il totale portafoglio header)
                     window.__equityByCtx = window.__equityByCtx || {};
@@ -4442,8 +4527,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // Sincronizza posizioni e cronologia
                     await syncAlpacaPositions();
+                    setSyncProgress(50);
                     await syncAlpacaOrders();
+                    setSyncProgress(75);
                     await syncAlpacaHistory();
+                    setSyncProgress(100);
                 } else {
                     const errData = await response.json();
                     console.error("[ALPACA] Dettaglio Errore:", errData);
@@ -4531,7 +4619,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             lowestPrice: entryPrice,
                             isBot: false,
                             confidence: 50,
-                            openTime: pos.created_at ? new Date(pos.created_at).getTime() : Date.now()
+                            // /v2/positions NON fornisce l'ora di apertura (created_at non esiste):
+                            // lasciamo null e la ricaviamo dal primo FILL in syncAlpacaHistory.
+                            // Mai Date.now(): mostrerebbe l'ora del sync, non quella di apertura.
+                            openTime: pos.created_at ? new Date(pos.created_at).getTime() : null
                         };
                         anyChanges = true;
                     }
@@ -4744,6 +4835,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // (entry=exit, pnl=0) filtrata da vista e statistiche.
                         pushRow('SHORT', price, qty, 0, null);
                     });
+
+                    // ORA DI APERTURA REALE: il basis ricostruito dai FILL conserva il
+                    // timestamp del PRIMO fill della posizione ancora aperta (b.time).
+                    // Le posizioni recuperate dal sync broker non hanno created_at e
+                    // resterebbero senza ora (o con l'ora del sync, se persistita da
+                    // versioni precedenti): qui le correggiamo. Regola: vince il
+                    // timestamp più VECCHIO, così non posticipiamo mai un'ora già
+                    // corretta impostata all'invio dell'ordine locale.
+                    let openTimeFixed = false;
+                    for (const sym in activePositions) {
+                        const posOpen = activePositions[sym];
+                        const nsOpen = normFillSym(sym);
+                        const basis = posOpen.type === 'SHORT' ? shortBasis[nsOpen] : longBasis[nsOpen];
+                        if (basis && basis.qty > EPS && basis.time && (!posOpen.openTime || basis.time < posOpen.openTime)) {
+                            posOpen.openTime = basis.time;
+                            openTimeFixed = true;
+                        }
+                    }
+                    if (openTimeFixed) {
+                        persistData();
+                        renderOpenPositions();
+                    }
 
 
                     // Eliminato ricalcolo iterativo che distruggeva lo storico lifetime.
@@ -5003,6 +5116,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ChartManager.setHistoricalData(data);
                     const lastPrice = data[data.length - 1].close;
                     currentPrice = lastPrice;
+                    lastCandleTime = data[data.length - 1].time;
+                    // Estende SUBITO il grafico all'ora corrente con l'ultimo prezzo
+                    // live: senza, l'ultima candela restava a quella delle barre API.
+                    const lpNow = getLivePriceFor(symbol);
+                    if (lpNow > 0) {
+                        currentPrice = lpNow;
+                        ChartManager.pushPrice(lpNow, Math.floor(Date.now() / 1000));
+                    }
                     if (typeof updatePriceUI === 'function') updatePriceUI();
                     console.log(`[CHART] Main series popolata (lazy switch) per ${symbol}`);
                 } else if (!data && assetPairSelect && assetPairSelect.value === symbol) {
@@ -5305,7 +5426,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!confirm(`Vuoi davvero rimuovere ${sym} SOLO dal simulatore? La posizione reale sul broker RESTERÀ APERTA. Usa questo solo se hai già gestito l'ordine manualmente.`)) return;
 
             const pos = activePositions[sym];
-            const price = globalPrices[sym] || pos.entryPrice;
+            const price = getLivePriceFor(sym) || pos.entryPrice;
             const pnl = pos.type === 'LONG' ? (price - pos.entryPrice) * pos.amount : (pos.entryPrice - price) * pos.amount;
 
             addTradeToHistory(pos.type, pos.entryPrice, price, pnl, pos.amount, sym, pos.openTime, Date.now(), false, 'FORCE_LOCAL');
@@ -5598,14 +5719,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 'BUY': '#10b981', 'SELL': '#ef4444', 'HOLD': '#94a3b8',
                 'EXIT_LONG': '#f59e0b', 'EXIT_SHORT': '#f59e0b'
             };
-            const signalEmojis = {
-                'BUY': '🟢', 'SELL': '🔴', 'HOLD': '⚪', 'EXIT_LONG': '🟡', 'EXIT_SHORT': '🟡'
-            };
             const color = signalColors[decision.signal] || '#94a3b8';
-            const emoji = signalEmojis[decision.signal] || '🤖';
             const assetIcons = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' };
             const assetIcon = assetIcons[type] || '💰';
-            const timeStr = new Date().toLocaleTimeString('it-IT', { hour12: false });
+            // HH:MM senza secondi: lascia spazio al simbolo (leggibilità prima di tutto)
+            const timeStr = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const dispSym = displaySymbol(sym);
 
             // Add to radar panel as AI signal
             const radarEl = document.getElementById('radarList');
@@ -5615,8 +5734,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 el.dataset.type = type;
                 el.style.borderLeft = `3px solid ${color}`;
                 el.innerHTML = `
-                    <span style="font-weight:bold;font-size:0.85rem;">${emoji} ${assetIcon} <span style="color:${color}">${decision.signal}</span> ${sym}</span>
-                    <span style="font-size:0.70rem;color:var(--text-secondary);">${decision.confidence}% • ${timeStr}</span>
+                    <span style="font-weight:bold;font-size:0.72rem;"><span style="color:#fff;">${assetIcon} ${dispSym}</span> <span style="color:${color}">${decision.signal}</span></span>
+                    <span style="font-size:0.62rem;color:var(--text-secondary);">${decision.confidence}% • ${timeStr}</span>
                 `;
                 el.title = decision.reasoning;
                 radarEl.prepend(el);
@@ -6444,10 +6563,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const reasonTip = reasonLabels[trade.reason] || reasonLabels['MANUAL'];
                 const typeTip = typeLabels[trade.type] || '';
 
-                // Layout impilato: sta nella larghezza della colonna senza scrollbar orizzontale
+                // Layout impilato: sta nella larghezza della colonna senza scrollbar orizzontale.
+                // Header uniforme agli altri pannelli: icona + simbolo bianco 0.85rem,
+                // etichetta categoria maiuscola piccola, badge direzione a pillola.
+                const typeBadgeColor = trade.type === 'LONG' ? '#10b981' : '#ef4444';
                 row.innerHTML = `
                     <div class="trade-row-top">
-                        <span class="trade-side" title="${typeTip}">${icon} <strong style="color:var(--text-primary); margin-right:4px; font-size:0.9rem;">${escHtml(trade.sym)}</strong> <span style="opacity: 0.7; font-size: 0.7rem; font-weight: normal; margin-right: 4px;">${catLabel}</span> ${trade.type}</span>
+                        <span class="trade-side" title="${typeTip}">${icon} <strong style="color:#fff; margin-right:4px; font-size:0.85rem;">${escHtml(displaySymbol(trade.sym))}</strong> <span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; font-weight: normal; margin-right: 4px;">${catLabel}</span> <span style="font-size: 0.6rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; background: ${typeBadgeColor}26; color: ${typeBadgeColor};">${trade.type}</span></span>
                         <span class="trade-pnl ${pnlClass}">${pnlSign}${formatMoney(trade.pnl, 2, 4)} <small>${pnlSign}${pnlPct.toFixed(2)}%</small></span>
                     </div>
                     <div class="trade-leg">
@@ -6602,7 +6724,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             let openMarketValueTotal = 0;
             for (let sym in activePositions) {
                 const p = activePositions[sym];
-                const livePrice = globalPrices[sym] || p.entryPrice;
+                const livePrice = getLivePriceFor(sym) || p.entryPrice;
                 let pnl = 0;
                 if (p.brokerUnrealizedPnL !== undefined && brokerViewActive()) {
                     pnl = p.brokerUnrealizedPnL;
@@ -6795,7 +6917,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             for (let sym in activePositions) {
                 const pos = activePositions[sym];
-                const livePrice = globalPrices[sym] || pos.entryPrice;
+                const livePrice = getLivePriceFor(sym) || pos.entryPrice;
                 const cat = getAssetType(sym);
 
                 let unrealized;
@@ -6936,33 +7058,39 @@ document.addEventListener('DOMContentLoaded', async () => {
                     el.className = `open-position ${pos.type}`;
                     el.innerHTML = `
                     <div class="open-position-header">
-                        <span style="font-weight: bold; font-size: 0.9rem;">
+                        <span style="font-weight: bold; font-size: 0.85rem; color: #fff; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                             <span class="pos-cat-icon"></span> <span class="pos-sym"></span>
-                            <span style="font-size: 0.72rem; font-weight: normal; margin-left: 4px; opacity:0.8;" class="pos-type-badge"></span>
-                            <span style="font-size: 0.65rem; color: var(--text-secondary); margin-left: 8px; font-weight: normal;" class="pos-time"></span>
+                            <span style="font-size: 0.6rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; margin-left: 4px;" class="pos-type-badge"></span>
+                            <span style="font-size: 0.62rem; color: var(--text-secondary); margin-left: 6px; font-weight: normal;" class="pos-time"></span>
                         </span>
                         <div class="pos-actions" style="display: flex; gap: 8px;">
                             <button class="btn-close-pos" onclick="window.closeTradeGlobal('${sym}')"></button>
                             <button class="btn-force-close" onclick="window.forceCloseLocal('${sym}')" style="display:none;"></button>
                         </div>
                     </div>
-                    <div class="open-position-pnl">
-                        <div style="display: flex; flex-direction: column; gap: 2px;">
-                            <div style="font-size: 0.72rem; display: flex; gap: 8px;">
-                                <span style="color: var(--text-secondary);">${tr('pos_entry', 'Entrata')}: <strong style="color:#fff;" class="pos-entry"></strong></span>
-                                <span style="color: var(--text-secondary);">Live: <strong style="color:#60a5fa;" class="pos-live"></strong></span>
-                            </div>
-                            <div style="font-size: 0.72rem; color: var(--text-secondary);">${tr('value_label', 'Valore')}: <strong style="color:#fff;" class="pos-val"></strong> <span style="opacity:0.6;" class="pos-inv"></span></div>
-                            <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                                <span>🎯 TP <strong style="color:#10b981;" class="pos-tp"></strong></span>
-                                <span>🛡️ SL <strong style="color:#ef4444;" class="pos-sl"></strong></span>
-                            </div>
-                            <div style="font-size: 0.62rem; color: var(--text-secondary); opacity: 0.7; margin-top: 1px;" class="pos-open-datetime"></div>
+                    <div style="display: flex; flex-direction: column; gap: 3px;">
+                        <!-- Entrata/Live e Valore/(Inv) su TUTTA la larghezza della card
+                             (nowrap = mai su due righe). Etichette maiuscole piccole +
+                             valori bianchi: stessi token grafici di Ordinate/Cronologia. -->
+                        <div style="font-size: 0.75rem; display: flex; justify-content: space-between; gap: 6px; white-space: nowrap;">
+                            <span><span class="trade-leg-badge in">IN</span> <strong style="color:#fff;" class="pos-entry"></strong></span>
+                            <span><span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">Live</span> <strong style="color:#60a5fa;" class="pos-live"></strong></span>
                         </div>
-                        <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                            <span style="font-weight: bold; font-size: 1.05rem;" class="pos-pnl-val"></span>
+                        <!-- IN Inv.@investito a sinistra, Valore @attuale (dinamico) a destra -->
+                        <div style="font-size: 0.75rem; display: flex; justify-content: space-between; gap: 6px; white-space: nowrap;">
+                            <span><span class="trade-leg-badge in">IN</span> <span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">Inv.</span> <strong style="color:#fff;" class="pos-inv"></strong></span>
+                            <span><span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">${tr('value_label', 'Valore')}</span> <strong style="color:#fff;" class="pos-val"></strong></span>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; gap: 12px; white-space: nowrap; margin-top: 2px;">
+                            <span>🎯 TP <strong style="color:#10b981;" class="pos-tp"></strong></span>
+                            <span>🛡️ SL <strong style="color:#ef4444;" class="pos-sl"></strong></span>
+                        </div>
+                        <!-- PnL dinamico ($ e %) sotto la riga TP/SL -->
+                        <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;">
+                            <span style="font-weight: bold; font-size: 1rem;" class="pos-pnl-val"></span>
                             <span style="font-size: 0.7rem; opacity: 0.9;" class="pos-roi-val"></span>
                         </div>
+                        <div style="font-size: 0.62rem; color: var(--text-secondary); opacity: 0.7;" class="pos-open-datetime"></div>
                     </div>`;
                     openPositionsListEl.appendChild(el);
                     el._v = {};
@@ -6976,7 +7104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const updateC = (sel, color) => { if (el._v[sel + '_c'] !== color) { el._q(sel).style.color = color; el._v[sel + '_c'] = color; } };
 
                 updateT('.pos-cat-icon', catIcon);
-                updateT('.pos-sym', sym);
+                updateT('.pos-sym', displaySymbol(sym));
                 updateT('.pos-type-badge', pos.type);
                 updateT('.pos-time', `${timeStr} (${durationStr})`);
 
@@ -6996,10 +7124,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     el._v.force = showForce;
                 }
 
-                updateT('.pos-entry', formatMoney(pos.entryPrice, decimals, decimals));
+                updateT('.pos-entry', `@ ${formatMoney(pos.entryPrice, decimals, decimals)}`);
                 updateT('.pos-live', formatMoney(livePrice, decimals, decimals));
-                updateT('.pos-val', formatMoney(marketValue));
-                updateT('.pos-inv', `(Inv: ${formatMoney(invested)})`);
+                updateT('.pos-val', `@ ${formatMoney(marketValue)}`);
+                updateT('.pos-inv', `@ ${formatMoney(invested)}`);
                 updateT('.pos-tp', `${effTP.toFixed(2)}%`);
                 updateT('.pos-sl', effSL > 0 ? `${effSL.toFixed(2)}%` : 'OFF');
                 // Data e ora apertura posizione
@@ -7520,7 +7648,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Batch poll dei prezzi crypto via REST usando QUOTES (più frequenti dei trades)
                 const cryptoSyms = VALID_SYMBOLS.CRYPTO;
-                const alpacaSyms = cryptoSyms.map(s => s.replace('USDT', '/USD')).join(',');
+                const alpacaSyms = cryptoSyms.map(toAlpacaCryptoSym).join(',');
                 // latest/quotes: restituisce bid/ask. Molto più reattivo su Alpaca Paper rispetto ai trades
                 const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/latest/quotes?symbols=${encodeURIComponent(alpacaSyms)}`;
 
@@ -7551,7 +7679,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) {
                     // Errori di rete: silenzioso, riproveremo al prossimo tick
                 }
-            }, 2000); // 2 secondi: altissima reattività senza sfondare i rate limits (200 req/min)
+            }, 1000); // 1 secondo: grafico più reattivo; 60 req/min, ben sotto il rate limit Alpaca (200 req/min)
         }
 
         function isMarketOpen(type) {
@@ -7756,7 +7884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let cryptoSymbols = [];
                 VALID_SYMBOLS.CRYPTO.forEach(s => {
                     if (!activeAlpacaSubs.has(s + "_CRY")) {
-                        cryptoSymbols.push(s.replace('USDT', '/USD'));
+                        cryptoSymbols.push(toAlpacaCryptoSym(s));
                     }
                 });
 
@@ -7809,9 +7937,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Preload history via Alpaca Crypto API (solo in broker mode, Paper o REALE)
                     const _dk = getBrokerHttp();
                     if (_dk.key && _dk.secret) { // Allow preload even on Finnhub tab
-                        const alpacaSym = symbol.replace('USDT', '/USD');
+                        const alpacaSym = toAlpacaCryptoSym(symbol);
                         const _nowIso = new Date().toISOString();
-                        const url = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${alpacaSym}&timeframe=1Min&limit=100&end=${_nowIso}`;
+                        // Per l'asset VISUALIZZATO nel grafico: 7 giorni di barre 15Min.
+                        // Per gli altri (solo warm-up radar/indicatori): 100 barre 1Min.
+                        const _isChartSym = assetPairSelect && assetPairSelect.value === symbol;
+                        const _weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                        const url = _isChartSym
+                            ? `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${alpacaSym}&timeframe=15Min&start=${_weekAgoIso}&end=${_nowIso}&limit=1000`
+                            : `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${alpacaSym}&timeframe=1Min&limit=100&end=${_nowIso}`;
                         const res = await fetch(url, {
                             headers: { 'apca-api-key-id': _dk.key, 'apca-api-secret-key': _dk.secret }
                         });
@@ -7845,6 +7979,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         ChartManager.setHistoricalData(historicalData);
                         const lastPrice = historicalData[historicalData.length - 1].close;
                         currentPrice = lastPrice;
+                        lastCandleTime = historicalData[historicalData.length - 1].time;
+                        // Anche all'AVVIO il grafico arriva all'ora corrente: estende
+                        // subito l'ultima candela con il prezzo live se disponibile.
+                        const lpBoot = getLivePriceFor(symbol);
+                        if (lpBoot > 0) {
+                            currentPrice = lpBoot;
+                            ChartManager.pushPrice(lpBoot, Math.floor(Date.now() / 1000));
+                        }
                         updatePriceUI();
                         console.log(`[CHART] Main series popolata per ${symbol}`);
                     }
@@ -7879,11 +8021,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (assetType === 'CRYPTO') endpoint = 'crypto/candle';
                 
                 const to = Math.floor(Date.now() / 1000);
-                // Richiediamo gli ultimi 4 giorni per scavalcare in sicurezza i weekend/festività
-                // a prescindere dallo stato attuale (aperto/chiuso) del mercato.
-                const from = to - (4 * 24 * 60 * 60); 
-                
-                const url = `https://finnhub.io/api/v1/${endpoint}?symbol=${encodeURIComponent(symbol)}&resolution=1&from=${from}&to=${to}&token=${key}`;
+                // Ultimi 7 giorni di barre da 15 minuti: storico grafico esteso e
+                // abbastanza ampio da scavalcare weekend/festività.
+                const from = to - (7 * 24 * 60 * 60);
+
+                const url = `https://finnhub.io/api/v1/${endpoint}?symbol=${encodeURIComponent(symbol)}&resolution=15&from=${from}&to=${to}&token=${key}`;
                 const res = await fetch(url);
                 if (res.ok) {
                     const data = await res.json();
@@ -7895,8 +8037,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 open: data.o[i], high: data.h[i], low: data.l[i], close: data.c[i]
                             });
                         }
-                        // Tagliamo per mostrare solo le ultime 100 candele (l'equivalente di 100 minuti attivi)
-                        const slicedData = historicalData.slice(-100);
+                        // Fino a ~7 giorni di barre 15Min (tetto di sicurezza a 1000 candele)
+                        const slicedData = historicalData.slice(-1000);
                         bgPriceHistories[symbol] = data.c.slice(-100);
                         console.log(`[PRELOAD] ${symbol}: caricati ${slicedData.length} punti utili via Finnhub.`);
                         return slicedData;
@@ -7927,15 +8069,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const assetType = getAssetType(symbol);
                 if (assetType === 'FOREX' || assetType === 'COMMODITY') return null;
 
+                // Storico grafico: ultimi 7 GIORNI in barre da 15 minuti (~670 barre).
+                // 1Min su 7 giorni sarebbero ~10.000 barre: pesanti e illeggibili.
                 let alpacaUrl, responseKey;
+                const nowIso = new Date().toISOString();
+                const weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
                 if (assetType === 'CRYPTO') {
-                    responseKey = symbol.replace('USDT', '/USD');
-                    const nowIsoCrypto = new Date().toISOString();
-                    alpacaUrl = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(responseKey)}&timeframe=1Min&limit=100&end=${nowIsoCrypto}`;
+                    responseKey = toAlpacaCryptoSym(symbol);
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(responseKey)}&timeframe=15Min&start=${weekAgoIso}&end=${nowIso}&limit=1000`;
                 } else {
                     responseKey = symbol;
-                    const nowIso = new Date().toISOString();
-                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=1Min&limit=100&end=${nowIso}&feed=iex`;
+                    alpacaUrl = `${ALPACA_DATA_BASE}/v2/stocks/bars?symbols=${encodeURIComponent(symbol)}&timeframe=15Min&start=${weekAgoIso}&end=${nowIso}&limit=1000&feed=iex`;
                 }
 
                 const aRes = await fetch(alpacaUrl, {
@@ -7964,6 +8108,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             return null;
         }
 
+
+        // --- Watchdog grafico: andamento sempre fino all'ora corrente ---
+        // Se i tick live si fermano (WS muto, feed lento) l'ultima candela resta
+        // indietro. Ogni 30s: se il grafico è fermo da oltre 2 minuti a mercato
+        // aperto, ricarichiamo le barre recenti (end=now) dell'asset selezionato.
+        setInterval(async () => {
+            try {
+                const sym = assetPairSelect ? assetPairSelect.value : null;
+                if (!sym || restrictedAssets.has(sym)) return;
+                const nowSec = Math.floor(Date.now() / 1000);
+                if (lastCandleTime && nowSec - lastCandleTime < 120) return; // già aggiornato
+                const aType = getAssetType(sym);
+                if (aType !== 'CRYPTO' && aType !== 'STOCK') return; // bars solo per crypto/stocks
+                if (typeof isMarketOpen === 'function' && !isMarketOpen(aType)) return;
+                const data = await tryAlpacaPreload(sym);
+                if (data && data.length > 0 && assetPairSelect && assetPairSelect.value === sym) {
+                    ChartManager.setHistoricalData(data);
+                    lastCandleTime = data[data.length - 1].time;
+                    currentPrice = data[data.length - 1].close;
+                    if (typeof updatePriceUI === 'function') updatePriceUI();
+                    console.log(`[CHART] Top-up barre recenti per ${sym} (feed live fermo).`);
+                }
+            } catch (e) { /* silenzioso: ritenta al prossimo giro */ }
+        }, 30000);
 
         // IL RADAR MULTI-ASSET È ORA ESTERNO IN radar.js
         if (window.RadarManager) {
@@ -8275,38 +8443,50 @@ document.addEventListener('DOMContentLoaded', async () => {
             list.innerHTML = orders.map(order => {
                 const side = escHtml(order.side.toUpperCase());
                 const isBuy = side === 'BUY';
-                const assetName = escHtml(order.symbol);
+                const assetName = escHtml(displaySymbol(order.symbol));
+                // Icona categoria come negli altri pannelli (simbolo Alpaca → simbolo bot)
+                const ordCat = getAssetType((order.symbol || '').replace('/USD', 'USDT'));
+                const ordIcon = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' }[ordCat] || '💰';
                 // L'id ordine finisce in un onclick inline: si accettano solo
                 // caratteri da UUID Alpaca (difesa contro injection nel handler)
                 const safeOrderId = String(order.id).replace(/[^a-zA-Z0-9-]/g, '');
+                // Quantità e prezzo formattati: i raw Alpaca ("0.276451288", null per
+                // i market order) rendevano la riga illeggibile nella colonna stretta
+                const rawQty = parseFloat(order.qty);
+                const qtyStr = isFinite(rawQty)
+                    ? escHtml(String(parseFloat(rawQty.toFixed(4))))
+                    : (order.notional ? '$' + escHtml(parseFloat(order.notional).toFixed(2)) : '--');
+                const rawLimit = parseFloat(order.limit_price || order.stop_price);
+                const priceStr = isFinite(rawLimit)
+                    ? '$' + escHtml(rawLimit.toFixed(rawLimit < 10 ? 4 : 2))
+                    : 'MARKET';
+                // Righe etichetta-valore: nella colonna stretta le 3 colonne affiancate
+                // troncavano tutto ("0... MA... ACCE..."). Una riga per dato = leggibile.
+                const rowStyle = 'display: flex; justify-content: space-between; align-items: baseline; gap: 8px;';
+                const metricLabel = 'font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;';
+                const metricVal = 'color: #fff; font-size: 0.75rem; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
 
                 return `
-                    <div class="open-position pending-order" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.03); margin-bottom: 8px; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch;">
-                        <div class="pos-main">
-                            <div class="pos-info" style="display: flex; align-items: center; justify-content: space-between;">
-                                <span class="pos-asset" style="color: #fff; font-weight: bold; font-size: 0.9rem;">${assetName}</span>
-                                <span class="pos-type ${isBuy ? 'buy' : 'sell'}" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: ${isBuy ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${isBuy ? '#10b981' : '#ef4444'}; font-weight: bold;">
-                                    ${side} ${escHtml(order.type.toUpperCase())}
-                                </span>
-                            </div>
-                            <div class="pos-metrics" style="margin-top: 8px; display: flex; justify-content: space-between;">
-                                <div class="pos-metric">
-                                    <span class="m-label" style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase;">Qty</span>
-                                    <span class="m-val" style="color: #fff; font-size: 0.8rem; display: block;">${escHtml(order.qty)}</span>
-                                </div>
-                                <div class="pos-metric" style="text-align: center;">
-                                    <span class="m-label" style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase;">Prezzo</span>
-                                    <span class="m-val" style="color: #fff; font-size: 0.8rem; display: block;">${escHtml(order.limit_price || 'MARKET')}</span>
-                                </div>
-                                <div class="pos-metric" style="text-align: right;">
-                                    <span class="m-label" style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase;">Stato</span>
-                                    <span class="m-val" style="color: #f59e0b; font-size: 0.8rem; display: block; font-weight: bold;">${escHtml(order.status.toUpperCase())}</span>
-                                </div>
-                            </div>
+                    <div class="open-position pending-order" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); margin-bottom: 8px; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 5px;">
+                        <div class="pos-asset" style="color: #fff; font-weight: bold; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ordIcon} ${assetName}</div>
+                        <div>
+                            <span class="pos-type ${isBuy ? 'buy' : 'sell'}" style="display: inline-block; font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; background: ${isBuy ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${isBuy ? '#10b981' : '#ef4444'}; font-weight: bold; white-space: nowrap;">${side} · ${escHtml(order.type.toUpperCase())}</span>
                         </div>
-                        <div class="pos-actions" style="margin-top: 12px; ${window.liveMonitorActive ? 'display:none;' : ''}">
+                        <div class="pos-metric" style="${rowStyle}">
+                            <span class="m-label" style="${metricLabel}">Qty</span>
+                            <span class="m-val" style="${metricVal}">${qtyStr}</span>
+                        </div>
+                        <div class="pos-metric" style="${rowStyle}">
+                            <span class="m-label" style="${metricLabel}">Prezzo</span>
+                            <span class="m-val" style="${metricVal}">${priceStr}</span>
+                        </div>
+                        <div class="pos-metric" style="${rowStyle}">
+                            <span class="m-label" style="${metricLabel}">Stato</span>
+                            <span class="m-val" style="${metricVal} color: #f59e0b;">${escHtml(order.status.toUpperCase())}</span>
+                        </div>
+                        <div class="pos-actions" style="margin-top: 3px; ${window.liveMonitorActive ? 'display:none;' : ''}">
                             <button class="btn btn-secondary" onclick="cancelAlpacaOrder('${safeOrderId}')"
-                                style="width: 100%; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); font-size: 0.65rem; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: all 0.2s;"
+                                style="width: 100%; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); font-size: 0.65rem; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: all 0.2s;"
                                 onmouseover="this.style.background='rgba(239,68,68,0.2)'"
                                 onmouseout="this.style.background='rgba(239,68,68,0.1)'">
                                 ${tr('btn_cancel', 'ANNULLA').toUpperCase()}
@@ -8380,10 +8560,12 @@ function createNotificationContainer() {
         btnFlush.addEventListener('click', () => {
             if (getBrokerCtx() !== 'fh') return;
             if (confirm('Sei sicuro di voler azzerare il portafoglio Finnhub? Verranno ripristinati il capitale iniziale (1000) e cancellati tutti i trade e la cronologia locale.')) {
-                // Rimuovi contesto locale Finnhub
+                // Rimuovi contesto locale Finnhub (stesse chiavi del reset all'avvio:
+                // capitale a 1000, posizioni aperte e cronologia azzerate)
                 localStorage.removeItem('sim_ctx_fh');
+                localStorage.removeItem('broker_pnl_fh');
                 localStorage.removeItem('broker_deposited_fh');
-                
+
                 // Rimuovi variabili globali che potrebbero fare da fallback
                 localStorage.removeItem('sim_trading_capital');
                 localStorage.removeItem('sim_session_initial_capital');

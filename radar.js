@@ -39,15 +39,23 @@ window.RadarManager = (function() {
         const whitelist = deps.VALID_SYMBOLS[cat] || [];
         if (!whitelist.includes(symbol)) return;
 
-        const catIcon = { 'CRYPTO': '🔥', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '🥇' }[cat] || '🔥';
+        // Stessa grafica dei segnali del bot (showAISignal in app.js): icona
+        // categoria + simbolo bianco a sinistra, dettaglio piccolo a destra,
+        // bordo colorato per direzione. Il radar resta uniforme con bot ON/OFF.
+        const catIcon = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' }[cat] || '💰';
+        const dirColor = percentage >= 0 ? '#10b981' : '#ef4444';
+        const timeStr = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', hour12: false });
 
         if (radarActiveElements[symbol]) {
             const el = radarActiveElements[symbol];
             const pctSpan = el.querySelector('.radar-pct');
             if (pctSpan) {
                 pctSpan.textContent = `${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%`;
-                pctSpan.style.color = percentage >= 0 ? '#10b981' : '#ef4444';
+                pctSpan.style.color = dirColor;
             }
+            const timeSpan = el.querySelector('.radar-time');
+            if (timeSpan) timeSpan.textContent = ` • ${timeStr}`;
+            el.style.borderLeft = `3px solid ${dirColor}`;
             clearTimeout(el.removeTimeout);
             el.removeTimeout = setTimeout(() => {
                 el.classList.add('fade-out');
@@ -58,10 +66,12 @@ window.RadarManager = (function() {
 
         const el = document.createElement('div');
         el.className = 'radar-signal';
+        el.style.borderLeft = `3px solid ${dirColor}`;
+        const dispSym = window.displaySymbol ? window.displaySymbol(symbol) : symbol;
         el.innerHTML = `
-        <span style="font-weight: bold; font-size: 0.9rem;">${catIcon} ${symbol}</span>
-        <span style="font-weight: bold; color: ${percentage >= 0 ? '#10b981' : '#ef4444'};">
-            <span class="radar-pct">${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%</span>
+        <span style="font-weight: bold; font-size: 0.72rem; color: #fff;">${catIcon} ${dispSym}</span>
+        <span style="font-size: 0.62rem; color: var(--text-secondary);">
+            <span class="radar-pct" style="font-weight: bold; color: ${dirColor};">${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%</span><span class="radar-time"> • ${timeStr}</span>
         </span>
         `;
 

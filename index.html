@@ -18,7 +18,7 @@
         object-src 'none';
         base-uri 'self';
         form-action 'self'">
-    <title>HF MT Personal AI Powered — Multi-Asset Trading</title>
+    <title>HF MT Personal - AI Powered — Multi-Asset Trading</title>
     <meta name="description"
         content="Simulatore di trading ad alta frequenza multi-asset con dati in tempo reale su Crypto, Azioni, Forex e Materie Prime.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,7 +29,7 @@
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"
         integrity="sha384-2Yiz1jBuc53MdRCA3ojcpk7cAoW2uFfKcetY6JKbqUetb537Hq2uPJrqM1Mj2AKx" crossorigin="anonymous"
         defer></script>
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=12">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <meta name="theme-color" content="#0f172a">
@@ -83,7 +83,7 @@
                     </defs>
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
-                <h1>HF MT Personal AI Powered</h1>
+                <h1>HF MT Personal - AI Powered</h1>
                 <p id="lblSubtitleFrancaLogin" style="color: #f59e0b; margin-top: -12px; margin-bottom: 12px; font-style: italic; font-weight: 500; font-size: 1.1rem;">"Più prudente di nonna Franca!"</p>
                 <p id="lblLoginPlatform">Multi-asset algorithmic trading platform · Adaptive, self-learning AI</p>
                 <div class="login-divider"></div>
@@ -387,6 +387,17 @@
                         </div>
                     </div>
 
+                    <!-- Box "Sync.": % di avanzamento della sincronizzazione col broker
+                         (conto → posizioni → ordini → storico). Aggiornato da
+                         setSyncProgress() in app.js a ogni ciclo di sync e al cambio scheda. -->
+                    <div id="syncProgressBox"
+                        style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-width:46px; padding:3px 8px; background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.35); border-radius:6px;">
+                        <span
+                            style="font-size:0.55rem; font-weight:600; color:var(--text-secondary); letter-spacing:0.08em; text-transform:uppercase;">Sync.</span>
+                        <span id="syncProgressPct"
+                            style="font-size:0.78rem; font-weight:800; color:#60a5fa; font-family:'JetBrains Mono','Courier New',monospace;">0%</span>
+                    </div>
+
                     <!-- Elementi nascosti mantenuti per compatibilità con la logica esistente -->
                     <div id="testModeToggleBox" style="display:none;">
                         <input type="checkbox" id="testModeToggle">
@@ -469,7 +480,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <h2 id="radarHeading"
                             data-tooltip="Scansione in tempo reale di TUTTI i mercati (Crypto, Stocks, Forex, Commodities).">
-                            <span id="lblRadarTitle">Market Radar</span> <span class="pulse"
+                            <span id="lblRadarTitle">Radar</span> <span class="pulse"
                                 style="display:inline-block; margin-left: 8px;"></span>
                         </h2>
                         <span id="radarCategory" class="radar-cat-badge cat-all"
@@ -546,11 +557,21 @@
 
                         <div class="capital-grid"
                             style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                            <!-- Ordine box (scelta utente): Versato, Iniziale, Saldo Cash,
+                                 Attuale, Valore Mercato, Potere Acquisto -->
+                            <div class="capital-item glass-panel" id="boxDepositedTotal"
+                                data-tooltip="Totale dei capitali caricati nel portafoglio di QUESTO broker dal momento dell'apertura (versamenti cumulativi)."
+                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
+                                    id="lblDepositedTotal">Versato Tot.</div>
+                                <div id="depositedTotal" style="font-size: 1rem; font-weight: 700; color: #a78bfa;">
+                                    $0.00</div>
+                            </div>
                             <div class="capital-item glass-panel" id="boxInitialCap"
                                 data-tooltip="Capitale di partenza o totale dei versamenti per questo broker."
                                 style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
                                 <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
-                                    id="lblInitialCapTitle">Capitale Iniziale</div>
+                                    id="lblInitialCapTitle">Iniziale</div>
                                 <div id="initialCapital" style="font-size: 1rem; font-weight: 700; color: #94a3b8;">
                                     $0.00</div>
                             </div>
@@ -562,13 +583,15 @@
                                 <div id="walletBalanceSide" style="font-size: 1rem; font-weight: 700; color: #f8fafc;">
                                     $0.00</div>
                             </div>
-                            <div class="capital-item glass-panel" id="boxBuyingPower"
-                                data-tooltip="Capitale totale disponibile per il trading, inclusa l'eventuale leva finanziaria (Buying Power)."
+                            <div class="capital-item glass-panel" id="boxCurrentCapital"
+                                data-tooltip="Capitale attuale = capitali versati − perdite + profitti di TUTTO lo storico del broker selezionato."
                                 style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
                                 <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
-                                    id="lblBuyingPower">Potere Acquisto</div>
-                                <div id="availableMargin" style="font-size: 1rem; font-weight: 700; color: #3b82f6;">
-                                    $0.00</div>
+                                    id="lblCurrentCapital">Attuale</div>
+                                <div id="currentCapitalHist" style="font-size: 1rem; font-weight: 700; color: #f8fafc;">
+                                    <span id="currentCapitalVal">$0.00</span> <span id="currentCapitalDelta"
+                                        style="font-size:0.7rem; font-weight:600;"></span>
+                                </div>
                             </div>
                             <div class="capital-item glass-panel" id="boxMarketValue"
                                 data-tooltip="Valore attuale totale di tutte le posizioni aperte (Long + Short)."
@@ -578,23 +601,13 @@
                                 <div id="totalInvested" style="font-size: 1rem; font-weight: 700; color: #f59e0b;">$0.00
                                 </div>
                             </div>
-                            <div class="capital-item glass-panel" id="boxDepositedTotal"
-                                data-tooltip="Totale dei capitali caricati nel portafoglio di QUESTO broker dal momento dell'apertura (versamenti cumulativi)."
+                            <div class="capital-item glass-panel" id="boxBuyingPower"
+                                data-tooltip="Capitale totale disponibile per il trading, inclusa l'eventuale leva finanziaria (Buying Power)."
                                 style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
                                 <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
-                                    id="lblDepositedTotal">Capitale Versato Tot.</div>
-                                <div id="depositedTotal" style="font-size: 1rem; font-weight: 700; color: #a78bfa;">
+                                    id="lblBuyingPower">Potere Acquisto</div>
+                                <div id="availableMargin" style="font-size: 1rem; font-weight: 700; color: #3b82f6;">
                                     $0.00</div>
-                            </div>
-                            <div class="capital-item glass-panel" id="boxCurrentCapital"
-                                data-tooltip="Capitale attuale = capitali versati − perdite + profitti di TUTTO lo storico del broker selezionato."
-                                style="padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2); cursor: help;">
-                                <div style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
-                                    id="lblCurrentCapital">Capitale Attuale</div>
-                                <div id="currentCapitalHist" style="font-size: 1rem; font-weight: 700; color: #f8fafc;">
-                                    <span id="currentCapitalVal">$0.00</span> <span id="currentCapitalDelta"
-                                        style="font-size:0.7rem; font-weight:600;"></span>
-                                </div>
                             </div>
                             <div class="capital-item glass-panel" id="boxPnlDaily"
                                 data-tooltip="Valore di tutte le posizioni chiuse."
@@ -616,7 +629,7 @@
                                 data-tooltip="PNL totale comprensivo del valore delle posizioni chiuse meno le commissioni."
                                 style="grid-column: span 2; padding: 12px; border-radius: 10px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.1); cursor: help;">
                                 <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
-                                    id="lblPnlNet">PNL NETTO (COMPRENSIVO)</div>
+                                    id="lblPnlNet">PNL Netto</div>
                                 <div id="totalNetPnL" style="font-size: 2.2rem; font-weight: 800; color: #fff;">
                                     $0.00</div>
                             </div>
@@ -732,7 +745,7 @@
                                 </div>
                                 <h2 id="perfPanelTitle"
                                     style="font-size: 1.1rem; color: #fff; margin: 0; font-weight: 700; cursor: help;">
-                                    Analisi Prestazioni</h2>
+                                    Prestazioni</h2>
                             </div>
                             <div id="botStatus" class="status-badge"
                                 style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 0.65rem; padding: 4px 10px; border-radius: 20px; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3);">
@@ -817,7 +830,7 @@
                                 id="boxPnlRealized"
                                 data-tooltip="Profitto o perdita netta derivante dalle posizioni già chiuse.">
                                 <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-secondary); cursor: help;"
-                                    id="lblPnlRealized">PnL Realizzato Totale</span>
+                                    id="lblPnlRealized">PnL Realizzato</span>
                                 <span id="totalPnL"
                                     style="font-size: 1.25rem; font-weight: 800; color: #fff; text-align: right;">$0.00</span>
                             </div>
@@ -881,7 +894,7 @@
                             <div class="mode-toggle-header">
                                 <div style="display: flex; flex-direction: column;">
                                     <h2 id="lblAutoTrading" style="margin-bottom: 2px;">
-                                        Stato Sessione</h2>
+                                        Pilota automatico</h2>
                                     <span id="sessionTimer"
                                         style="font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 0.75rem; color: #3b82f6; margin-top: 4px; font-weight: bold;">00:00:00</span>
                                 </div>
@@ -1059,7 +1072,7 @@
 
                     <!-- Posizioni Aperte & Ordini in Attesa (colonna destra del Trading Automatico) -->
                     <div class="positions-card glass-panel glow panel-cell"
-                        style="padding: 16px; border-color: #8b5cf6;">
+                        style="padding: 12px; border-color: #8b5cf6;">
 
                         <!-- Posizioni Aperte con Tabs per Asset Class -->
                         <div class="open-position-container" style="flex: 1;">
@@ -1067,9 +1080,11 @@
                                 <h3 id="openPosTitle"
                                     data-tooltip="Asset attualmente in portafoglio con guadagno/perdita calcolato in tempo reale (Unrealized PnL)."
                                     style="font-size: 0.8rem; margin-bottom: 8px; display:flex; align-items:center; flex-wrap: nowrap; white-space: nowrap;">
-                                    <span id="lblOpenPosText">Posizioni Aperte</span> <span id="perfOpenCountBadge" style="font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 10px; margin-left: 4px; display: none;">0</span>
-                                    <span id="openDailyNet" style="font-size: 0.9rem; font-weight: 800; padding: 2px 4px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin-left: 4px;">$0.00</span>
+                                    <!-- Ordine uniforme dei 3 pannelli: titolo a sinistra, valore $ al centro, conteggio a destra -->
+                                    <span id="lblOpenPosText">Posizioni Aperte</span>
+                                    <span id="openDailyNet" style="font-size: 0.9rem; font-weight: 800; padding: 2px 4px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin: 0 auto;">$0.00</span>
                                     <span id="openTotalValue" style="display: none;"></span>
+                                    <span id="perfOpenCountBadge" style="font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 10px; margin-left: 4px; display: none;">0</span>
                                 </h3>
                                 <!-- Contatore posizioni SALTATE dal bot (e perché): mostra a colpo d'occhio
                                      quante mosse la strategia ha voluto ma il broker non ha eseguito
@@ -1110,7 +1125,7 @@
                                 style="color: #f59e0b; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; flex-wrap: nowrap;">
                                 <span class="dot"
                                     style="background: #f59e0b; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
-                                <span id="lblPendingOrdersText" style="flex-shrink: 1; text-overflow: ellipsis; overflow: hidden;">Ordini in Attesa</span>
+                                <span id="lblPendingOrdersText" style="flex-shrink: 1; text-overflow: ellipsis; overflow: hidden;">Ordinate</span>
                                 <span class="pos-count" id="cnt-PENDING"
                                     style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: auto; flex-shrink: 0;">0</span>
                             </h3>
@@ -1127,11 +1142,12 @@
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <h2 id="lblHistoryTitle"
                                 data-tooltip="Storico di tutte le operazioni chiuse per questo broker"
-                                style="margin:0; display:flex; align-items:center; gap: 4px; font-size: 0.9rem; flex-wrap: nowrap; white-space: nowrap;">
+                                style="margin:0; display:flex; align-items:center; gap: 4px; font-size: 0.9rem; flex-wrap: nowrap; white-space: nowrap; flex: 1; min-width: 0;">
+                                <!-- Ordine uniforme dei 3 pannelli: titolo, valore $ al centro, conteggio a destra -->
                                 <span id="lblHistoryText">Cronologia</span>
-                                <span id="historyCountBadge" style="font-size: 0.75rem; background: rgba(96,165,250,0.2); padding: 2px 5px; border-radius: 10px; display: none;">0</span>
                                 <span id="historyDailyNet"
-                                    style="font-size: 0.95rem; font-weight: 800; padding: 2px 6px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin-left: 2px;">$0.00</span>
+                                    style="font-size: 0.95rem; font-weight: 800; padding: 2px 6px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin: 0 auto;">$0.00</span>
+                                <span id="historyCountBadge" style="font-size: 0.75rem; background: rgba(96,165,250,0.2); padding: 2px 5px; border-radius: 10px; display: none;">0</span>
                             </h2>
                             <!-- Colonna a destra: tasto Cancella SOPRA il valore totale delle operazioni -->
                             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
@@ -1439,7 +1455,7 @@
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
                 </div>
-                <h2>HF MT Personal AI Powered</h2>
+                <h2>HF MT Personal - AI Powered</h2>
                 <h4 style="color: #f59e0b; margin-top: -4px; margin-bottom: 8px; font-style: italic; font-weight: 500;"><span id="lblSubtitleFranca">"Più prudente di nonna Franca!"</span></h4>
                 <span class="version-tag" id="appVersionTag">v.1.0.01a</span>
             </div>
@@ -1725,8 +1741,8 @@
     <script src="brokers/capitalcomtrading.js" defer></script>
     <script src="grafico.js" defer></script>
     <script src="statusbar.js" defer></script>
-    <script src="radar.js?v=5" defer></script>
-    <script src="app.js?v=6" defer></script>
+    <script src="radar.js?v=8" defer></script>
+    <script src="app.js?v=19" defer></script>
 </body>
 
 </html>

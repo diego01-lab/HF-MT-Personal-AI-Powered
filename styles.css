@@ -540,7 +540,7 @@ select {
     gap: 10px;
     max-height: 850px;
     overflow-y: auto;
-    padding-right: 8px;
+    padding-right: 4px;
 }
 
 /* Scrollbar styling - same as history */
@@ -658,6 +658,20 @@ select {
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid var(--color-sell);
     color: var(--color-sell);
+}
+
+/* Badge direzione a "pillola": stesso token grafico dei badge di Ordinate
+   (SELL · MARKET) e Cronologia — grafica uniforme tra pannelli */
+.open-position.LONG .pos-type-badge,
+.open-position.BUY .pos-type-badge {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.open-position.SHORT .pos-type-badge,
+.open-position.SELL .pos-type-badge {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
 }
 
 /* History Card */
@@ -924,7 +938,7 @@ select {
 }
 
 .radar-signal {
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: rgba(16, 185, 129, 0.15);
     border-left: 3px solid #10b981;
     border-radius: 6px;
@@ -932,9 +946,25 @@ select {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 6px;
+    /* Tutte le info su UNA riga: niente wrap, il simbolo si tronca con "…" se serve */
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    font-size: 0.72rem;
     cursor: pointer;
     transition: all 0.2s;
     animation: flashGreen 1s ease-out;
+}
+
+.radar-signal > span:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.radar-signal > span:last-child {
+    flex-shrink: 0;
 }
 
 .radar-signal:hover {
@@ -2854,7 +2884,7 @@ html.no-gsi .g_id_signin {
 
     .radar-signal {
         padding: 6px 10px;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
     }
 
     /* Wallet */
