@@ -306,6 +306,7 @@ window.AlpacaRealManager = (function() {
 
         if (!response.ok) {
             const errTxt = await response.text();
+            try { window.__lastAlpacaOrderError = errTxt.toLowerCase(); } catch (_) { }
             throw new Error(errTxt);
         }
         

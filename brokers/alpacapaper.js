@@ -309,6 +309,8 @@ window.AlpacaPaperManager = (function () {
         if (!response.ok) {
             const errText = await response.text();
             console.error(`[ALPACA] Errore creazione ordine (Status: ${response.status}):`, errText);
+            // Salva l'errore per il circuit breaker globale in app.js
+            try { window.__lastAlpacaOrderError = errText.toLowerCase(); } catch (_) { }
             throw new Error(`Alpaca Order failed: ${response.status} - ${errText}`);
         }
 

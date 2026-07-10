@@ -1764,6 +1764,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
         const orderRejectCooldown = {};
         const ORDER_REJECT_COOLDOWN_MS = 120000;
+        // Circuit breaker GLOBALE: quando il buying power è esaurito, TUTTI gli ordini
+        // vengono sospesi per 5 minuti. Evita centinaia di 403 al secondo quando i fondi sono a 0.
+        const GLOBAL_ORDER_PAUSE_MS = 300000; // 5 minuti
+        let globalOrderPauseUntil = 0;
         // Stop a break-even: quando una posizione raggiunge questo profitto %,
         // lo stop sale al prezzo d'ingresso — da lì in poi il trade non può più
         // chiudere in perdita (aggiustamento "solo-stringere", mai allargare).
@@ -5741,6 +5745,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // cooldown, i bottoni manuali (bot fermo) restano sempre operativi
             if (isBotActive && orderRejectCooldown[sym] && Date.now() < orderRejectCooldown[sym]) return;
 
+            // Circuit breaker globale: fondi esauriti → nessun ordine su nessun asset
+            if (isBotActive && globalOrderPauseUntil && Date.now() < globalOrderPauseUntil) return;
+
             // Blackout post-chiusura (stessa finestra di 30s di syncAlpacaPositions):
             // il broker può avere ancora la vecchia posizione in liquidazione, e una
             // nuova apertura sullo stesso simbolo verrebbe rifiutata (403 insufficient qty)
@@ -5860,9 +5867,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (isCryptoSym && safeFunds <= 0) {
                         // Modalità Alpaca Paper: NIENTE simulazioni locali. Senza cash
                         // reale per le crypto il segnale viene semplicemente saltato.
-                        orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
-                        console.warn(`[BROKER] Cash per Crypto esaurito su Alpaca: ordine ${sym} saltato (nessuna simulazione locale in modalità Alpaca Paper).`);
-                        botNotify('nocashcrypto', tr('bot_skip_nocash', 'Cash crypto Alpaca insufficiente: ordini crypto in pausa finché non rientrano fondi.'), 'warning', 30000);
+                        // Circuit breaker GLOBALE: fondi crypto a zero → tutti gli ordini in pausa
+                        globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
+                        console.warn(`[BROKER] Cash per Crypto esaurito su Alpaca: TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
+                        botNotify('nocashcrypto', tr('bot_skip_nocash', 'Cash crypto Alpaca insufficiente: ordini in pausa per 5 minuti.'), 'warning', 30000);
                         if (isBotActive) bumpSkipped('nocash');
                         return;
                     } else {
@@ -5876,9 +5884,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Se dopo i tagli l'investimento è sceso sotto i 10$, Alpaca rifiuterà l'ordine.
                 // Annulliamo subito per evitare l'errore API (cost basis must be >= 10).
                 if (investUsd > 0 && investUsd < 10) {
-                    orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
-                    console.warn(`[BROKER] Importo finale troppo basso (${investUsd.toFixed(2)}$) per ${sym}: minimo richiesto da Alpaca è 10$.`);
-                    botNotify('min_order_10', tr('bot_skip_min10', `Fondi liberi insufficienti (${investUsd.toFixed(2)}$). Alpaca richiede almeno 10$ per ordine.`), 'warning', 30000);
+                    // Circuit breaker GLOBALE: se non riusciamo a raggiungere i 10$ minimi,
+                    // nessun altro asset avrà fondi sufficienti → pausa tutti gli ordini.
+                    globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
+                    console.warn(`[BROKER] Importo finale troppo basso (${investUsd.toFixed(2)}$) per ${sym}: TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
+                    botNotify('min_order_10', tr('bot_skip_min10', `Fondi insufficienti (${investUsd.toFixed(2)}$). Tutti gli ordini in pausa per 5 minuti.`), 'warning', 30000);
                     return;
                 }
             }
@@ -6014,8 +6024,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // CONTROLLO GLOBALE DEI FONDI REALI SUL BROKER (Evita i 403)
                 const brokerFunds = isCrypto ? availableCash : availableMargin;
                 if (actualCost > brokerFunds) {
-                    orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
-                    console.warn(`[BROKER] Fondi insufficienti per coprire l'ordine di $${actualCost.toFixed(2)} per ${sym}. Disponibili: $${(brokerFunds || 0).toFixed(2)}.`);
+                    // Se i fondi sono sotto i 10$ (minimo Alpaca), nessun ordine potrà passare:
+                    // attiva il circuit breaker globale per evitare centinaia di 403.
+                    if (brokerFunds < 10) {
+                        globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
+                        console.warn(`[BROKER] Fondi esauriti ($${(brokerFunds || 0).toFixed(2)}): TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
+                    } else {
+                        orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
+                        console.warn(`[BROKER] Fondi insufficienti per $${actualCost.toFixed(2)} su ${sym}. Disponibili: $${(brokerFunds || 0).toFixed(2)}.`);
+                    }
                     if (isBotActive) { botNotify('nocash', tr('bot_skip_nocash', `Fondi insufficienti sul broker per aprire il trade su ${sym}.`), 'warning', 30000); bumpSkipped('nocash'); }
                     return;
                 }
@@ -6041,8 +6058,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         
                         // Ordine rifiutato dal broker: NON scalare capitale né budget di sessione,
                         // altrimenti il budget si esaurisce con ordini mai eseguiti.
-                        orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
-                        console.warn(`[ORDER] Ordine ${type} ${sym} rifiutato dal broker. Capitale e budget invariati. Il bot non riproverà su ${sym} per ${ORDER_REJECT_COOLDOWN_MS / 60000} minuti.`);
+                        // Se il rifiuto è per fondi insufficienti, attiva il circuit breaker globale
+                        if (window.__lastAlpacaOrderError && window.__lastAlpacaOrderError.includes('insufficient buying power')) {
+                            globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
+                            console.warn(`[ORDER] Buying power esaurito: TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
+                        } else {
+                            orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
+                            console.warn(`[ORDER] Ordine ${type} ${sym} rifiutato dal broker. Riprovo tra ${ORDER_REJECT_COOLDOWN_MS / 60000} min.`);
+                        }
                         if (isBotActive) { botNotify('reject', tr('bot_order_rejected', `Ordine ${sym} rifiutato dal broker: riprovo tra qualche minuto.`), 'error', 20000); bumpSkipped('reject'); }
                         return;
                     }
