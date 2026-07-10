@@ -207,6 +207,9 @@ window.ChartManager = (function() {
             if (currentPriceEl) {
                 currentPriceEl.textContent = last.close.toFixed(5);
             }
+            // Mostra TUTTO lo storico caricato (7 giorni): senza fitContent la
+            // vista restava zoomata sulle ultime ~100 candele del vecchio zoom.
+            try { if (chart && chart.timeScale) chart.timeScale().fitContent(); } catch (e) { }
         }
     }
 

@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.02';
+window.APP_VERSION = 'v.1.0.03';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -1797,6 +1797,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // possa chiuderla (le inversioni nei primi secondi sono quasi sempre
         // rumore e il giro apri-chiudi brucia lo spread)
         const MIN_REVERSAL_AGE_MS = 60000;
+        // Grazia anti-spread sullo SL: nei primi secondi il PnL broker sconta lo
+        // spread di apertura (la posizione "nasce" già negativa) e lo stop veniva
+        // bucato in 4-10s senza alcun movimento reale del mercato. Nei primi 45s
+        // lo SL scatta solo per perdite GRAVI (>= 2× lo stop impostato).
+        const SL_GRACE_MS = 45000;
         // Cooldown per simbolo dopo un rifiuto ordine del broker: il bot non
         // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
         const orderRejectCooldown = {};
@@ -1805,10 +1810,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         // vengono sospesi per 5 minuti. Evita centinaia di 403 al secondo quando i fondi sono a 0.
         const GLOBAL_ORDER_PAUSE_MS = 300000; // 5 minuti
         let globalOrderPauseUntil = 0;
-        // Stop a break-even: quando una posizione raggiunge questo profitto %,
+        // Stop a break-even: quando una posizione raggiunge la soglia di armamento,
         // lo stop sale al prezzo d'ingresso — da lì in poi il trade non può più
         // chiudere in perdita (aggiustamento "solo-stringere", mai allargare).
+        // BREAKEVEN_ARM_PCT è il TETTO della soglia: la soglia reale è calcolata
+        // per-posizione SOTTO il TP effettivo (vedi getBreakevenArmPct), perché
+        // con la costante fissa 1.5% > TP dinamico (~1.13%) il TP chiudeva prima
+        // e la protezione non si armava MAI (codice morto).
         const BREAKEVEN_ARM_PCT = 1.5;
+        // Soglia di armamento: 70% del TP effettivo, mai sopra il tetto e mai
+        // sotto i costi stimati +0.1% (deve stare sopra la soglia di CHIUSURA a
+        // pari, che è netBreakeven, altrimenti chiuderebbe subito dopo l'arm).
+        function getBreakevenArmPct(sym, effTP) {
+            const floor = getNetBreakevenPct(sym) + 0.1;
+            return Math.max(floor, Math.min(BREAKEVEN_ARM_PCT, (effTP || BREAKEVEN_ARM_PCT) * 0.7));
+        }
         const restrictedAssets = new Set(); // Per evitare di riprovare preload su asset che danno 403
 
         // --- State variables (Loaded from global scope) ---
@@ -1906,6 +1922,51 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.removeItem('broker_deposited_' + ctx);
         });
         console.log(`[TEST] Portafogli FH/CAP-D azzerati all'avvio: capitale $${TEST_DEFAULT_CAPITAL}, nessuna posizione, cronologia vuota.`);
+
+        // ─── Cambio account Alpaca: invalida i dati locali del vecchio conto ───
+        // Cronologia, statistiche, cache FILL e versato vivono in localStorage
+        // SENZA legame con la API key: cambiando chiave (nuovo portafoglio) l'app
+        // mostrava ancora i dati del conto precedente. Memorizziamo la chiave
+        // usata e, quando cambia, azzeriamo le cache locali: il nuovo conto si
+        // risincronizza interamente da Alpaca (conto/posizioni/ordini/FILL).
+        function purgeAlpacaLocalData(cacheKey, ctx) {
+            ['sim_trade_history', 'sim_total_pnl', 'sim_executed_trades', 'sim_win_trades',
+             'sim_gross_profit', 'sim_gross_loss', 'sim_active_positions', 'sim_trading_capital',
+             'sim_session_initial_capital', 'sim_global_commissions',
+             'broker_pnl_' + ctx, 'broker_deposited_' + ctx].forEach(k => localStorage.removeItem(k));
+            try {
+                const cache = JSON.parse(localStorage.getItem('alpaca_activities_cache')) || {};
+                delete cache[cacheKey];
+                localStorage.setItem('alpaca_activities_cache', JSON.stringify(cache));
+            } catch (_) { localStorage.removeItem('alpaca_activities_cache'); }
+            if (window.__alpacaActivitiesCache) delete window.__alpacaActivitiesCache[cacheKey];
+            // Stato in-memory (cambio chiave a runtime dal modale): riparte pulito
+            if (useAlpacaBroker) {
+                tradeHistory = []; activePositions = {}; brokerEntryBasis = {};
+                totalPnL = 0; executedTrades = 0; winTrades = 0; grossProfit = 0; grossLoss = 0;
+                globalCommissions = 0;
+                _lastRenderedHistoryJSON = null;
+                try { if (typeof renderHistory === 'function') renderHistory(); } catch (_) { }
+            }
+            console.log(`[ACCOUNT] Chiave Alpaca (${cacheKey}) cambiata: dati locali del vecchio account azzerati, risincronizzo dal broker.`);
+        }
+        function checkAlpacaKeyChange() {
+            const pairs = [
+                { cur: alpacaKeyId || '', memo: 'alpaca_key_memo_paper', cacheKey: 'paper', ctx: 'alp' },
+                { cur: alpacaLiveKeyId || '', memo: 'alpaca_key_memo_live', cacheKey: 'live', ctx: 'alrt' }
+            ];
+            pairs.forEach(p => {
+                if (!p.cur) return; // nessuna chiave configurata: niente da confrontare
+                if (localStorage.getItem(p.memo) !== p.cur) {
+                    // memo assente = primo avvio con questa logica: pulizia una tantum
+                    // (i dati veri tornano comunque dalla sync del broker).
+                    purgeAlpacaLocalData(p.cacheKey, p.ctx);
+                    localStorage.setItem(p.memo, p.cur);
+                }
+            });
+        }
+        window.checkAlpacaKeyChange = checkAlpacaKeyChange;
+        checkAlpacaKeyChange();
 
         if (!useAlpacaBroker) {
             // ===== MODALITÀ TEST: recupera contesto se esiste =====
@@ -2308,11 +2369,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (rev && unrealizedPct > 0.1) { closeTrade(sym, livePrice, 'TRAILING_SL'); continue; }
                     }
                 }
-                // Break-even armato a +0.8% (stessa logica del motore principale)
-                if (!pos.breakevenArmed && unrealizedPct >= BREAKEVEN_ARM_PCT) pos.breakevenArmed = true;
+                // Break-even armato SOTTO il TP effettivo (stessa logica del motore principale)
+                if (!pos.breakevenArmed && unrealizedPct >= getBreakevenArmPct(sym, effTP)) pos.breakevenArmed = true;
                 if (pos.breakevenArmed && unrealizedPct <= (getNetBreakevenPct(sym) + 0.05)) { closeTrade(sym, livePrice, 'BREAKEVEN'); continue; }
                 if (unrealizedPct >= effTP) { closeTrade(sym, livePrice, 'TP'); continue; }
-                if (effSL > 0 && unrealizedPct <= -effSL) { closeTrade(sym, livePrice, 'SL'); continue; }
+                if (effSL > 0 && unrealizedPct <= -effSL) {
+                    // Grazia anti-spread (stessa logica del motore principale)
+                    const posAge = pos.openTime ? (Date.now() - pos.openTime) : Infinity;
+                    if (posAge >= SL_GRACE_MS || unrealizedPct <= -(effSL * 2)) { closeTrade(sym, livePrice, 'SL'); continue; }
+                }
             }
         }
         // Ciclo di rischio dei motori in background (1s, come il ritmo del principale)
@@ -3734,6 +3799,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 localStorage.setItem('alpaca_live_secret_key', alpacaLiveSecretKey);
                             }
                             console.log("Keys: Recuperate dal server locale.");
+                            // Se dal server arriva una chiave DIVERSA (nuovo account),
+                            // azzera i dati locali del vecchio account
+                            checkAlpacaKeyChange();
 
                             // NON forzare il broker: l'app parte sempre in test mode.
                             // Le chiavi restano disponibili per l'attivazione manuale dal toggle.
@@ -3890,6 +3958,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 localStorage.setItem('alpaca_key_id', alpacaKeyId);
                 localStorage.setItem('alpaca_secret_key', alpacaSecretKey);
+                // Nuova chiave = nuovo account: azzera i dati locali del vecchio
+                checkAlpacaKeyChange();
 
                 syncKeysWithServer(true); // Salva persistentemente nel keys.json
 
@@ -3924,6 +3994,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alpacaLiveSecretKey = alpacaLiveSecretInput.value.trim();
                 localStorage.setItem('alpaca_live_key_id', alpacaLiveKeyId);
                 localStorage.setItem('alpaca_live_secret_key', alpacaLiveSecretKey);
+                // Nuova chiave = nuovo account: azzera i dati locali del vecchio
+                checkAlpacaKeyChange();
                 syncKeysWithServer(true);
                 if (alpacaLiveModal) alpacaLiveModal.classList.add('hidden');
                 showNotification(tr('live_keys_saved', 'Chiavi Alpaca Trading (reale) salvate.'), 'success');
@@ -3996,6 +4068,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             const m = mode || window.capitalMode;
             if (m === 'live') return { mode: 'live', base: CAPITAL_BASES.live, key: capLiveKey, ident: capLiveIdent, pass: capLivePass };
             return { mode: 'demo', base: CAPITAL_BASES.demo, key: capDemoKey, ident: capDemoIdent, pass: capDemoPass };
+        }
+
+        // Manager Capital.com per la modalità richiesta (demo di default).
+        // BUGFIX: questa funzione era CHIAMATA (capitalAuthed/capitalLogin) ma mai
+        // definita → ogni richiesta Capital moriva con ReferenceError silenziato,
+        // incluso lo storico del grafico per Forex/Materie Prime.
+        function getCapitalManager(mode) {
+            const m = mode || window.capitalMode;
+            const mgr = (m === 'live') ? window.CapitalTradingManager : window.CapitalDemoManager;
+            if (!mgr) return null;
+            const cfg = getCapitalCfg(m === 'live' ? 'live' : 'demo');
+            if (!cfg.key || !cfg.ident || !cfg.pass) return null; // credenziali mancanti
+            if (typeof mgr.setCredentials === 'function') mgr.setCredentials(cfg.key, cfg.ident, cfg.pass);
+            return mgr;
         }
 
         // HTTP unificato: CapacitorHttp (nativo) su Android, fetch nel browser.
@@ -5063,6 +5149,46 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
+        // ─── Esporta cronologia in CSV (separatore ';' + BOM: apre bene in Excel) ───
+        const btnExportHistory = document.getElementById('btnExportHistory');
+        if (btnExportHistory) {
+            btnExportHistory.addEventListener('click', () => {
+                if (!tradeHistory || tradeHistory.length === 0) {
+                    showNotification('Nessuna operazione da esportare.', 'info');
+                    return;
+                }
+                const esc = v => {
+                    v = (v === null || v === undefined) ? '' : String(v);
+                    return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+                };
+                const fmtTs = t => t ? new Date(t).toLocaleString('it-IT') : '';
+                const header = ['Simbolo', 'Tipo', 'Apertura', 'Chiusura', 'DurataSec',
+                    'PrezzoEntrata', 'PrezzoUscita', 'Quantita', 'Investito', 'PnL', 'PnLPct', 'Motivo', 'Stato'];
+                const rows = [...tradeHistory]
+                    .sort((a, b) => (b.time || 0) - (a.time || 0))
+                    .map(t => {
+                        const invested = t.invested || (t.entryPrice * t.amount) || 0;
+                        const pnlPct = invested > 0 ? (t.pnl / invested) * 100 : 0;
+                        const durSec = (t.exitTime && t.entryTime) ? Math.round((t.exitTime - t.entryTime) / 1000) : '';
+                        return [
+                            displaySymbol(t.sym), t.type, fmtTs(t.entryTime || t.time), fmtTs(t.exitTime || t.time),
+                            durSec, t.entryPrice, t.exitPrice, t.amount, invested.toFixed(2),
+                            (t.pnl || 0).toFixed(4), pnlPct.toFixed(2), t.reason || 'MANUAL', t.status || ''
+                        ].map(esc).join(';');
+                    });
+                const csv = '﻿' + [header.join(';')].concat(rows).join('\r\n'); // BOM per Excel
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `cronologia_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                showNotification(`Cronologia esportata: ${rows.length} operazioni.`, 'success');
+            });
+        }
+
         function checkApiRequirement(symbol) {
             const isFinnhub = !symbol.endsWith('USDT');
             if (isFinnhub && !finnhubApiKey) {
@@ -5102,7 +5228,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Lazy load della cronologia OHLC per il grafico quando si cambia asset
             const assetType = getAssetType(symbol);
-            const isAlpacaCompatible = (assetType === 'CRYPTO' || assetType === 'STOCK');
+            // Alpaca copre crypto + tutto ciò che è un'azione USA (incluso l'ETF LIT
+            // in categoria COMMODITY); restano fuori solo i CFD OANDA:* (Capital.com)
+            const isAlpacaCompatible = !symbol.includes('OANDA:');
             
             const doPreload = async () => {
                 let data = null;
@@ -5111,6 +5239,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 if (!data && typeof tryFinnhubPreload === 'function' && !restrictedAssets.has(symbol)) {
                     data = await tryFinnhubPreload(symbol);
+                }
+                // Forex/Materie OANDA: storico dal conto Capital.com (se configurato)
+                if (!data && typeof tryCapitalPreload === 'function') {
+                    data = await tryCapitalPreload(symbol);
                 }
                 if (data && assetPairSelect && assetPairSelect.value === symbol) {
                     ChartManager.setHistoricalData(data);
@@ -5630,7 +5762,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
                     const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
                     
-                    const minSL = sym.includes('USDT') ? 0.75 : 0.25;
+                    // SL minimo crypto 1.2%: deve stare SOPRA lo spread tipico di
+                    // apertura, altrimenti la posizione nasce già a un passo dallo stop.
+                    const minSL = getAssetType(sym) === 'CRYPTO' ? 1.2 : 0.25;
                     // SL HFT: diamo respiro per il rumore di fondo
                     let dynamicSL = Math.min(5.0, Math.max(minSL, (volatilityPct / 3)));
                     
@@ -5783,10 +5917,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        // Helper: Restituisce la stima dei costi percentuali di commissione + spread
+        // Helper: Restituisce la stima dei costi percentuali di commissione + spread.
+        // Usa getAssetType (non "includes USDT"): i simboli-posizione del broker
+        // (PAXGUSD, ADAUSD) non contengono USDT e venivano trattati come azioni,
+        // sottostimando i costi crypto di 4 volte.
         function getNetBreakevenPct(sym) {
-            if (sym.includes('USDT')) return 0.65; // Crypto: fee Alpaca ~0.25% * 2 + spread
-            if (sym.includes('OANDA')) return 0.05; // Forex: solo spread implicito
+            if (getAssetType(sym) === 'CRYPTO') return 0.65; // Crypto: fee Alpaca ~0.25% * 2 + spread
+            if (sym.includes('OANDA')) return 0.05; // Forex/Materie: solo spread implicito
             return 0.15; // Azioni: fee assenti, ma calcoliamo 0.15% di scivolamento/spread
         }
 
@@ -6463,11 +6600,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         function renderHistory() {
             if (window.__ctxOverride) return;
             const historyCountBadge = document.getElementById('historyCountBadge');
-            const btnClearHistory = document.getElementById('btnClearHistory');
-            if (btnClearHistory) {
-                btnClearHistory.style.display = brokerViewActive() ? 'none' : 'inline-block';
-            }
-            
+            // Il tasto Cancella è stato rimosso dalla UI (i portafogli test si
+            // azzerano a ogni avvio; in modalità broker la cronologia è del conto).
+
             let validHistoryCount = 0;
             tradeHistory.forEach(trade => {
                 if (!trade || !trade.sym || trade.sym === 'undefined') return;
@@ -6765,7 +6900,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (adjustedInitialCapital > 0) {
                 sessionInitialCapital = adjustedInitialCapital;
                 const initialCapitalEl = document.getElementById('initialCapital');
-                if (initialCapitalEl) initialCapitalEl.textContent = '$' + formatMoney(sessionInitialCapital);
+                // formatMoney include già il simbolo valuta (il '$' extra mostrava "$$1,009.30")
+                if (initialCapitalEl) initialCapitalEl.textContent = formatMoney(sessionInitialCapital);
             }
             
             // Per far combaciare l'Equity Attuale, modifichiamo solo visivamente il PNL NETTO
@@ -6942,7 +7078,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const bb = calculateBollingerBands(h, Math.min(20, h.length));
                         if (bb && bb.middle) {
                             const volPct = ((bb.upper - bb.lower) / bb.middle) * 100;
-                            const minSL = sym.includes('USDT') ? 0.75 : 0.25;
+                            // getAssetType (non "includes USDT"): i simboli broker (PAXGUSD)
+                            // venivano trattati come azioni → SL minimo 0.25% bucato dallo spread
+                            const minSL = getAssetType(sym) === 'CRYPTO' ? 1.2 : 0.25;
                             const newSL = Math.min(5.0, Math.max(minSL, volPct / 2));
                             pos.dynamicSL = newSL;
                             pos.dynamicTP = Math.min(15.0, Math.max(getNetBreakevenPct(sym) + 0.15, newSL * 1.5));
@@ -6974,7 +7112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             // Trailing stop: la distanza deve ignorare il rumore (ATR su 1s è troppo basso).
                             // Applichiamo un minimo % legato all'asset.
                             // Resta attivo solo in profitto (unrealizedPct > 0.1) → non chiude in perdita.
-                            const minTrailingPct = sym.includes('USDT') ? 0.005 : 0.002;
+                            const minTrailingPct = getAssetType(sym) === 'CRYPTO' ? 0.005 : 0.002;
                             const trailingDistance = Math.max(currentATR * 5.0, livePrice * minTrailingPct);
                             const isReversing = pos.type === 'LONG'
                                 ? (livePrice <= pos.peakPrice - trailingDistance)
@@ -7006,9 +7144,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // prezzo ritraccia fino all'ingresso, chiudiamo a pari (+0.05% di
                     // margine per lo spread) invece di lasciar tornare il trade in perdita.
                     // Solo-stringere: non tocca SL/TP e non chiude mai in perdita.
-                    if (!pos.breakevenArmed && unrealizedPct >= BREAKEVEN_ARM_PCT) {
+                    const beArmPct = getBreakevenArmPct(sym, effTP);
+                    if (!pos.breakevenArmed && unrealizedPct >= beArmPct) {
                         pos.breakevenArmed = true;
-                        console.log(`[RISK] ${sym} oltre +${BREAKEVEN_ARM_PCT}%: stop spostato a break-even (il trade non può più chiudere in perdita).`);
+                        console.log(`[RISK] ${sym} oltre +${beArmPct.toFixed(2)}% (70% del TP ${effTP.toFixed(2)}%): stop spostato a break-even (il trade non può più chiudere in perdita).`);
                     }
                     const netBreakeven = getNetBreakevenPct(sym);
                     if (pos.breakevenArmed && unrealizedPct <= netBreakeven && !pos.isActuallyClosing && !closePending) {
@@ -7022,8 +7161,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         continue;
                     }
                     if (effSL > 0 && unrealizedPct <= -effSL && !pos.isActuallyClosing && !closePending) {
-                        closeTrade(sym, livePrice, 'SL');
-                        continue;
+                        // Grazia anti-spread: nei primi SL_GRACE_MS chiudi solo se la
+                        // perdita è grave (2× SL) — lo spread di apertura non è un movimento
+                        const posAge = pos.openTime ? (now - pos.openTime) : Infinity;
+                        if (posAge >= SL_GRACE_MS || unrealizedPct <= -(effSL * 2)) {
+                            closeTrade(sym, livePrice, 'SL');
+                            continue;
+                        }
                     }
                 }
 
@@ -7927,8 +8071,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 
-            // Se Finnhub è già stato bloccato (403), saltiamo tutto tranne Crypto (che usa Alpaca)
-            if (window.finnhubForbidden && cat !== 'CRYPTO') return;
+            // NOTA: niente skip globale su finnhubForbidden — Alpaca è la fonte
+            // primaria per stock/ETF e Capital per Forex/Materie; il 403 di
+            // Finnhub blocca solo il SUO tentativo (guard dentro tryFinnhubPreload).
+            // Il vecchio skip lasciava il grafico azioni VUOTO all'avvio.
 
             console.log(`[RADAR] Avvio precaricamento per ${symbol}...`);
             try {
@@ -7968,6 +8114,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         let data = null;
                         if (typeof tryAlpacaPreload === 'function') data = await tryAlpacaPreload(symbol);
                         if (!data && typeof tryFinnhubPreload === 'function') data = await tryFinnhubPreload(symbol);
+                        // Capital.com SOLO per l'asset del grafico: 16 richieste
+                        // storiche OANDA all'avvio sarebbero un carico inutile.
+                        if (!data && typeof tryCapitalPreload === 'function' && assetPairSelect && assetPairSelect.value === symbol) {
+                            data = await tryCapitalPreload(symbol);
+                        }
                         if (data) historicalData = data;
                         else restrictedAssets.add(symbol);
                     }
@@ -8065,9 +8216,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!key || !sec) return null;
             }
             try {
-                // Alpaca offre bars solo per Stocks e Crypto; Forex/Commodity non supportati
+                // Alpaca offre bars per Stocks e Crypto. I simboli OANDA:* (forex e
+                // materie CFD) non esistono su Alpaca; un ETF come LIT (categoria
+                // COMMODITY) è invece un'azione a tutti gli effetti → endpoint stocks.
                 const assetType = getAssetType(symbol);
-                if (assetType === 'FOREX' || assetType === 'COMMODITY') return null;
+                if (symbol.includes('OANDA:')) return null;
 
                 // Storico grafico: ultimi 7 GIORNI in barre da 15 minuti (~670 barre).
                 // 1Min su 7 giorni sarebbero ~10.000 barre: pesanti e illeggibili.
@@ -8116,13 +8269,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         setInterval(async () => {
             try {
                 const sym = assetPairSelect ? assetPairSelect.value : null;
-                if (!sym || restrictedAssets.has(sym)) return;
+                if (!sym) return;
                 const nowSec = Math.floor(Date.now() / 1000);
                 if (lastCandleTime && nowSec - lastCandleTime < 120) return; // già aggiornato
                 const aType = getAssetType(sym);
-                if (aType !== 'CRYPTO' && aType !== 'STOCK') return; // bars solo per crypto/stocks
                 if (typeof isMarketOpen === 'function' && !isMarketOpen(aType)) return;
-                const data = await tryAlpacaPreload(sym);
+                let data = null;
+                if (!sym.includes('OANDA:')) {
+                    if (restrictedAssets.has(sym)) return;
+                    data = await tryAlpacaPreload(sym);
+                } else if (typeof tryCapitalPreload === 'function') {
+                    // Forex/Materie OANDA: barre recenti dal conto Capital.com
+                    data = await tryCapitalPreload(sym);
+                }
                 if (data && data.length > 0 && assetPairSelect && assetPairSelect.value === sym) {
                     ChartManager.setHistoricalData(data);
                     lastCandleTime = data[data.length - 1].time;
@@ -8132,6 +8291,43 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } catch (e) { /* silenzioso: ritenta al prossimo giro */ }
         }, 30000);
+
+        // Storico per Forex/Materie Prime via Capital.com: ultimi 7 giorni in
+        // barre 15Min. Finnhub candle è premium (403) e Alpaca non ha questi
+        // asset — senza credenziali Capital il grafico OANDA:* parte dai tick live.
+        async function tryCapitalPreload(symbol) {
+            const epic = CAPITAL_EPIC_MAP[symbol];
+            if (!epic || capitalBadEpics.has(epic)) return null;
+            if (!capDemoKey && !capLiveKey) return null; // nessuna credenziale Capital
+            try {
+                const res = await capitalAuthed(`/api/v1/prices/${encodeURIComponent(epic)}?resolution=MINUTE_15&max=672`);
+                if (res && res.ok) {
+                    const data = await res.json();
+                    if (data && Array.isArray(data.prices) && data.prices.length > 0) {
+                        const mid = f => {
+                            if (!f) return 0;
+                            const b = parseFloat(f.bid), a = parseFloat(f.ask);
+                            return (b > 0 && a > 0) ? (b + a) / 2 : (a || b || 0);
+                        };
+                        const historicalData = data.prices.map(p => {
+                            let ts = p.snapshotTimeUTC || p.snapshotTime || '';
+                            if (ts && !/Z$|[+-]\d\d:?\d\d$/.test(ts)) ts += 'Z'; // orario UTC senza suffisso
+                            return {
+                                time: Math.floor(new Date(ts).getTime() / 1000),
+                                open: mid(p.openPrice), high: mid(p.highPrice),
+                                low: mid(p.lowPrice), close: mid(p.closePrice)
+                            };
+                        }).filter(b => b.time > 0 && b.close > 0);
+                        if (historicalData.length > 0) {
+                            bgPriceHistories[symbol] = historicalData.slice(-100).map(b => b.close);
+                            console.log(`[PRELOAD] ${symbol}: caricati ${historicalData.length} punti via Capital.com (${epic}).`);
+                            return historicalData;
+                        }
+                    }
+                }
+            } catch (e) { console.warn(`[CAPITAL PRELOAD] Fallito per ${symbol}:`, e.message); }
+            return null;
+        }
 
         // IL RADAR MULTI-ASSET È ORA ESTERNO IN radar.js
         if (window.RadarManager) {

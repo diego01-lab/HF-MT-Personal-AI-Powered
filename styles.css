@@ -3131,9 +3131,9 @@ html.no-gsi .g_id_signin {
     min-width: 0;
     /* Altezza ancorata al viewport + ~2cm (76px a 96 DPI) + 14px recuperati
        riducendo il gap header→griglia (allungamento verso l'alto)
-       + ~1cm (38px a 96 DPI) di allungamento verso il basso. */
-    height: calc(100vh - 155px + 76px + 14px + 38px);
-    min-height: 540px;
+       + ~1cm (38px) + ~2cm (76px) di allungamento verso il basso. */
+    height: calc(100vh - 155px + 76px + 14px + 38px + 76px);
+    min-height: 616px;
     overflow-y: auto;
     overflow-x: hidden;
     margin: 0 !important;
