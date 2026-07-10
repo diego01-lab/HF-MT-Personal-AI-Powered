@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.04';
+window.APP_VERSION = 'v.1.0.06';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -1848,6 +1848,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
         const orderRejectCooldown = {};
         const ORDER_REJECT_COOLDOWN_MS = 120000;
+        // Cooldown per-simbolo dopo un rifiuto per WASH TRADE (ordine opposto ancora
+        // pendente sullo stesso simbolo su Alpaca): dà tempo al fill precedente di
+        // risolversi prima di riprovare, spegnendo la raffica di 403 del churn rapido.
+        const WASH_TRADE_COOLDOWN_MS = 60000;
+        // Blackout riapertura dopo una chiusura: il bot non riapre lo stesso simbolo
+        // per questo tempo (riduce il ping-pong open/close/reopen e i wash trade).
+        const POST_CLOSE_BLACKOUT_MS = 45000;
         // Circuit breaker GLOBALE: quando il buying power è esaurito, TUTTI gli ordini
         // vengono sospesi per 5 minuti. Evita centinaia di 403 al secondo quando i fondi sono a 0.
         const GLOBAL_ORDER_PAUSE_MS = 300000; // 5 minuti
@@ -6072,10 +6079,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Circuit breaker globale: fondi esauriti → nessun ordine su nessun asset
             if (isBotActive && globalOrderPauseUntil && Date.now() < globalOrderPauseUntil) return;
 
-            // Blackout post-chiusura (stessa finestra di 30s di syncAlpacaPositions):
-            // il broker può avere ancora la vecchia posizione in liquidazione, e una
-            // nuova apertura sullo stesso simbolo verrebbe rifiutata (403 insufficient qty)
-            if (closingAssets.has(sym) || Date.now() - (recentlyClosed[sym] || 0) < 30000) return;
+            // Blackout post-chiusura: il broker può avere ancora la vecchia posizione in
+            // liquidazione (ordine di chiusura pendente), e una nuova apertura sullo stesso
+            // simbolo verrebbe rifiutata (403 insufficient qty / wash trade). Finestra
+            // estesa a POST_CLOSE_BLACKOUT_MS per spezzare il ping-pong open/close/reopen.
+            if (closingAssets.has(sym) || Date.now() - (recentlyClosed[sym] || 0) < POST_CLOSE_BLACKOUT_MS) return;
 
             // -- Blacklist meme-coin sub-penny (deterministica, NON dipende dalle quote) --
             // Prima linea di difesa contro il churn: questi asset hanno spread effettivo
@@ -6415,8 +6423,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 if (qtyVal > 0) {
-                    const orderOk = await alpacaCreateOrder(type === 'LONG' ? 'buy' : 'sell', alpacaSym, qtyVal.toString());
-                    if (!orderOk) {
+                    // alpacaCreateOrder: true = successo, altrimenti stringa col motivo del
+                    // rifiuto (o false se manager assente). Usiamo il motivo di QUESTO ordine.
+                    const orderRes = await alpacaCreateOrder(type === 'LONG' ? 'buy' : 'sell', alpacaSym, qtyVal.toString());
+                    if (orderRes !== true) {
                         // Restituzione fondi in caso di ordine rifiutato
                         if (isCrypto && typeof availableCash !== 'undefined') {
                             availableCash += actualCost;
@@ -6426,10 +6436,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         // Ordine rifiutato dal broker: NON scalare capitale né budget di sessione,
                         // altrimenti il budget si esaurisce con ordini mai eseguiti.
-                        // Se il rifiuto è per fondi insufficienti, attiva il circuit breaker globale
-                        if (window.__lastAlpacaOrderError && window.__lastAlpacaOrderError.includes('insufficient buying power')) {
+                        // Classificazione del rifiuto sul motivo di questo specifico ordine
+                        // (fallback al global solo se il motivo non è arrivato come stringa).
+                        const reason = (typeof orderRes === 'string' ? orderRes : '') || window.__lastAlpacaOrderError || '';
+                        const isFundError = /insufficient buying power|insufficient balance|cost basis must be|not enough/.test(reason);
+                        const isWashTrade = /wash trade/.test(reason);
+                        if (isFundError) {
+                            // Errore di conto (fondi): sospensione globale, ogni altro ordine
+                            // fallirebbe uguale → evita la raffica di 403.
                             globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
-                            console.warn(`[ORDER] Buying power esaurito: TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
+                            console.warn(`[ORDER] Fondi insufficienti (${reason.slice(0, 60)}): TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
+                        } else if (isWashTrade) {
+                            // Ordine opposto ancora pendente sullo stesso simbolo: cooldown lungo
+                            // per lasciarlo risolvere, invece di ritentare subito (altra 403).
+                            orderRejectCooldown[sym] = Date.now() + WASH_TRADE_COOLDOWN_MS;
+                            console.warn(`[ORDER] Wash trade su ${sym} (ordine opposto pendente): cooldown ${WASH_TRADE_COOLDOWN_MS / 1000}s.`);
                         } else {
                             orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
                             console.warn(`[ORDER] Ordine ${type} ${sym} rifiutato dal broker. Riprovo tra ${ORDER_REJECT_COOLDOWN_MS / 60000} min.`);
@@ -8601,11 +8622,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (msg.includes('insufficient balance') || msg.includes('insufficient buying power') || msg.includes('cost basis must be')) {
                     console.warn(`[ALPACA] Ordine rifiutato per fondi insufficienti (possibile desincronizzazione temporanea). Dettaglio: ${e.message}`);
                     showNotification(`Alpaca: Fondi temporaneamente insufficienti per eseguire l'ordine.`, "warning");
+                } else if (msg.includes('wash trade')) {
+                    console.warn(`[ALPACA] Ordine rifiutato: wash trade (ordine opposto ancora pendente sullo stesso simbolo). Dettaglio: ${e.message}`);
                 } else {
                     console.error("[ALPACA] Errore ordine:", e);
                     showNotification(`Alpaca Errore: ${e.message}`, "error");
                 }
-                return false;
+                // Restituiamo il MOTIVO (stringa) invece di false: il chiamante lo usa per
+                // classificare il rifiuto in modo affidabile, senza leggere il global
+                // window.__lastAlpacaOrderError (che ordini paralleli possono sovrascrivere).
+                return msg || 'error';
             }
         }
 
