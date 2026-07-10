@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.06';
+window.APP_VERSION = 'v.1.0.07';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -4571,6 +4571,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             brokerMarketValue = (parseFloat(data.long_market_value) || 0) + Math.abs(parseFloat(data.short_market_value) || 0);
             brokerUnrealizedPnL = parseFloat(data.unrealized_intraday_pl != null ? data.unrealized_intraday_pl : (data.unrealized_pl || 0));
             window.alpacaShortingEnabled = data.shorting_enabled === true;
+            // Sincronizza il flag anti-short col conto REALE: se il conto non abilita lo
+            // scoperto, il bot NON deve nemmeno tentare ordini SHORT (Alpaca li rifiuta con
+            // 403 "account is not allowed to short"). Prima il flag si attivava solo DOPO il
+            // primo 403 → raffica di rifiuti all'avvio; ora è proattivo dal /v2/account.
+            window.__alpacaShortNotAllowed = !window.alpacaShortingEnabled;
+            try { localStorage.setItem('alpacaShortNotAllowed', String(window.__alpacaShortNotAllowed)); } catch (_) { }
 
             // Valuta
             if (data.currency) {
