@@ -1,5 +1,5 @@
 // --- Global Alpaca Request Queue (serialized with spacing & exponential backoff) ---
-(function() {
+(function () {
     const _origFetch = window.fetch;
     const ALPACA_MIN_GAP_MS = 250;      // min ms between consecutive Alpaca API calls
     const ALPACA_MAX_BACKOFF_MS = 15000; // max backoff on repeated 429s
@@ -44,7 +44,7 @@
         _processing = false;
     }
 
-    window.fetch = function(...args) {
+    window.fetch = function (...args) {
         const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
         if (!_isAlpacaREST(url)) return _origFetch.apply(this, args);
         // Enqueue Alpaca REST calls
@@ -778,7 +778,7 @@ function uiLocale() {
 let isBotActive = false;
 let isCapitalExhausted = false;
 let sessionBudgetUsed = 0;
-let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
+let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
 let isManualMode = true; // Il bot parte sempre FERMO ad ogni avvio — l'utente deve avviarlo manualmente
 let useAlpacaBroker = false; // L'app parte SEMPRE in test mode; il broker si attiva solo dal toggle
 let alpacaKeyId = localStorage.getItem('alpaca_key_id') || '';
@@ -812,7 +812,7 @@ let finnhubApiKey = localStorage.getItem('finnhub_api_key') || '';
 window.finnhubForbidden = localStorage.getItem('finnhub_candles_forbidden') === 'true';
 let useFinnhubData = false;
 let bgFinnhubWs = null;
-        const wsThrottleMap = {};
+const wsThrottleMap = {};
 let bgAlpacaWs = null;
 let bgAlpacaCryptoWs = null;
 let alpacaCryptoAuthenticated = false;
@@ -828,6 +828,17 @@ let closingAssets = new Set();
 let brokerEntryBasis = {};
 // Normalizza i simboli per confrontare fill Alpaca (BTC/USD o BTCUSD) e simboli interni (BTCUSDT)
 function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); }
+// Ora di apertura annotata da openTrade per la posizione che il sync sta per
+// creare (/v2/positions non fornisce created_at). Consumata una sola volta;
+// valida 10 minuti, oltre è stantia (ordine mai riempito o posizione già nota).
+function takePendingOpenTime(sym) {
+    const pot = window.__pendingOpenTimes;
+    const ns = normFillSym(sym);
+    if (!pot || !pot[ns]) return null;
+    const t = pot[ns];
+    delete pot[ns];
+    return (Date.now() - t < 600000) ? t : null;
+}
 // Nome asset in forma compatta e leggibile per la UI (ADAUSD, EUR_USD, AAPL):
 // stessa resa in TUTTI i pannelli (Radar, Posizioni, Ordinate, Cronologia).
 function displaySymbol(s) { return (s || '').replace('OANDA:', '').replace('/', '').replace('USDT', 'USD'); }
@@ -858,6 +869,24 @@ function getLivePriceFor(sym) {
         if (p > 0) return p;
     }
     return 0;
+}
+// Spread bid/ask live per simbolo (% sul mid), alimentato dalle quote WS/REST.
+// Serve al filtro d'ingresso e alle soglie di rischio: comprare all'ask e
+// rivendere al bid costa l'intero spread anche senza alcun movimento di mercato.
+window.globalSpreads = window.globalSpreads || {};
+function recordSpread(sym, bid, ask) {
+    const b = parseFloat(bid), a = parseFloat(ask);
+    if (!(b > 0) || !(a > 0) || a < b) return;
+    window.globalSpreads[sym] = { pct: ((a - b) / ((a + b) / 2)) * 100, t: Date.now() };
+}
+function getSpreadPctFor(sym) {
+    const gs = window.globalSpreads;
+    if (!gs) return 0;
+    const s = (sym || '').replace('/', '');
+    const q = gs[sym] || gs[s] || (s.endsWith('USD') ? gs[s + 'T'] : null);
+    // Quote più vecchie di 5 minuti: inaffidabili, meglio dichiarare "sconosciuto" (0)
+    if (!q || Date.now() - q.t > 300000) return 0;
+    return q.pct;
 }
 let activePositions = {};
 let tradeCooldowns = {};
@@ -1706,7 +1735,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // batch di quotes → niente prezzi crypto. Per i simboli-posizione senza
             // slash (ADAUSD dei sync broker) c'è già il fallback in getAssetType.
             CRYPTO: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'MATICUSDT', 'AVAXUSDT', 'LINKUSDT', 'DOTUSDT', 'UNIUSDT', 'LTCUSDT', 'ATOMUSDT',
-                     'BCHUSDT', 'AAVEUSDT', 'BATUSDT', 'GRTUSDT', 'MKRUSDT'],
+                'BCHUSDT', 'AAVEUSDT', 'BATUSDT', 'GRTUSDT', 'MKRUSDT'],
             STOCK: ['AAPL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'GOOGL', 'META', 'NFLX', 'AMD', 'COIN', 'DIS', 'PYPL', 'BABA', 'NIO', 'INTC'],
             FOREX: ['OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD', 'OANDA:USD_CAD', 'OANDA:NZD_USD', 'OANDA:USD_CHF', 'OANDA:EUR_GBP', 'OANDA:EUR_JPY', 'OANDA:GBP_JPY'],
             COMMODITY: ['OANDA:XAU_USD', 'OANDA:XAG_USD', 'OANDA:BRENT_USD', 'OANDA:WTI_USD', 'OANDA:NATGAS_USD', 'OANDA:COPPER_USD', 'LIT']
@@ -1802,6 +1831,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         // bucato in 4-10s senza alcun movimento reale del mercato. Nei primi 45s
         // lo SL scatta solo per perdite GRAVI (>= 2× lo stop impostato).
         const SL_GRACE_MS = 45000;
+        // Spread massimo accettabile all'INGRESSO (bot): oltre questa soglia la
+        // posizione nasce con una perdita da spread che nessun movimento realistico
+        // recupera prima delle soglie di rischio (cronologia 10/07/2026: SHIB
+        // spread ~3.2% → 21 chiusure a -3.24% in 10 secondi).
+        const MAX_ENTRY_SPREAD_PCT = 0.50;
+        // Blacklist DETERMINISTICA dei meme-coin sub-penny: il bot non li apre MAI.
+        // Su questi asset la quota top-of-book di Alpaca è spesso stretta o incompleta
+        // (book sottile), ma l'ordine a mercato "cammina" il book pagando lo spread
+        // effettivo enorme (0.7–3.9%). Un filtro basato sulla quota (getSpreadPctFor)
+        // NON può intercettarlo: la quota mente. Solo l'esclusione statica è affidabile.
+        // Chiave normalizzata via normFillSym (SHIBUSDT / SHIB/USD / SHIBUSD → SHIBUSD).
+        // Gli ordini MANUALI restano possibili (con avviso): blocca solo il bot.
+        const HIGH_SPREAD_CRYPTO_BLACKLIST = new Set(['SHIBUSD', 'PEPEUSD', 'BONKUSD']);
         // Cooldown per simbolo dopo un rifiuto ordine del broker: il bot non
         // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
         const orderRejectCooldown = {};
@@ -1857,6 +1899,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentPrice = 0;
         previousPrice = 0;
         selectedPosCategory = 'ALL';
+        // Ordinamento pannelli Aperte/Ordinate/Cronologia: true = dal più recente al
+        // più vecchio (default richiesto), false = dal più vecchio al più recente.
+        let openPositionsSortDesc = (localStorage.getItem('sort_open_desc') ?? 'true') === 'true';
+        let pendingOrdersSortDesc = (localStorage.getItem('sort_pending_desc') ?? 'true') === 'true';
+        let historySortDesc = (localStorage.getItem('sort_history_desc') ?? 'true') === 'true';
+        function updateSortToggleUI(btnId, isDesc) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.textContent = isDesc ? '🔽' : '🔼';
+            btn.setAttribute('data-tooltip', isDesc
+                ? tr('sort_newest_first', 'Ordine: dal più recente al più vecchio (clicca per invertire)')
+                : tr('sort_oldest_first', 'Ordine: dal più vecchio al più recente (clicca per invertire)'));
+        }
         globalPrices = {};
         overviewPrevPrices = {};
 
@@ -1931,9 +1986,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // risincronizza interamente da Alpaca (conto/posizioni/ordini/FILL).
         function purgeAlpacaLocalData(cacheKey, ctx) {
             ['sim_trade_history', 'sim_total_pnl', 'sim_executed_trades', 'sim_win_trades',
-             'sim_gross_profit', 'sim_gross_loss', 'sim_active_positions', 'sim_trading_capital',
-             'sim_session_initial_capital', 'sim_global_commissions',
-             'broker_pnl_' + ctx, 'broker_deposited_' + ctx].forEach(k => localStorage.removeItem(k));
+                'sim_gross_profit', 'sim_gross_loss', 'sim_active_positions', 'sim_trading_capital',
+                'sim_session_initial_capital', 'sim_global_commissions',
+                'broker_pnl_' + ctx, 'broker_deposited_' + ctx].forEach(k => localStorage.removeItem(k));
             try {
                 const cache = JSON.parse(localStorage.getItem('alpaca_activities_cache')) || {};
                 delete cache[cacheKey];
@@ -2059,12 +2114,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // FASE D1: stato bot ON/OFF ricordato PER SCHEDA nella sessione corrente (in-memory only).
         // Il bot NON viene mai riattivato automaticamente tra sessioni/ricaricamenti:
         // l'utente deve sempre avviarlo manualmente premendo ▶ Start Bot.
-        var botActiveByCtx = { 
-            fh: false, 
-            alp: false, 
-            alrt: false, 
-            capd: false, 
-            capl: false 
+        var botActiveByCtx = {
+            fh: false,
+            alp: false,
+            alrt: false,
+            capd: false,
+            capl: false
         };
         function saveLocalCtxState(ctx) {
             if (!LOCAL_CTXS.includes(ctx)) return;
@@ -2102,7 +2157,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 grossLoss = parseFloat(s.grossLoss) || 0;
                 sessionBudgetUsed = parseFloat(s.sessionBudgetUsed) || 0;
                 globalCommissions = parseFloat(s.globalCommissions) || 0;
-                skippedCounters = s.skippedCounters || { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 };
+                skippedCounters = s.skippedCounters || { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0 };
             }
             isCapitalExhausted = false;
         }
@@ -2236,9 +2291,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Anti-bleed UI: durante fn le funzioni di rendering possono aver scritto
             // nel DOM i valori del contesto in background; ri-renderizza subito i
             // valori del contesto ATTIVO appena ripristinato.
-            try { 
-                updateWalletUI(); 
-                if (typeof updateDashboard === 'function') updateDashboard(); 
+            try {
+                updateWalletUI();
+                if (typeof updateDashboard === 'function') updateDashboard();
                 if (typeof renderHistory === 'function') renderHistory();
                 if (typeof renderOpenPositions === 'function') renderOpenPositions();
             } catch (_) { }
@@ -2272,7 +2327,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!el) return;
             const parts = [];
             let total = 0;
-            
+
             // SOMMA SOLO PORTAFOGLI REALI (ALRT e CAPL)
             const known = window.__equityByCtx || {};
             for (const b of ['alrt', 'capl']) {
@@ -2281,29 +2336,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                     parts.push(`${b.toUpperCase()}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(known[b])}`);
                 }
             }
-            
+
             // Lettura valuta scelta dalla barra (default USD)
             const currencySel = document.getElementById('topBarCurrencySelector');
             const targetCurrency = currencySel ? currencySel.value : 'USD';
-            
+
             // Calcolo tasso di conversione dai prezzi in tempo reale (Finnhub/Capital Forex)
             let rate = 1;
             if (targetCurrency === 'EUR') rate = globalPrices['EURUSD'] ? (1 / globalPrices['EURUSD']) : (1 / 1.08);
             else if (targetCurrency === 'GBP') rate = globalPrices['GBPUSD'] ? (1 / globalPrices['GBPUSD']) : (1 / 1.25);
             else if (targetCurrency === 'CHF') rate = globalPrices['USDCHF'] || 0.88;
             else if (targetCurrency === 'JPY') rate = globalPrices['USDJPY'] || 150.0;
-            
+
             const convertedTotal = total * rate;
 
             // Formatta SOLO come numero (il simbolo è nella combo box)
             const formatted = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(convertedTotal);
             el.textContent = formatted;
-            
+
             const wrap = el.closest('.header-portfolio');
             if (wrap) wrap.setAttribute('data-tooltip', 'Totale Portafogli Reali — ' + (parts.length > 0 ? parts.join(' · ') : 'Nessun conto reale collegato'));
         }
         window.updateGlobalPortfolioHeader = updateGlobalPortfolioHeader;
-        
+
         // Aggiungi listener per ricalcolare subito al cambio di valuta
         document.addEventListener('DOMContentLoaded', () => {
             const topBarSel = document.getElementById('topBarCurrencySelector');
@@ -2608,7 +2663,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 winTrades = 0;
                 grossProfit = 0;
                 grossLoss = 0;
-                
+
                 // In Fase C, le connessioni dati sono indipendenti dai tab.
                 // Il cambio tab NON forza l'attivazione della connessione.
                 if (window.__connAllowed.alp) {
@@ -3341,7 +3396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const EMA_LONG_PERIOD = 26;
         const EMA_TREND_PERIOD = 200;
         const RSI_PERIOD = 14;
-        
+
         function getBrokerCtx() {
             // FASE D2: durante l'esecuzione di un motore in background il contesto
             // "corrente" è quello del motore (ledger/persistenza instradati giusti)
@@ -3404,7 +3459,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         window.updateCapitalHistoryBoxes = updateCapitalHistoryBoxes;
 
-                var lastWalletUITime = 0;
+        var lastWalletUITime = 0;
         function updateWalletUI(force = false) {
             if (window.__ctxOverride) return;
             const now = Date.now();
@@ -3473,7 +3528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (typeof updateGlobalPortfolioHeader === 'function') updateGlobalPortfolioHeader();
                 if (document.getElementById('availableMargin')) document.getElementById('availableMargin').textContent = formatMoney(tradingCapital);
                 if (document.getElementById('totalInvested')) document.getElementById('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
-                
+
                 const dep = getDepositedTotal(getBrokerCtx(), testEquity);
                 const realizedPnl = globalTotalRealizedPnL;
                 if (document.getElementById('sessionRevenue')) {
@@ -3856,8 +3911,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 entryPrice: parseFloat(p.avg_entry_price),
                                 amount: parseFloat(p.qty),
                                 invested: parseFloat(p.cost_basis),
-                                // /v2/positions non ha created_at: l'ora reale arriva dai FILL (syncAlpacaHistory)
-                                openTime: p.created_at ? new Date(p.created_at).getTime() : null,
+                                // /v2/positions non ha created_at: usa l'ora annotata da openTrade
+                                // se l'apertura è appena partita da qui, altrimenti i FILL (syncAlpacaHistory)
+                                openTime: p.created_at ? new Date(p.created_at).getTime() : takePendingOpenTime(botSym),
                                 fromBroker: true
                             };
                             console.log(`[SYNC] Posizione recuperata da Alpaca: ${botSym}`);
@@ -4213,6 +4269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (!sym || !mid || mid <= 0) return;
                         const type = getAssetType(sym);
                         globalPrices[sym] = mid;
+                        recordSpread(sym, bid, offer);
                         updateBackgroundHistoryAndStrategy(sym, mid, now, type, 'cap');
                         processRadarTick(sym, mid, now, type);
                     });
@@ -4522,9 +4579,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (isFinite(nbpVal) && nbpVal < cVal) cVal = nbpVal;
             if (!isFinite(cVal)) cVal = 0;
             if (cVal < 0) cVal = 0;
-            
+
             const marginVal = parseFloat(data.buying_power);
-            
+
             window.__lastAlpacaDeduction = window.__lastAlpacaDeduction || 0;
             if (Date.now() - window.__lastAlpacaDeduction < 10000) {
                 // Previene sovrascritture con dati vecchi dal polling subito dopo un ordine
@@ -4686,10 +4743,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const positions = await mgr.getPositions();
                 if (!brokerViewActive()) return;
-                
+
                 let anyChanges = false;
                 const currentSymbols = new Set(positions.map(p => p.symbol));
-                
+
                 for (const pos of positions) {
                     const sym = pos.symbol;
                     const isLong = pos.side === 'long';
@@ -4710,9 +4767,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             isBot: false,
                             confidence: 50,
                             // /v2/positions NON fornisce l'ora di apertura (created_at non esiste):
-                            // lasciamo null e la ricaviamo dal primo FILL in syncAlpacaHistory.
+                            // usa l'ora annotata da openTrade se l'ordine è partito da qui,
+                            // altrimenti null e la ricaviamo dal primo FILL in syncAlpacaHistory.
                             // Mai Date.now(): mostrerebbe l'ora del sync, non quella di apertura.
-                            openTime: pos.created_at ? new Date(pos.created_at).getTime() : null
+                            openTime: pos.created_at ? new Date(pos.created_at).getTime() : takePendingOpenTime(sym)
                         };
                         anyChanges = true;
                     }
@@ -4724,7 +4782,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         activePositions[sym].brokerMarketValue = parseFloat(pos.market_value || 0);
                     }
                 }
-                
+
                 // Rimuovi le posizioni fantasma chiuse sul broker
                 for (const sym in activePositions) {
                     if (!currentSymbols.has(sym) && !closingAssets.has(sym)) {
@@ -4732,7 +4790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         anyChanges = true;
                     }
                 }
-                
+
                 if (anyChanges) {
                     persistData();
                     renderOpenPositions();
@@ -4759,7 +4817,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let pageToken = '';
                 const cacheKey = src.live ? 'live' : 'paper';
                 let savedCache = {};
-                try { savedCache = JSON.parse(localStorage.getItem('alpaca_activities_cache')) || {}; } catch(e){}
+                try { savedCache = JSON.parse(localStorage.getItem('alpaca_activities_cache')) || {}; } catch (e) { }
                 window.__alpacaActivitiesCache = window.__alpacaActivitiesCache || savedCache;
                 const cached = window.__alpacaActivitiesCache[cacheKey] || [];
                 const latestCachedId = cached.length > 0 ? cached[0].id : null;
@@ -4775,7 +4833,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                     const chunk = await response.json();
                     if (!chunk || chunk.length === 0) break;
-                    
+
                     let hitCache = false;
                     for (const act of chunk) {
                         if (act.id === latestCachedId || cached.some(c => c.id === act.id)) {
@@ -4785,16 +4843,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                         activities.push(act);
                     }
                     if (hitCache) break;
-                    
+
                     if (chunk.length < 100) break; // Ultima pagina
                     pageToken = chunk[chunk.length - 1].id;
                 }
-                
+
                 activities = activities.concat(cached);
                 if (activities.length > 1000) activities = activities.slice(0, 1000);
                 window.__alpacaActivitiesCache[cacheKey] = activities;
-                try { localStorage.setItem('alpaca_activities_cache', JSON.stringify(window.__alpacaActivitiesCache)); } catch(e){}
-                
+                try { localStorage.setItem('alpaca_activities_cache', JSON.stringify(window.__alpacaActivitiesCache)); } catch (e) { }
+
                 if (activities.length > 0) {
                     // Cambio modalità durante la richiesta: non contaminare la modalità test
                     // né mescolare i dati Paper/Reale
@@ -4835,7 +4893,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const actId = act.id || act.transaction_id || `alpaca_${timestamp}_${sym}`;
 
                         // Una sola voce per fill di chiusura (dedup per id attività Alpaca)
-                        const pushRow = (type, entryPrice, closedQty, pnl, entryTime) => {
+                        // closeReason: il motivo annotato da closeTrade (SL/TP/HEDGE/...);
+                        // assente per chiusure avvenute fuori dall'app → BROKER_SYNC
+                        const pushRow = (type, entryPrice, closedQty, pnl, entryTime, closeReason) => {
                             if (tradeHistory.some(t => t.id === actId)) return;
 
                             // Aggiorna le statistiche globali (LIFETIME)
@@ -4862,7 +4922,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 entryTime: entryTime || (timestamp - 60000),
                                 exitTime: timestamp,
                                 fromBroker: true,
-                                reason: 'BROKER_SYNC',
+                                reason: closeReason || 'BROKER_SYNC',
                                 status: 'COMPLETATO (BROKER)'
                             });
                             addedNew = true;
@@ -4877,7 +4937,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (sb && sb.qty > EPS) {
                                 // Copertura di uno short aperto nella finestra: PnL realizzato
                                 const coverQty = Math.min(qty, sb.qty);
-                                pushRow('SHORT', sb.price, coverQty, (sb.price - price) * coverQty, sb.time);
+                                pushRow('SHORT', sb.price, coverQty, (sb.price - price) * coverQty, sb.time, (known && known.type === 'SHORT') ? known.reason : null);
                                 sb.qty -= coverQty;
                                 const rest = qty - coverQty;
                                 if (rest > EPS) addToBasis(longBasis, ns, rest, price, timestamp);
@@ -4885,7 +4945,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 if (known && known.type === 'SHORT') delete brokerEntryBasis[ns];
                             } else if (known && known.type === 'SHORT') {
                                 // Copertura di uno short aperto PRIMA della finestra: usa l'entry annotato
-                                pushRow('SHORT', known.price, qty, (known.price - price) * qty, known.time);
+                                pushRow('SHORT', known.price, qty, (known.price - price) * qty, known.time, known.reason);
                                 delete brokerEntryBasis[ns];
                             } else {
                                 // Acquisto normale: apre/incrementa il long. Nessuna voce in cronologia.
@@ -4899,7 +4959,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (lb && lb.qty > EPS) {
                             // Chiusura (anche parziale) di un long: PnL rispetto al costo medio
                             const closeQty = Math.min(qty, lb.qty);
-                            pushRow('LONG', lb.price, closeQty, (price - lb.price) * closeQty, lb.time);
+                            pushRow('LONG', lb.price, closeQty, (price - lb.price) * closeQty, lb.time, (known && known.type === 'LONG') ? known.reason : null);
                             lb.qty -= closeQty;
                             const rest = qty - closeQty;
                             if (rest > EPS) addToBasis(shortBasis, ns, rest, price, timestamp);
@@ -4909,7 +4969,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         if (known && known.type === 'LONG') {
                             // Chiusura di un long aperto PRIMA della finestra: usa l'entry annotato
-                            pushRow('LONG', known.price, qty, (price - known.price) * qty, known.time);
+                            pushRow('LONG', known.price, qty, (price - known.price) * qty, known.time, known.reason);
                             delete brokerEntryBasis[ns];
                             return;
                         }
@@ -4986,18 +5046,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // eseguiamo UNA finale per avere lo stato più aggiornato.
                 if (_historySyncQueued) { _historySyncQueued = false; syncAlpacaHistory(); }
             }
-        }
-
-        function finalizeLocalClose(sym, price) {
-            const pos = activePositions[sym];
-            if (!pos) return;
-            const pnl = pos.type === 'LONG' ? (price - pos.entryPrice) * pos.amount : (pos.entryPrice - price) * pos.amount;
-            tradingCapital += (pos.invested + pnl);
-            addTradeToHistory(pos.type, pos.entryPrice, price, pnl, pos.amount, sym, pos.openTime, Date.now(), true);
-            delete activePositions[sym];
-            syncFinnhubSubscriptions();
-            updateDashboard();
-            updateWalletUI();
         }
 
         if (testAlpacaBtn) {
@@ -5150,6 +5198,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
+        // Toggle ordinamento Cronologia (recente↔vecchio)
+        const btnSortHistory = document.getElementById('btnSortHistory');
+        if (btnSortHistory) {
+            btnSortHistory.addEventListener('click', () => {
+                historySortDesc = !historySortDesc;
+                localStorage.setItem('sort_history_desc', String(historySortDesc));
+                updateSortToggleUI('btnSortHistory', historySortDesc);
+                renderHistory();
+            });
+            updateSortToggleUI('btnSortHistory', historySortDesc);
+        }
+
         // ─── Esporta cronologia in CSV (separatore ';' + BOM: apre bene in Excel) ───
         const btnExportHistory = document.getElementById('btnExportHistory');
         if (btnExportHistory) {
@@ -5163,7 +5223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
                 };
                 const fmtTs = t => t ? new Date(t).toLocaleString('it-IT') : '';
-                const header = ['Simbolo', 'Tipo', 'Apertura', 'Chiusura', 'DurataSec',
+                const header = ['IdTransazione', 'Simbolo', 'Tipo', 'Apertura', 'Chiusura', 'DurataSec',
                     'PrezzoEntrata', 'PrezzoUscita', 'Quantita', 'Investito', 'PnL', 'PnLPct', 'Motivo', 'Stato'];
                 const rows = [...tradeHistory]
                     .sort((a, b) => (b.time || 0) - (a.time || 0))
@@ -5171,8 +5231,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const invested = t.invested || (t.entryPrice * t.amount) || 0;
                         const pnlPct = invested > 0 ? (t.pnl / invested) * 100 : 0;
                         const durSec = (t.exitTime && t.entryTime) ? Math.round((t.exitTime - t.entryTime) / 1000) : '';
+                        // Invariante: in modalità broker (Alpaca Paper/Reale) OGNI voce
+                        // arriva dal sync Alpaca con id reale (t.id) — il fallback NON scatta
+                        // mai qui. L'id sintetico serve SOLO all'export in modalità TEST, dove
+                        // i trade sono locali e privi di id (in broker mode non esistono).
+                        const txId = t.id || `local_${t.time || 0}_${t.sym || ''}`;
                         return [
-                            displaySymbol(t.sym), t.type, fmtTs(t.entryTime || t.time), fmtTs(t.exitTime || t.time),
+                            txId, displaySymbol(t.sym), t.type, fmtTs(t.entryTime || t.time), fmtTs(t.exitTime || t.time),
                             durSec, t.entryPrice, t.exitPrice, t.amount, invested.toFixed(2),
                             (t.pnl || 0).toFixed(4), pnlPct.toFixed(2), t.reason || 'MANUAL', t.status || ''
                         ].map(esc).join(';');
@@ -5226,13 +5291,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             lastCandleTime = 0;
 
             ChartManager.setSymbol(symbol);
-            
+
             // Lazy load della cronologia OHLC per il grafico quando si cambia asset
             const assetType = getAssetType(symbol);
             // Alpaca copre crypto + tutto ciò che è un'azione USA (incluso l'ETF LIT
             // in categoria COMMODITY); restano fuori solo i CFD OANDA:* (Capital.com)
             const isAlpacaCompatible = !symbol.includes('OANDA:');
-            
+
             const doPreload = async () => {
                 let data = null;
                 if (isAlpacaCompatible && typeof tryAlpacaPreload === 'function' && !restrictedAssets.has(symbol)) {
@@ -5282,7 +5347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             console.warn('Fallback quote err:', e);
                         }
                     }
-                    
+
                     // Se qRes ha fallito (es. 403 su Forex) e il grafico è ancora vuoto,
                     // usiamo i tick live accumulati in background come piano C (Extreme Fallback)
                     if (currentPrice === 0 || currentPrice === undefined) {
@@ -5290,7 +5355,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const ticks = window.bgPriceHistories[symbol];
                             let now = Math.floor(Date.now() / 1000);
                             const fallbackData = [];
-                            for(let i=ticks.length-1; i>=0; i--) {
+                            for (let i = ticks.length - 1; i >= 0; i--) {
                                 const p = ticks[i];
                                 fallbackData.unshift({ time: now, open: p, high: p, low: p, close: p });
                                 now -= 60; // arretriamo di 1 minuto per ogni tick
@@ -5347,7 +5412,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             // Reset della serie di confronto per evitare glitch visivi
-            
+
 
             updateDashboard();
 
@@ -5370,13 +5435,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     else if (ctx === 'capd') isArmed = window.__connAllowed && window.__connAllowed.capd;
                     else if (ctx === 'capl') isArmed = window.__connWanted && window.__connWanted.capl;
                     else if (ctx === 'alrt') isArmed = window.__connWanted && window.__connWanted.alrt;
-                    
+
                     if (!isArmed) {
                         showNotification("Attiva l'interruttore di connessione per questo broker prima di avviare il trading automatico.", 'warning');
                         return;
                     }
                 }
-                
+
                 // FASE D1: il tasto agisce sulla SCHEDA corrente; ogni contesto broker
                 // ricorda il suo stato bot (ripristinato al ritorno sulla scheda).
                 applyBotState(!isBotActive);
@@ -5392,7 +5457,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             isBotActive = !!on;
             const ctx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
             botActiveByCtx[ctx] = isBotActive;
-            
+
             // UNIFICAZIONE: Bot Active = Auto Mode, Bot Stopped = Manual Mode
             isManualMode = !isBotActive;
             localStorage.setItem('sim_trading_mode', isManualMode ? 'manual' : 'auto');
@@ -5762,20 +5827,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!pos) {
                     // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
                     const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
-                    
+
                     // SL minimo crypto 1.2%: deve stare SOPRA lo spread tipico di
                     // apertura, altrimenti la posizione nasce già a un passo dallo stop.
                     const minSL = getAssetType(sym) === 'CRYPTO' ? 1.2 : 0.25;
                     // SL HFT: diamo respiro per il rumore di fondo
                     let dynamicSL = Math.min(5.0, Math.max(minSL, (volatilityPct / 3)));
-                    
+
                     // Considera i costi di commissione: TP deve almeno coprire i costi + un po' di margine
-                    const netBreakeven = getNetBreakevenPct(sym); 
+                    const netBreakeven = getNetBreakevenPct(sym);
                     const minTarget = netBreakeven + 0.15; // deve guadagnare netto 0.15% minimo
-                    
+
                     // TP: Risk/Reward ratio di 1:1.5, con pavimento scalping
                     let dynamicTP = Math.min(15.0, Math.max(minTarget, (dynamicSL * 1.5)));
-                    
+
                     // Se la volatilità è bassissima, forza SL a ridosso per non rimanere incastrati
                     if (dynamicTP === minTarget) dynamicSL = Math.max(minSL, minTarget / 1.5);
 
@@ -5954,9 +6019,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Contatore posizioni SALTATE dalla sessione bot corrente, per motivo. Mostrato
         // nel pannello Posizioni Aperte (sopra le icone): rende visibile PERCHÉ in Alpaca
         // si aprono meno posizioni che in Test (SHORT crypto non consentito, cash, ecc.).
-        
+
         function bumpSkipped(reason) {
-            if (reason in skippedCounters) skippedCounters[reason]++;
+            // Tollerante: i contatori salvati da versioni precedenti possono non avere la chiave
+            skippedCounters[reason] = (skippedCounters[reason] || 0) + 1;
             updateSkippedCounterUI();
         }
         let _skippedUpdatePending = false;
@@ -5964,13 +6030,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (window.__ctxOverride) return;
             if (_skippedUpdatePending) return;
             _skippedUpdatePending = true;
-            
+
             requestAnimationFrame(() => {
                 _skippedUpdatePending = false;
                 const el = document.getElementById('skippedCounter');
                 if (!el) return;
                 const c = skippedCounters;
-                const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos;
+                const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos + (c.spread || 0);
                 // Visibile per TUTTA la sessione col bot attivo (anche a 0), così è chiaro che
                 // c'è e sta contando; si nasconde solo a bot fermo.
                 if (!isBotActive) { el.style.display = 'none'; return; }
@@ -5980,6 +6046,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (c.reject) parts.push(`rifiuti ${c.reject}`);
                 if (c.qty) parts.push(`qty ${c.qty}`);
                 if (c.maxpos) parts.push(`limite ${c.maxpos}`);
+                if (c.spread) parts.push(`spread ${c.spread}`);
                 const totalEl = document.getElementById('skippedTotal');
                 const breakEl = document.getElementById('skippedBreakdown');
                 if (totalEl) totalEl.textContent = total;
@@ -6009,6 +6076,50 @@ document.addEventListener('DOMContentLoaded', async () => {
             // il broker può avere ancora la vecchia posizione in liquidazione, e una
             // nuova apertura sullo stesso simbolo verrebbe rifiutata (403 insufficient qty)
             if (closingAssets.has(sym) || Date.now() - (recentlyClosed[sym] || 0) < 30000) return;
+
+            // -- Blacklist meme-coin sub-penny (deterministica, NON dipende dalle quote) --
+            // Prima linea di difesa contro il churn: questi asset hanno spread effettivo
+            // strutturale enorme che il filtro basato su quota non intercetta (la quota
+            // top-of-book è sottile/incompleta e "mente"). Il bot non li apre mai.
+            if (HIGH_SPREAD_CRYPTO_BLACKLIST.has(normFillSym(sym))) {
+                if (isBotActive) {
+                    botNotify('spread', tr('bot_skip_blacklist', `${displaySymbol(sym)}: spread strutturale troppo alto (meme-coin), ingresso saltato dal bot.`), 'warning', 30000);
+                    bumpSkipped('spread');
+                    return;
+                }
+                // Ordine manuale: l'utente decide, ma avvisiamo del costo certo
+                showNotification(`${displaySymbol(sym)} ha uno spread strutturale molto alto: la posizione parte già in forte perdita.`, 'warning');
+            }
+
+            // -- Filtro spread all'ingresso --
+            // Si compra all'ask e si rivende al bid: lo spread è un costo CERTO,
+            // pagato per intero alla chiusura. Se supera il cap assoluto o lo SL
+            // impostato, il trade è matematicamente condannato → il bot lo salta.
+            const entrySpreadPct = getSpreadPctFor(sym);
+            if (entrySpreadPct > 0) {
+                const slRef = dynSL || parseFloat(document.getElementById('botStopLoss')?.value) || 0;
+                const spreadCap = slRef > 0 ? Math.min(MAX_ENTRY_SPREAD_PCT, slRef) : MAX_ENTRY_SPREAD_PCT;
+                if (entrySpreadPct > spreadCap) {
+                    if (isBotActive) {
+                        botNotify('spread', tr('bot_skip_spread', `Spread ${displaySymbol(sym)} ${entrySpreadPct.toFixed(2)}% oltre il limite (${spreadCap.toFixed(2)}%): ingresso saltato.`), 'warning', 30000);
+                        bumpSkipped('spread');
+                        return;
+                    }
+                    // Ordine manuale (bot fermo): l'utente decide, ma va avvisato del costo certo
+                    showNotification(`Attenzione: spread ${displaySymbol(sym)} = ${entrySpreadPct.toFixed(2)}% — la posizione parte già in perdita di circa lo spread.`, 'warning');
+                }
+            } else if (isBotActive && brokerViewActive()) {
+                // Spread ancora SCONOSCIUTO (nessuna quote ricevuta per questo simbolo, es.
+                // primi secondi dopo l'avvio del bot, prima che i feed WS/REST popolino
+                // globalSpreads): sul broker reale il bot NON deve aprire alla cieca. Era
+                // il buco che generava aperture simultanee su asset ad alto spread (es.
+                // SHIB) subito rivendute in perdita in 10-13s alla prima quote reale.
+                // Solo in modalità broker: in TEST senza chiavi Alpaca lo spread non è
+                // mai noto e questo bloccherebbe ogni trade per sempre.
+                botNotify('spread_unknown', tr('bot_skip_spread_unknown', `Spread ${displaySymbol(sym)} non ancora disponibile: ingresso saltato per sicurezza.`), 'info', 30000);
+                bumpSkipped('spread');
+                return;
+            }
 
             // Limite massimo posizioni aperte contemporaneamente
             const openCount = Object.keys(activePositions).length;
@@ -6115,7 +6226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         console.warn(`[BROKER] Alpaca non supporta posizioni SHORT sulle Crypto. Ordine ${sym} annullato.`);
                         if (typeof showNotification === 'function') showNotification('Alpaca non permette lo SHORT sulle Crypto: operazione annullata.', 'warning');
                     }
-                    return; 
+                    return;
                 }
 
                 const brokerFunds = isCryptoSym ? availableCash : availableMargin;
@@ -6137,7 +6248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         investUsd = safeFunds;
                     }
                 }
-                
+
                 // Se dopo i tagli l'investimento è sceso sotto i 10$, Alpaca rifiuterà l'ordine.
                 // Annulliamo subito per evitare l'errore API (cost basis must be >= 10).
                 if (investUsd > 0 && investUsd < 10) {
@@ -6312,7 +6423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         } else if (typeof availableMargin !== 'undefined') {
                             availableMargin += actualCost;
                         }
-                        
+
                         // Ordine rifiutato dal broker: NON scalare capitale né budget di sessione,
                         // altrimenti il budget si esaurisce con ordini mai eseguiti.
                         // Se il rifiuto è per fondi insufficienti, attiva il circuit breaker globale
@@ -6327,10 +6438,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                         return;
                     }
 
+                    // L'ora di apertura REALE per la posizione che il sync creerà tra poco:
+                    // /v2/positions non ha created_at e senza openTime la grazia anti-spread
+                    // non partiva mai (posAge=Infinity) → SL bucato dallo spread in 4-10s
+                    window.__pendingOpenTimes = window.__pendingOpenTimes || {};
+                    window.__pendingOpenTimes[normFillSym(sym)] = Date.now();
+
                     // --- GESTIONE CAPITALE ---
                     // Scala l'importo realmente impegnato (qty arrotondata × prezzo), non l'intento
                     tradingCapital -= actualCost;
-                    
+
                     // (I fondi Alpaca locali sono già stati decurtati preventivamente)
 
                     // --- BUDGET SESSIONE ---
@@ -6376,7 +6493,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!pos || pos.isActuallyClosing) return;
             // Anti-duplicazione: se una chiusura broker è in corso/appena inviata, non ripetere
             if (reason !== 'MANUAL' && Date.now() - (recentlyClosed[sym] || 0) < 30000) return;
-            
+
             if (reason !== 'MANUAL' && brokerViewActive() && !pos.simulated) {
                 window.__lastAlpacaAction = window.__lastAlpacaAction || 0;
                 if (Date.now() - window.__lastAlpacaAction < 400) {
@@ -6536,14 +6653,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 }
 
-                // Se arriviamo qui, la chiusura è avvenuta o è stata accettata dal broker
-                if (brokerViewActive() && !pos.simulated && alpacaKeyId) {
+                // Se arriviamo qui, la chiusura è avvenuta o è stata accettata dal broker.
+                // La decisione contabile dipende SOLO da brokerViewActive()+posizione reale,
+                // NON dalla presenza della chiave: in modalità broker una posizione reale non
+                // va MAI registrata localmente (creerebbe un trade locale fantasma senza id
+                // Alpaca). Invariante: "in Alpaca Paper non esistono trade locali/simulati".
+                if (brokerViewActive() && !pos.simulated) {
                     // BROKER: capitale, cronologia e statistiche arrivano SOLO dai sync
                     // (equity reale + FILL). Niente contabilità locale: eviterebbe
                     // doppi conteggi (voce locale + FILL importato) e doppi accrediti.
                     recentlyClosed[sym] = Date.now(); // blocca resurrezione dal sync durante la liquidazione
-                    // Annota l'entry reale per il FILL di chiusura in arrivo (vedi syncAlpacaHistory)
-                    brokerEntryBasis[normFillSym(sym)] = { price: pos.entryPrice, time: pos.openTime, type: pos.type };
+                    // Annota entry reale E motivo per il FILL di chiusura in arrivo
+                    // (vedi syncAlpacaHistory): così in cronologia compare SL/TP/HEDGE
+                    // invece del generico BROKER_SYNC
+                    brokerEntryBasis[normFillSym(sym)] = { price: pos.entryPrice, time: pos.openTime, type: pos.type, reason: reason };
                     if (pnl > 0) playCashSound(); else playLossSound();
 
                     sessionBudgetUsed -= pos.invested;
@@ -6554,12 +6677,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     updateWalletUI();
                     updateDashboard();
                 } else {
-                    // TEST/SIMULATE: contabilità locale completa
+                    // TEST/SIMULATE: contabilità locale completa. Raggiungibile SOLO quando
+                    // !brokerViewActive() || pos.simulated (stessa guardia della chiusura DUST):
+                    // in modalità broker con posizione reale questo ramo non gira mai, quindi
+                    // non registra mai localmente a prescindere dalla presenza della chiave.
                     const feePct = getNetBreakevenPct(sym);
                     const notional = pos.entryPrice * pos.amount;
                     const feeCost = notional * (feePct / 100);
                     globalCommissions += feeCost;
-                    
+
                     const pnlNetto = pnl - feeCost;
                     tradingCapital += (pos.invested + pnlNetto);
                     updateWalletUI();
@@ -6618,8 +6744,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 historyCountBadge.style.display = count > 0 ? 'inline-block' : 'none';
             }
             if (!tradeListEl) return;
-            
-            const currentJSON = JSON.stringify(tradeHistory);
+
+            const currentJSON = JSON.stringify(tradeHistory) + '|' + historySortDesc;
             if (_lastRenderedHistoryJSON === currentJSON) return;
             _lastRenderedHistoryJSON = currentJSON;
 
@@ -6630,8 +6756,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const fragment = document.createDocumentFragment();
-            // Ottimizzazione performance: mostra solo le ultime 100 operazioni per evitare blocchi UI
-            const visibleHistory = tradeHistory.slice(-100).reverse();
+            // Ordina esplicitamente per data di chiusura secondo il toggle utente
+            // (non assume che tradeHistory sia già ordinato): default = più recenti prima.
+            // Ottimizzazione performance: mostra solo le prime 100 dopo l'ordinamento.
+            const visibleHistory = [...tradeHistory]
+                .sort((a, b) => historySortDesc ? ((b.time || 0) - (a.time || 0)) : ((a.time || 0) - (b.time || 0)))
+                .slice(0, 100);
             visibleHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
                 if (!trade || !trade.sym || trade.sym === 'undefined') return;
@@ -6682,10 +6812,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const durationMs = trade.exitTime && trade.entryTime ? trade.exitTime - trade.entryTime : 0;
                 const durationStr = formatDuration(durationMs);
 
-                const reasonColors = { 'TP': '#10b981', 'SL': '#ef4444', 'SIGNAL': '#8b5cf6', 'MANUAL': '#94a3b8', 'BROKER_SYNC': '#60a5fa' };
+                const reasonColors = { 'TP': '#10b981', 'SL': '#ef4444', 'TRAILING_SL': '#f59e0b', 'BREAKEVEN': '#38bdf8', 'HEDGE_PROTECTION': '#f97316', 'SIGNAL': '#8b5cf6', 'MANUAL': '#94a3b8', 'BROKER_SYNC': '#60a5fa' };
                 const reasonLabels = {
                     'TP': tr('tip_tp', 'Take Profit: Operazione chiusa in guadagno automatico'),
                     'SL': tr('tip_sl', 'Stop Loss: Operazione chiusa per limitare le perdite'),
+                    'TRAILING_SL': tr('tip_trailing_sl', 'Trailing Stop: chiusa in profitto dopo un\'inversione del prezzo'),
+                    'BREAKEVEN': tr('tip_breakeven', 'Break-even: chiusa a pari dopo un ritracciamento dal profitto'),
+                    'HEDGE_PROTECTION': tr('tip_hedge', 'Protezione: chiusura d\'emergenza per crollo oltre la soglia di sicurezza'),
                     'SIGNAL': tr('tip_signal', 'Signal: Operazione aperta/chiusa in base ai segnali del bot'),
                     'MANUAL': tr('tip_manual', 'Manuale: Operazione gestita direttamente dall\'utente'),
                     'BROKER_SYNC': tr('tip_broker_sync', 'Broker Sync: Operazione sincronizzata direttamente dal conto Alpaca')
@@ -6880,7 +7013,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Sostituiamo il PnL Realizzato calcolato matematicamente per far quadrare i conti
                 const trueRealizedPnL = totalPnL - openUnrealizedTotal;
                 const gap = trueRealizedPnL - totalRealizedPnL;
-                
+
                 if (gap < -0.01) {
                     // Se abbiamo perso più di quanto dicono i trade, la differenza sono le commissioni
                     currentCommissions = Math.abs(gap);
@@ -6894,7 +7027,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // COMMISSIONI = currentCommissions
             // PNL NETTO = PNL TOTALE - COMMISSIONI
             const calculatedNetPnL = totalRealizedPnL - currentCommissions;
-            
+
             // Allineiamo il Capitale Iniziale per garantire che:
             // Equity Attuale (tradingCapital) = Capitale Iniziale + PNL Netto + Unrealized
             const adjustedInitialCapital = tradingCapital - calculatedNetPnL - openUnrealizedTotal;
@@ -6904,7 +7037,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // formatMoney include già il simbolo valuta (il '$' extra mostrava "$$1,009.30")
                 if (initialCapitalEl) initialCapitalEl.textContent = formatMoney(sessionInitialCapital);
             }
-            
+
             // Per far combaciare l'Equity Attuale, modifichiamo solo visivamente il PNL NETTO
             // in modo che corrisponda al calcolo esatto della UI
             window.__trueRealizedPnL = calculatedNetPnL;
@@ -6924,7 +7057,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const commissionsDisplayEl = document.getElementById('commissionsDisplay');
             const capitalCommissionsDisplayEl = document.getElementById('capitalCommissionsDisplay');
             const totalNetPnLEl = document.getElementById('totalNetPnL');
-            
+
             if (commissionsDisplayEl) {
                 commissionsDisplayEl.textContent = `-${formatMoney(window.__globalCommissions || 0)}`;
             }
@@ -7018,6 +7151,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 
+        // Toggle ordinamento Posizioni Aperte (recente↔vecchio)
+        const btnSortOpenPositions = document.getElementById('btnSortOpenPositions');
+        if (btnSortOpenPositions) {
+            btnSortOpenPositions.addEventListener('click', () => {
+                openPositionsSortDesc = !openPositionsSortDesc;
+                localStorage.setItem('sort_open_desc', String(openPositionsSortDesc));
+                updateSortToggleUI('btnSortOpenPositions', openPositionsSortDesc);
+                renderOpenPositions();
+            });
+            updateSortToggleUI('btnSortOpenPositions', openPositionsSortDesc);
+        }
+
         // Tab filter setup
         const posTabs = document.getElementById('posTabs');
         if (posTabs) {
@@ -7052,7 +7197,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             const useRisk = document.getElementById('aiModeRisk')?.checked;
             const useHedging = document.getElementById('aiModeHedging')?.checked;
 
-            for (let sym in activePositions) {
+            // Ordina per data apertura (openTime, o firstSeenTime come fallback per le
+            // posizioni sincronizzate dal broker senza created_at) secondo il toggle utente.
+            const sortedPosSyms = Object.keys(activePositions).sort((symA, symB) => {
+                const pa = activePositions[symA], pb = activePositions[symB];
+                if (!pa.openTime && !pa.firstSeenTime) pa.firstSeenTime = now;
+                if (!pb.openTime && !pb.firstSeenTime) pb.firstSeenTime = now;
+                const ta = pa.openTime || pa.firstSeenTime;
+                const tb = pb.openTime || pb.firstSeenTime;
+                return openPositionsSortDesc ? (tb - ta) : (ta - tb);
+            });
+
+            for (let sym of sortedPosSyms) {
                 const pos = activePositions[sym];
                 const livePrice = getLivePriceFor(sym) || pos.entryPrice;
                 const cat = getAssetType(sym);
@@ -7096,6 +7252,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (isBotActive && manageRisk) {
                     const closePending = closingAssets.has(sym) || (Date.now() - (recentlyClosed[sym] || 0) < 30000);
 
+                    // Quota del drawdown che NON è movimento di mercato: il mark è al bid
+                    // mentre si è comprato all'ask. Le soglie di PERDITA (SL, hedging) la
+                    // compensano, altrimenti su asset a spread largo scattano senza che il
+                    // prezzo si sia mosso. Cap a 3% per non allargare troppo su dati anomali.
+                    const spreadComp = Math.min(getSpreadPctFor(sym), 3.0);
+                    // Età posizione per la grazia anti-spread: se openTime manca (posizione
+                    // creata dal sync senza created_at) usa il primo avvistamento locale.
+                    // Mai Infinity: disattivava la grazia proprio sulle aperture del bot.
+                    if (!pos.openTime && !pos.firstSeenTime) pos.firstSeenTime = now;
+                    const posAge = now - (pos.openTime || pos.firstSeenTime);
+                    const inGrace = posAge < SL_GRACE_MS;
+
                     if (useRisk) {
                         // -- Trailing Stop Loss via ATR --
                         if (pos.type === 'LONG') {
@@ -7129,7 +7297,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
 
                     // -- Hedging Strategico --
-                    if (useHedging && unrealizedPct <= -3.0 && !pos.isHedged) {
+                    // Soglia compensata dello spread: -3% di MOVIMENTO reale, non -3% di mark.
+                    // Senza, un asset con spread >3% (SHIB) veniva liquidato alla nascita.
+                    if (useHedging && unrealizedPct <= -(3.0 + spreadComp) && !pos.isHedged) {
                         pos.isHedged = true;
                         // Il testo riflette ciò che accade davvero: in modalità broker
                         // (Paper o Reale) su una posizione non-simulata l'hedging esegue
@@ -7161,11 +7331,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         closeTrade(sym, livePrice, 'TP');
                         continue;
                     }
-                    if (effSL > 0 && unrealizedPct <= -effSL && !pos.isActuallyClosing && !closePending) {
+                    // SL compensato dello spread: misura il movimento di mercato contro la
+                    // posizione, non il costo fisso bid/ask che c'è dal primo istante.
+                    if (effSL > 0 && unrealizedPct <= -(effSL + spreadComp) && !pos.isActuallyClosing && !closePending) {
                         // Grazia anti-spread: nei primi SL_GRACE_MS chiudi solo se la
-                        // perdita è grave (2× SL) — lo spread di apertura non è un movimento
-                        const posAge = pos.openTime ? (now - pos.openTime) : Infinity;
-                        if (posAge >= SL_GRACE_MS || unrealizedPct <= -(effSL * 2)) {
+                        // perdita è grave (2× SL oltre lo spread) — l'apertura non è un movimento
+                        if (!inGrace || unrealizedPct <= -(effSL * 2 + spreadComp)) {
                             closeTrade(sym, livePrice, 'SL');
                             continue;
                         }
@@ -7237,10 +7408,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </div>
                         <div style="font-size: 0.62rem; color: var(--text-secondary); opacity: 0.7;" class="pos-open-datetime"></div>
                     </div>`;
-                    openPositionsListEl.appendChild(el);
                     el._v = {};
                     el._q = (sel) => el.querySelector(sel);
                 }
+                // appendChild su un nodo già presente lo SPOSTA in coda: usato qui per
+                // mantenere l'ordine del DOM allineato a sortedPosSyms a ogni render,
+                // senza ricreare gli elementi (preserva l'update incrementale sotto).
+                openPositionsListEl.appendChild(el);
 
                 if (el.style.display === 'none') el.style.display = 'flex';
 
@@ -7372,7 +7546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setInterval(() => { if (!useAlpacaBroker) persistTestData(); }, 30000);
 
         let chartUpdatePending = false;
-        
+
 
         // --- Market Connections ---
         function connectToMarket(symbol) {
@@ -7395,7 +7569,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentPriceEl.textContent = 'Mercato chiuso — riapre a orario di borsa';
                 return;
             }
-            
+
         }
 
         // --- BACKGROUND ENGINE (RADAR & MULTI-ASSET TRACKING) ---
@@ -7435,7 +7609,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let lastPingForUI = 0;
         let currentFpsForUI = 0;
         setInterval(() => {
-            if(window.StatusBarManager) window.StatusBarManager.updateEngineStatus(lastPingForUI, currentFpsForUI);
+            if (window.StatusBarManager) window.StatusBarManager.updateEngineStatus(lastPingForUI, currentFpsForUI);
         }, 3000);
 
 
@@ -7623,6 +7797,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
 
                         globalPrices[sym] = price;
+                        if (msg.T === 'q') recordSpread(sym, msg.bp, msg.ap);
                         const cat = getAssetType(sym);
                         updateBackgroundHistoryAndStrategy(sym, price, now, cat, 'alp');
                         processRadarTick(sym, price, now, cat);
@@ -7730,6 +7905,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const now = Date.now();
                             if (sym.endsWith('/USD')) sym = sym.replace('/USD', 'USDT');
                             globalPrices[sym] = price;
+                            if (msg.T === 'q') recordSpread(sym, msg.bp, msg.ap);
                             updateBackgroundHistoryAndStrategy(sym, price, now, 'CRYPTO', 'binance');
                             processRadarTick(sym, price, now, 'CRYPTO');
                         } else if (msg.T === 'error') {
@@ -7810,8 +7986,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 const q = data.quotes[aSym];
                                 const price = (q.bp > 0 && q.ap > 0) ? (q.bp + q.ap) / 2 : (q.ap || q.bp);
                                 if (!price || price <= 0) continue;
-                                
+
                                 globalPrices[botSym] = price;
+                                recordSpread(botSym, q.bp, q.ap);
                                 updateBackgroundHistoryAndStrategy(botSym, price, now, 'CRYPTO', 'sim');
                                 processRadarTick(botSym, price, now, 'CRYPTO'); // Aggiorna anche il Radar
                             }
@@ -7867,10 +8044,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // (requestAnimationFrame). Storico indicatori e strategia restano invece
             // a 1 aggiornamento/sec (throttle più sotto): così non si accorcia la
             // finestra di lookback degli indicatori né cambia la cadenza del bot.
-            
+
             const activeCtx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
             let isAuthoritative = false;
-            
+
             if (sourceCtx === activeCtx || (sourceCtx === 'cap' && activeCtx.startsWith('cap'))) {
                 isAuthoritative = true;
             } else if (activeCtx === 'alp' || activeCtx === 'alrt') {
@@ -7928,7 +8105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (isNaN(pctChange) || !isFinite(pctChange)) pctChange = 0;
             const isCurrent = (assetPairSelect && sym === assetPairSelect.value);
 
-            
+
 
             // Run strategy for this asset ONLY if category enabled (Universal Engine)
             if (!isManualMode && isBotActive && isSymbolEnabled(sym)) {
@@ -8152,7 +8329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }));
 
                     const isCurrent = (assetPairSelect && symbol === assetPairSelect.value);
-                    
+
                 }
 
             } catch (err) {
@@ -8171,7 +8348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 let endpoint = 'stock/candle';
                 if (assetType === 'CRYPTO') endpoint = 'crypto/candle';
-                
+
                 const to = Math.floor(Date.now() / 1000);
                 // Ultimi 7 giorni di barre da 15 minuti: storico grafico esteso e
                 // abbastanza ampio da scavalcare weekend/festività.
@@ -8183,7 +8360,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const data = await res.json();
                     if (data.s === 'ok' && data.t && data.t.length > 0) {
                         const historicalData = [];
-                        for(let i=0; i<data.t.length; i++) {
+                        for (let i = 0; i < data.t.length; i++) {
                             historicalData.push({
                                 time: data.t[i],
                                 open: data.o[i], high: data.h[i], low: data.l[i], close: data.c[i]
@@ -8354,7 +8531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 evaluateStrategy
             });
         }
-        
+
         function updateMarketRadarTarget(symbol) { return; }
         function processRadarTick(sym, price, now, type) {
             if (window.RadarManager && typeof window.RadarManager.processRadarTick === 'function') {
@@ -8362,7 +8539,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         // triggerRadarSignal is encapsulated inside radar.js
-        
+
         let sharedAudioCtx = null;
 
         function initAudio() {
@@ -8598,13 +8775,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await mgr.cancelOrder(orderId);
                 showNotification("Ordine annullato con successo", "success");
                 syncAlpacaOrders();
-            } catch(e) {
+            } catch (e) {
                 showNotification(`Errore: ${e.message}`, "error");
             }
         }
         window.cancelAlpacaOrder = cancelAlpacaOrder;
 
+        let _lastPendingOrders = [];
+        // Toggle ordinamento Ordini in Attesa (recente↔vecchio)
+        const btnSortPendingOrders = document.getElementById('btnSortPendingOrders');
+        if (btnSortPendingOrders) {
+            btnSortPendingOrders.addEventListener('click', () => {
+                pendingOrdersSortDesc = !pendingOrdersSortDesc;
+                localStorage.setItem('sort_pending_desc', String(pendingOrdersSortDesc));
+                updateSortToggleUI('btnSortPendingOrders', pendingOrdersSortDesc);
+                renderPendingOrders(_lastPendingOrders);
+            });
+            updateSortToggleUI('btnSortPendingOrders', pendingOrdersSortDesc);
+        }
+
         function renderPendingOrders(orders) {
+            _lastPendingOrders = orders || [];
             const pendingOrdersCountBadge = document.getElementById('pendingOrdersCountBadge');
             if (pendingOrdersCountBadge) {
                 const count = orders ? orders.length : 0;
@@ -8637,13 +8828,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (countEl) countEl.textContent = orders.length;
 
-            list.innerHTML = orders.map(order => {
+            // Ordina per data creazione ordine secondo il toggle utente (default: recenti prima)
+            const sortedOrders = [...orders].sort((a, b) => {
+                const ta = new Date(a.submitted_at || a.created_at || 0).getTime();
+                const tb = new Date(b.submitted_at || b.created_at || 0).getTime();
+                return pendingOrdersSortDesc ? (tb - ta) : (ta - tb);
+            });
+
+            list.innerHTML = sortedOrders.map(order => {
                 const side = escHtml(order.side.toUpperCase());
                 const isBuy = side === 'BUY';
                 const assetName = escHtml(displaySymbol(order.symbol));
                 // Icona categoria come negli altri pannelli (simbolo Alpaca → simbolo bot)
                 const ordCat = getAssetType((order.symbol || '').replace('/USD', 'USDT'));
                 const ordIcon = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' }[ordCat] || '💰';
+                const rawDate = order.submitted_at || order.created_at;
+                const dateStr = rawDate ? new Date(rawDate).toLocaleString(uiLocale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '--';
                 // L'id ordine finisce in un onclick inline: si accettano solo
                 // caratteri da UUID Alpaca (difesa contro injection nel handler)
                 const safeOrderId = String(order.id).replace(/[^a-zA-Z0-9-]/g, '');
@@ -8668,6 +8868,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="pos-asset" style="color: #fff; font-weight: bold; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ordIcon} ${assetName}</div>
                         <div>
                             <span class="pos-type ${isBuy ? 'buy' : 'sell'}" style="display: inline-block; font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; background: ${isBuy ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${isBuy ? '#10b981' : '#ef4444'}; font-weight: bold; white-space: nowrap;">${side} · ${escHtml(order.type.toUpperCase())}</span>
+                        </div>
+                        <div class="pos-metric" style="${rowStyle}">
+                            <span class="m-label" style="${metricLabel}">Data</span>
+                            <span class="m-val" style="${metricVal}">${escHtml(dateStr)}</span>
                         </div>
                         <div class="pos-metric" style="${rowStyle}">
                             <span class="m-label" style="${metricLabel}">Qty</span>
@@ -8752,32 +8956,32 @@ function createNotificationContainer() {
 
 // FLUSH EVENT LISTENER
 
-    const btnFlush = document.getElementById('btnFlushCapital');
-    if (btnFlush) {
-        btnFlush.addEventListener('click', () => {
-            if (getBrokerCtx() !== 'fh') return;
-            if (confirm('Sei sicuro di voler azzerare il portafoglio Finnhub? Verranno ripristinati il capitale iniziale (1000) e cancellati tutti i trade e la cronologia locale.')) {
-                // Rimuovi contesto locale Finnhub (stesse chiavi del reset all'avvio:
-                // capitale a 1000, posizioni aperte e cronologia azzerate)
-                localStorage.removeItem('sim_ctx_fh');
-                localStorage.removeItem('broker_pnl_fh');
-                localStorage.removeItem('broker_deposited_fh');
+const btnFlush = document.getElementById('btnFlushCapital');
+if (btnFlush) {
+    btnFlush.addEventListener('click', () => {
+        if (getBrokerCtx() !== 'fh') return;
+        if (confirm('Sei sicuro di voler azzerare il portafoglio Finnhub? Verranno ripristinati il capitale iniziale (1000) e cancellati tutti i trade e la cronologia locale.')) {
+            // Rimuovi contesto locale Finnhub (stesse chiavi del reset all'avvio:
+            // capitale a 1000, posizioni aperte e cronologia azzerate)
+            localStorage.removeItem('sim_ctx_fh');
+            localStorage.removeItem('broker_pnl_fh');
+            localStorage.removeItem('broker_deposited_fh');
 
-                // Rimuovi variabili globali che potrebbero fare da fallback
-                localStorage.removeItem('sim_trading_capital');
-                localStorage.removeItem('sim_session_initial_capital');
-                localStorage.removeItem('sim_total_pnl');
-                localStorage.removeItem('sim_executed_trades');
-                localStorage.removeItem('sim_win_trades');
-                localStorage.removeItem('sim_gross_profit');
-                localStorage.removeItem('sim_gross_loss');
-                localStorage.removeItem('sim_trade_history');
-                localStorage.removeItem('sim_active_positions');
-                localStorage.removeItem('sim_global_commissions');
-                
-                // Ricarica la pagina per azzerare completamente la memoria e riavviare l'app pulita
-                window.location.reload();
-            }
-        });
-    }
+            // Rimuovi variabili globali che potrebbero fare da fallback
+            localStorage.removeItem('sim_trading_capital');
+            localStorage.removeItem('sim_session_initial_capital');
+            localStorage.removeItem('sim_total_pnl');
+            localStorage.removeItem('sim_executed_trades');
+            localStorage.removeItem('sim_win_trades');
+            localStorage.removeItem('sim_gross_profit');
+            localStorage.removeItem('sim_gross_loss');
+            localStorage.removeItem('sim_trade_history');
+            localStorage.removeItem('sim_active_positions');
+            localStorage.removeItem('sim_global_commissions');
+
+            // Ricarica la pagina per azzerare completamente la memoria e riavviare l'app pulita
+            window.location.reload();
+        }
+    });
+}
 
