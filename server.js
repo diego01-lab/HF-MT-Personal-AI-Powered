@@ -2,6 +2,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 
 // Radice servita dal gestore statico: solo i file dentro questa cartella.
 const WEB_ROOT = __dirname;
@@ -11,8 +12,16 @@ const WEB_ROOT = __dirname;
 // handler dedicato (solo same-origin); qui lo blocchiamo per evitare bypass.
 const BLOCKED_FILES = new Set(['keys.json', 'key.pem', 'cert.pem', 'alpaca_acc.json']);
 
-// Porta del server (dichiarata qui: serve anche al controllo same-origin)
-const PORT = 8443;
+// Porte standard. Il server ascolta SEMPRE solo su loopback (127.0.0.1),
+// quindi non è raggiungibile dalla rete locale: espone chiavi e proxy
+// unicamente all'app sulla stessa macchina.
+const HTTP_PORT = 80;
+const HTTPS_PORT = 443;
+
+// Modalità attive (impostate a runtime dopo la scelta all'avvio). Il
+// requestHandler le legge per il controllo same-origin e per l'HSTS.
+let enableHttp = false;
+let enableHttps = false;
 
 // Solo host locali: difesa contro DNS rebinding (un dominio dell'attaccante
 // che risolve a 127.0.0.1 avrebbe Host != localhost e viene rifiutato).
@@ -22,8 +31,10 @@ function isLocalHost(req) {
 }
 
 // Richiesta same-origin: niente header Origin (GET/navigazione same-origin)
-// oppure Origin ESATTAMENTE uguale a quella del server (schema https e porta
-// comprese). Un'altra app locale su porta diversa (es. localhost:3000) è
+// oppure Origin ESATTAMENTE uguale a uno degli endpoint attivi del server
+// (schema E porta comprese). Una pagina servita in HTTP su :80 è same-origin
+// solo verso http://localhost:80; una in HTTPS su :443 solo verso
+// https://localhost:443. Un'altra app locale su porta/schema diversi è
 // cross-origin e viene respinta: non può leggere né sovrascrivere le chiavi.
 function isSameOrigin(req) {
   const origin = req.headers.origin;
@@ -32,7 +43,12 @@ function isSameOrigin(req) {
     const u = new URL(origin);
     const h = u.hostname.replace(/^\[|\]$/g, '');
     const localName = h === 'localhost' || h === '127.0.0.1' || h === '::1';
-    return localName && u.protocol === 'https:' && String(u.port || '443') === String(PORT);
+    if (!localName) return false;
+    // Il browser omette la porta di default (443 per https, 80 per http).
+    const port = u.port || (u.protocol === 'https:' ? '443' : '80');
+    if (u.protocol === 'https:' && enableHttps && port === String(HTTPS_PORT)) return true;
+    if (u.protocol === 'http:' && enableHttp && port === String(HTTP_PORT)) return true;
+    return false;
   } catch (e) { return false; }
 }
 
@@ -49,9 +65,9 @@ function cleanProxyHeaders(headers) {
   return out;
 }
 
-// Il server gira SEMPRE in HTTPS. Se i certificati mancano proviamo a
-// generarli al volo con openssl; se non è possibile, usciamo con un
-// messaggio chiaro (nessun fallback HTTP).
+// Certificati TLS: necessari solo se si avvia in HTTPS. Se mancano proviamo a
+// generarli al volo con openssl; se non è possibile, usciamo con un messaggio
+// chiaro.
 const KEY_PATH = path.join(WEB_ROOT, 'key.pem');
 const CERT_PATH = path.join(WEB_ROOT, 'cert.pem');
 
@@ -73,18 +89,6 @@ function ensureCertificates() {
     return false;
   }
 }
-
-if (!ensureCertificates()) {
-  console.error('❌ Impossibile avviare in HTTPS: certificati mancanti e openssl non disponibile.');
-  console.error('   Genera i certificati manualmente in questa cartella con:');
-  console.error('   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 3650 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"');
-  process.exit(1);
-}
-
-const tlsOptions = {
-  key: fs.readFileSync(KEY_PATH),
-  cert: fs.readFileSync(CERT_PATH)
-};
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -115,6 +119,7 @@ const requestHandler = (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');   // niente MIME sniffing
   res.setHeader('Referrer-Policy', 'no-referrer');      // nessun referrer verso terzi
   res.setHeader('X-Frame-Options', 'DENY');             // la pagina non è incorniciabile
+
   // Content-Security-Policy: stessa allowlist del meta tag in index.html
   // (il meta copre anche la WebView Capacitor; l'header copre tutto ciò che
   // serve questo server e aggiunge frame-ancestors, ignorato nei meta tag).
@@ -127,9 +132,18 @@ const requestHandler = (req, res) => {
     "connect-src 'self' https://paper-api.alpaca.markets https://api.alpaca.markets https://data.alpaca.markets wss://stream.data.alpaca.markets wss://ws.finnhub.io https://finnhub.io https://accounts.google.com; " +
     "frame-src https://accounts.google.com; " +
     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
-  // NIENTE CORS permissivo: app e proxy girano sulla stessa origine
-  // (localhost:8443), quindi non serve alcun header CORS. Rimuovere il
-  // wildcard impedisce ai siti di terzi di leggere keys.json o usare il proxy.
+
+  // HSTS: solo per le connessioni cifrate E solo quando NON è attivo anche
+  // l'HTTP. Se HTTP è abilitato, inviare l'HSTS forzerebbe il browser a
+  // riscrivere http://localhost in https://localhost, rompendo la modalità
+  // HTTP che l'utente ha esplicitamente scelto di tenere accesa.
+  if (req.socket.encrypted && !enableHttp) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  }
+
+  // NIENTE CORS permissivo: app e proxy girano sulla stessa origine, quindi
+  // non serve alcun header CORS. Rimuovere il wildcard impedisce ai siti di
+  // terzi di leggere keys.json o usare il proxy.
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
@@ -383,19 +397,109 @@ const requestHandler = (req, res) => {
   });
 };
 
-const server = https.createServer(tlsOptions, requestHandler);
+// ---------------------------------------------------------------------------
+// Scelta della modalità di avvio: HTTP, HTTPS o entrambe.
+// Precedenza: argomento CLI (`node server.js http|https|both` o `--mode=...`)
+// > variabile d'ambiente SERVER_MODE > menu interattivo. In assenza di un
+// terminale interattivo (es. avvio da task runner) si usa HTTPS come default
+// sicuro.
+// ---------------------------------------------------------------------------
+function normalizeMode(value) {
+  const m = String(value || '').trim().toLowerCase().replace(/^--mode=/, '');
+  return ['http', 'https', 'both'].includes(m) ? m : null;
+}
 
-// Bind SOLO su loopback (127.0.0.1): il server non è raggiungibile dalla
-// rete locale. Espone chiavi e proxy solo all'app sulla stessa macchina.
-// (PORT è dichiarata in alto: serve anche al controllo same-origin)
-server.listen(PORT, '127.0.0.1', () => {
-  console.log('-------------------------------------------');
-  console.log('🚀 Server HFT Pro in ascolto su:');
-  console.log(`🔗 https://localhost:${PORT}`);
-  console.log('-------------------------------------------');
-  console.log('⚠️  IMPORTANTE:');
-  console.log('Il browser mostrerà un avviso di sicurezza (certificato self-signed).');
-  console.log('Clicca su "Avanzate" e poi su "Procedi su localhost (non sicuro)".');
-  console.log('-------------------------------------------');
-});
+function modeFromArgsOrEnv() {
+  for (const arg of process.argv.slice(2)) {
+    const m = normalizeMode(arg);
+    if (m) return m;
+  }
+  return normalizeMode(process.env.SERVER_MODE);
+}
 
+function askMode() {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    console.log('-------------------------------------------');
+    console.log('Scegli la modalità di avvio del server:');
+    console.log(`  1) HTTP      (porta ${HTTP_PORT})`);
+    console.log(`  2) HTTPS     (porta ${HTTPS_PORT})`);
+    console.log(`  3) Entrambe  (HTTP:${HTTP_PORT} + HTTPS:${HTTPS_PORT})`);
+    console.log('-------------------------------------------');
+    rl.question('Selezione [1/2/3]: ', (answer) => {
+      rl.close();
+      const a = answer.trim();
+      if (a === '1') resolve('http');
+      else if (a === '2') resolve('https');
+      else if (a === '3') resolve('both');
+      else {
+        console.log('Scelta non valida: uso HTTPS come default.');
+        resolve('https');
+      }
+    });
+  });
+}
+
+async function resolveMode() {
+  const preset = modeFromArgsOrEnv();
+  if (preset) return preset;
+  if (process.stdin.isTTY) return await askMode();
+  console.log('Nessuna modalità specificata e nessun terminale interattivo: uso HTTPS.');
+  return 'https';
+}
+
+// Avvia un singolo server con gestione degli errori di bind (porta occupata
+// o permessi insufficienti sulle porte privilegiate).
+function startServer(server, port, label) {
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.error(`❌ ${label}: la porta ${port} è già in uso (un altro processo la occupa).`);
+    } else if (e.code === 'EACCES') {
+      console.error(`❌ ${label}: permessi insufficienti per la porta ${port} (richiede privilegi di amministratore).`);
+    } else {
+      console.error(`❌ ${label}: ${e.message}`);
+    }
+    process.exitCode = 1;
+  });
+  // Bind SOLO su loopback (127.0.0.1): il server non è raggiungibile dalla
+  // rete locale. Espone chiavi e proxy solo all'app sulla stessa macchina.
+  server.listen(port, '127.0.0.1', () => {
+    const scheme = label === 'HTTPS' ? 'https' : 'http';
+    console.log(`✅ ${label} in ascolto su ${scheme}://localhost:${port}`);
+  });
+}
+
+(async () => {
+  const mode = await resolveMode();
+  enableHttp = mode === 'http' || mode === 'both';
+  enableHttps = mode === 'https' || mode === 'both';
+
+  // I certificati servono solo se avviamo l'HTTPS.
+  if (enableHttps && !ensureCertificates()) {
+    console.error('❌ Impossibile avviare in HTTPS: certificati mancanti e openssl non disponibile.');
+    console.error('   Genera i certificati manualmente in questa cartella con:');
+    console.error('   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 3650 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"');
+    process.exit(1);
+  }
+
+  console.log('-------------------------------------------');
+  console.log('🚀 Server HFT Pro — modalità: ' + mode.toUpperCase());
+
+  if (enableHttp) {
+    startServer(http.createServer(requestHandler), HTTP_PORT, 'HTTP');
+  }
+  if (enableHttps) {
+    const tlsOptions = {
+      key: fs.readFileSync(KEY_PATH),
+      cert: fs.readFileSync(CERT_PATH)
+    };
+    startServer(https.createServer(tlsOptions, requestHandler), HTTPS_PORT, 'HTTPS');
+  }
+
+  console.log('-------------------------------------------');
+  if (enableHttps) {
+    console.log('⚠️  In HTTPS il browser mostrerà un avviso (certificato self-signed).');
+    console.log('   Clicca su "Avanzate" → "Procedi su localhost (non sicuro)".');
+    console.log('-------------------------------------------');
+  }
+})();
