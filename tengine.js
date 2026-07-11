@@ -41,14 +41,16 @@ const SL_GRACE_MS = 45000;
 // recupera prima delle soglie di rischio (cronologia 10/07/2026: SHIB
 // spread ~3.2% → 21 chiusure a -3.24% in 10 secondi).
 const MAX_ENTRY_SPREAD_PCT = 0.50;
-// Blacklist DETERMINISTICA dei meme-coin sub-penny: il bot non li apre MAI.
-// Su questi asset la quota top-of-book di Alpaca è spesso stretta o incompleta
-// (book sottile), ma l'ordine a mercato "cammina" il book pagando lo spread
-// effettivo enorme (0.7–3.9%). Un filtro basato sulla quota (getSpreadPctFor)
-// NON può intercettarlo: la quota mente. Solo l'esclusione statica è affidabile.
+// Blacklist DETERMINISTICA degli asset a spread strutturale alto: il bot non
+// li apre MAI. Sui meme-coin sub-penny la quota top-of-book di Alpaca è spesso
+// stretta o incompleta (book sottile), ma l'ordine a mercato "cammina" il book
+// pagando lo spread effettivo enorme (0.7–3.9%). Un filtro basato sulla quota
+// (getSpreadPctFor) NON può intercettarlo: la quota mente. Solo l'esclusione
+// statica è affidabile. PAXG non è sub-penny ma ha spread ~1.1% costante
+// (cronologia 10/07/2026): con TP/SL dell'1-2% ogni trade nasce condannato.
 // Chiave normalizzata via normFillSym (SHIBUSDT / SHIB/USD / SHIBUSD → SHIBUSD).
 // Gli ordini MANUALI restano possibili (con avviso): blocca solo il bot.
-const HIGH_SPREAD_CRYPTO_BLACKLIST = new Set(['SHIBUSD', 'PEPEUSD', 'BONKUSD']);
+const HIGH_SPREAD_CRYPTO_BLACKLIST = new Set(['SHIBUSD', 'PEPEUSD', 'BONKUSD', 'PAXGUSD']);
 // Cooldown per simbolo dopo un rifiuto ordine del broker: il bot non
 // deve riprovare lo stesso ordine (condannato) a ogni tick di strategia
 const orderRejectCooldown = {};
@@ -417,6 +419,13 @@ function getNetBreakevenPct(sym) {
 
 // Main strategy dispatcher — motore tecnico locale (RSI + EMA + MACD + BB) o fallback EMA
 function evaluateStrategy(sym, history, price) {
+    // Blacklist spread strutturale A MONTE della strategia: inutile valutare
+    // simboli che il bot non aprirà mai (openTrade li blocca comunque, difesa
+    // in profondità): si risparmiano cicli di calcolo e si eliminano i log
+    // "[CONFIRMED BUY] SHIB/PEPE/BONK/PAXG" ingannevoli. ECCEZIONE: se esiste
+    // già una posizione sul simbolo (aperta manualmente), la valutazione resta
+    // attiva perché serve alla chiusura dinamica AI_REVERSAL.
+    if (HIGH_SPREAD_CRYPTO_BLACKLIST.has(normFillSym(sym)) && !activePositions[sym]) return;
     const aiToggle = document.getElementById('aiModeToggle');
     const isAiMode = aiToggle && aiToggle.checked;
 
