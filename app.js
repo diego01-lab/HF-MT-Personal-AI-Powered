@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.10';
+window.APP_VERSION = 'v.1.0.11';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -493,9 +493,15 @@ async function loadLanguage(lang) {
 let currentLang = localStorage.getItem('sim_lang') || 'IT';
 
 // Helper per stringhe generate da JS: chiave tradotta con fallback
-function tr(key, fallback) {
+function tr(key, fallback, vars) {
     const t = translations[currentLang] || translations.IT || {};
-    return t[key] || fallback;
+    let s = t[key] || fallback;
+    // Placeholder {nome} sostituiti a runtime: permette di tradurre messaggi
+    // dinamici (simbolo, percentuali, importi) senza perdere i dettagli.
+    if (vars && typeof s === 'string') {
+        for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k]));
+    }
+    return s;
 }
 
 // Escaping HTML per dati esterni (simboli/ordini dal broker) interpolati
@@ -989,6 +995,7 @@ function updateLanguage() {
         'syncBadgeTest': 'sync_test',
         'lblNoPendingOrders': 'no_pending_orders',
         'lblPendingOrdersText': 'pending_orders_title',
+        'skippedLabel': 'skipped_label',
         'btnSimulatePaypal': 'btn_simulate_payment',
         'lblAppTitle': 'app_title',
         'radarTitle': 'radar_title',
@@ -1195,6 +1202,30 @@ function updateLanguage() {
         'lblTradePnL': 'tip_trade_pnl',
         'assetIcon': 'tip_asset_icon',
         'assetPair': 'tip_asset_select',
+        // Export CSV e ordinamento dei 3 pannelli (Aperte / Ordini / Cronologia)
+        'btnExportHistory': 'tip_export_history',
+        'btnExportOpenPositions': 'tip_export_open',
+        'btnExportPendingOrders': 'tip_export_orders',
+        // Tooltip prima hardcoded in italiano nell'HTML
+        'capitalSettingsBtn': 'tip_capital_btn',
+        'capitalLiveSettingsBtn': 'tip_capital_live_btn',
+        'statusCAP': 'tip_status_cap',
+        'statusCAPL': 'tip_status_capl',
+        'boxDepositedTotal': 'tip_deposited_total',
+        'boxCurrentCapital': 'tip_current_capital',
+        'boxPnlCommissions': 'tip_pnl_commissions',
+        'boxPnlNet': 'tip_pnl_net',
+        'boxWinningTrades': 'tip_winning_trades',
+        'boxLosingTrades': 'tip_losing_trades',
+        'boxBreakevenTrades': 'tip_breakeven_trades',
+        'boxCommissions': 'tip_commissions',
+        'skippedCounter': 'tip_skipped',
+        'manualQty': 'tip_manual_qty',
+        'armFHTip': 'tip_bot_arm_fh',
+        'armALPTip': 'tip_bot_arm_alp',
+        'armALrtTip': 'tip_bot_arm_alrt',
+        'armCAPDTip': 'tip_bot_arm_capd',
+        'armCAPLTip': 'tip_bot_arm_capl',
     };
     for (const id in tooltipMaps) {
         const el = document.getElementById(id);
@@ -2493,6 +2524,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 renderOpenPositions();
                 renderHistory();
+                renderPendingOrders(_lastPendingOrders);
                 updateSessionBudgetUI();
             } catch (e) { /* pannelli non ancora inizializzati */ }
         };
@@ -5112,7 +5144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnExportHistory) {
             btnExportHistory.addEventListener('click', () => {
                 if (!tradeHistory || tradeHistory.length === 0) {
-                    showNotification('Nessuna operazione da esportare.', 'info');
+                    showNotification(tr('export_nothing', 'Nessun dato da esportare.'), 'info');
                     return;
                 }
                 const esc = v => {
@@ -5139,16 +5171,86 @@ document.addEventListener('DOMContentLoaded', async () => {
                             (t.pnl || 0).toFixed(4), pnlPct.toFixed(2), t.reason || 'MANUAL', t.status || ''
                         ].map(esc).join(';');
                     });
-                const csv = '﻿' + [header.join(';')].concat(rows).join('\r\n'); // BOM per Excel
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `cronologia_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-                showNotification(`Cronologia esportata: ${rows.length} operazioni.`, 'success');
+                downloadCsv(rows, header, 'cronologia');
+            });
+        }
+
+        // Helper condiviso dai 3 export (Aperte / Ordini / Cronologia):
+        // separatore ';' + BOM per Excel, nome file con timestamp, notifica tradotta.
+        function downloadCsv(rows, header, baseName) {
+            const csv = '﻿' + [header.join(';')].concat(rows).join('\r\n'); // BOM per Excel
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${baseName}_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+            showNotification(tr('export_done', 'Esportazione completata: {n} righe.', { n: rows.length }), 'success');
+        }
+        const csvEsc = v => {
+            v = (v === null || v === undefined) ? '' : String(v);
+            return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        };
+
+        // ─── Esporta POSIZIONI APERTE in CSV (pannello Aperte) ───
+        const btnExportOpenPositions = document.getElementById('btnExportOpenPositions');
+        if (btnExportOpenPositions) {
+            btnExportOpenPositions.addEventListener('click', () => {
+                const syms = Object.keys(activePositions);
+                if (syms.length === 0) {
+                    showNotification(tr('export_nothing', 'Nessun dato da esportare.'), 'info');
+                    return;
+                }
+                const header = ['Simbolo', 'Tipo', 'Apertura', 'PrezzoEntrata', 'PrezzoLive', 'Quantita',
+                    'Investito', 'ValoreAttuale', 'PnL', 'PnLPct', 'TP', 'SL', 'Stato'];
+                const rows = syms
+                    .map(sym => ({ sym, pos: activePositions[sym] }))
+                    .sort((a, b) => ((b.pos.openTime || b.pos.firstSeenTime || 0) - (a.pos.openTime || a.pos.firstSeenTime || 0)))
+                    .map(({ sym, pos }) => {
+                        const livePrice = getLivePriceFor(sym) || pos.entryPrice;
+                        // Stessa contabilità del pannello: PnL del broker se disponibile,
+                        // altrimenti calcolato dal prezzo live
+                        const unrealized = (pos.brokerUnrealizedPnL !== undefined && brokerViewActive())
+                            ? pos.brokerUnrealizedPnL
+                            : (pos.type === 'LONG' ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice)) * pos.amount;
+                        const invested = pos.invested || pos.entryPrice * pos.amount;
+                        const pnlPct = invested > 0 ? (unrealized / invested) * 100 : 0;
+                        return [
+                            displaySymbol(sym), pos.type,
+                            pos.openTime ? new Date(pos.openTime).toLocaleString('it-IT') : '',
+                            pos.entryPrice, livePrice, pos.amount, invested.toFixed(2),
+                            (invested + unrealized).toFixed(2), unrealized.toFixed(4), pnlPct.toFixed(2),
+                            pos.dynamicTP ? pos.dynamicTP.toFixed(2) + '%' : '',
+                            pos.dynamicSL ? pos.dynamicSL.toFixed(2) + '%' : '',
+                            pos.simulated ? 'SIMULATA' : 'APERTA (BROKER)'
+                        ].map(csvEsc).join(';');
+                    });
+                downloadCsv(rows, header, 'posizioni_aperte');
+            });
+        }
+
+        // ─── Esporta ORDINI in attesa in CSV (pannello Ordini) ───
+        const btnExportPendingOrders = document.getElementById('btnExportPendingOrders');
+        if (btnExportPendingOrders) {
+            btnExportPendingOrders.addEventListener('click', () => {
+                const orders = _lastPendingOrders || [];
+                if (orders.length === 0) {
+                    showNotification(tr('export_nothing', 'Nessun dato da esportare.'), 'info');
+                    return;
+                }
+                const header = ['IdOrdine', 'Simbolo', 'Lato', 'TipoOrdine', 'Quantita', 'Notional',
+                    'PrezzoLimite', 'PrezzoStop', 'Stato', 'DataInvio'];
+                const rows = [...orders]
+                    .sort((a, b) => (new Date(b.submitted_at || b.created_at || 0)) - (new Date(a.submitted_at || a.created_at || 0)))
+                    .map(o => [
+                        o.id || '', displaySymbol(o.symbol), (o.side || '').toUpperCase(), (o.type || '').toUpperCase(),
+                        o.qty || '', o.notional || '', o.limit_price || '', o.stop_price || '',
+                        (o.status || '').toUpperCase(),
+                        (o.submitted_at || o.created_at) ? new Date(o.submitted_at || o.created_at).toLocaleString('it-IT') : ''
+                    ].map(csvEsc).join(';'));
+                downloadCsv(rows, header, 'ordini');
             });
         }
 
@@ -5562,7 +5664,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             if (!tradeListEl) return;
 
-            const currentJSON = JSON.stringify(tradeHistory) + '|' + historySortDesc;
+            // La lingua fa parte della cache key: senza, il cambio lingua non
+            // rigenerava le righe (stesso JSON) e le etichette restavano vecchie
+            const currentJSON = JSON.stringify(tradeHistory) + '|' + historySortDesc + '|' + currentLang;
             if (_lastRenderedHistoryJSON === currentJSON) return;
             _lastRenderedHistoryJSON = currentJSON;
 
@@ -5623,7 +5727,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const type = getAssetType(tradeSym);
                 const icons = { 'CRYPTO': '🔸', 'STOCK': '📈', 'FOREX': '💱', 'COMMODITY': '⛽' };
                 const icon = icons[type] || '💰';
-                const catLabels = { 'CRYPTO': 'Crypto', 'STOCK': 'Azione', 'FOREX': 'Forex', 'COMMODITY': 'Commodity' };
+                const catLabels = {
+                    'CRYPTO': tr('asset_cat_crypto', 'Crypto'), 'STOCK': tr('asset_cat_stock', 'Azione'),
+                    'FOREX': tr('asset_cat_forex', 'Forex'), 'COMMODITY': tr('asset_cat_commodity', 'Commodity')
+                };
                 const catLabel = catLabels[type] || 'Asset';
 
                 const durationMs = trade.exitTime && trade.entryTime ? trade.exitTime - trade.entryTime : 0;
@@ -6006,11 +6113,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                              valori bianchi: stessi token grafici di Ordinate/Cronologia. -->
                         <div style="font-size: 0.75rem; display: flex; justify-content: space-between; gap: 6px; white-space: nowrap;">
                             <span><span class="trade-leg-badge in">IN</span> <strong style="color:#fff;" class="pos-entry"></strong></span>
-                            <span><span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">Live</span> <strong style="color:#60a5fa;" class="pos-live"></strong></span>
+                            <span><span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">${tr('lbl_live', 'Live')}</span> <strong style="color:#60a5fa;" class="pos-live"></strong></span>
                         </div>
                         <!-- IN Inv.@investito a sinistra, Valore @attuale (dinamico) a destra -->
                         <div style="font-size: 0.75rem; display: flex; justify-content: space-between; gap: 6px; white-space: nowrap;">
-                            <span><span class="trade-leg-badge in">IN</span> <span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">Inv.</span> <strong style="color:#fff;" class="pos-inv"></strong></span>
+                            <span><span class="trade-leg-badge in">IN</span> <span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">${tr('lbl_invested_short', 'Inv.')}</span> <strong style="color:#fff;" class="pos-inv"></strong></span>
                             <span><span style="font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">${tr('value_label', 'Valore')}</span> <strong style="color:#fff;" class="pos-val"></strong></span>
                         </div>
                         <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; gap: 12px; white-space: nowrap; margin-top: 2px;">
@@ -7453,19 +7560,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="pos-type ${isBuy ? 'buy' : 'sell'}" style="display: inline-block; font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; background: ${isBuy ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${isBuy ? '#10b981' : '#ef4444'}; font-weight: bold; white-space: nowrap;">${side} · ${escHtml(order.type.toUpperCase())}</span>
                         </div>
                         <div class="pos-metric" style="${rowStyle}">
-                            <span class="m-label" style="${metricLabel}">Data</span>
+                            <span class="m-label" style="${metricLabel}">${tr('lbl_date', 'Data')}</span>
                             <span class="m-val" style="${metricVal}">${escHtml(dateStr)}</span>
                         </div>
                         <div class="pos-metric" style="${rowStyle}">
-                            <span class="m-label" style="${metricLabel}">Qty</span>
+                            <span class="m-label" style="${metricLabel}">${tr('lbl_qty', 'Qty')}</span>
                             <span class="m-val" style="${metricVal}">${qtyStr}</span>
                         </div>
                         <div class="pos-metric" style="${rowStyle}">
-                            <span class="m-label" style="${metricLabel}">Prezzo</span>
+                            <span class="m-label" style="${metricLabel}">${tr('lbl_price', 'Prezzo')}</span>
                             <span class="m-val" style="${metricVal}">${priceStr}</span>
                         </div>
                         <div class="pos-metric" style="${rowStyle}">
-                            <span class="m-label" style="${metricLabel}">Stato</span>
+                            <span class="m-label" style="${metricLabel}">${tr('lbl_status', 'Stato')}</span>
                             <span class="m-val" style="${metricVal} color: #f59e0b;">${escHtml(order.status.toUpperCase())}</span>
                         </div>
                         <div class="pos-actions" style="margin-top: 3px; ${window.liveMonitorActive ? 'display:none;' : ''}">

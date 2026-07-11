@@ -18,7 +18,7 @@
         object-src 'none';
         base-uri 'self';
         form-action 'self'">
-    <title>HF MT Personal - AI Powered — Multi-Asset Trading</title>
+    <title>Personal HF MT - AI Powered — Multi-Asset Trading</title>
     <meta name="description"
         content="Simulatore di trading ad alta frequenza multi-asset con dati in tempo reale su Crypto, Azioni, Forex e Materie Prime.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -83,7 +83,7 @@
                     </defs>
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
-                <h1>HF MT Personal - AI Powered</h1>
+                <h1>Personal HF MT - AI Powered</h1>
                 <p id="lblSubtitleFrancaLogin" style="color: #f59e0b; margin-top: -12px; margin-bottom: 12px; font-style: italic; font-weight: 500; font-size: 1.1rem;">"Più prudente di nonna Franca!"</p>
                 <p id="lblLoginPlatform">Multi-asset algorithmic trading platform · Adaptive, self-learning AI</p>
                 <div class="login-divider"></div>
@@ -342,7 +342,7 @@
                                 <span class="status-dot"></span>
                                 <span class="status-text">FH</span>
                             </div>
-                            <label class="arm-switch"
+                            <label class="arm-switch" id="armFHTip"
                                 data-tooltip="Bot su Finnhub (Test): ON = trada anche in background"><input
                                     type="checkbox" id="armFH"><span class="arm-slider"></span></label>
                         </div>
@@ -352,7 +352,7 @@
                                 <span class="status-dot"></span>
                                 <span class="status-text">ALP</span>
                             </div>
-                            <label class="arm-switch"
+                            <label class="arm-switch" id="armALPTip"
                                 data-tooltip="Bot su Alpaca Paper: ON = armato (opera quando la sua scheda è attiva)"><input
                                     type="checkbox" id="armALP"><span class="arm-slider"></span></label>
                         </div>
@@ -362,7 +362,7 @@
                                 <span class="status-dot"></span>
                                 <span class="status-text">ALrt</span>
                             </div>
-                            <label class="arm-switch"
+                            <label class="arm-switch" id="armALrtTip"
                                 data-tooltip="Bot su Alpaca REALE: ON = armato (opera quando la sua scheda è attiva)"><input
                                     type="checkbox" id="armALrt"><span class="arm-slider"></span></label>
                         </div>
@@ -371,7 +371,7 @@
                                 <span class="status-dot"></span>
                                 <span class="status-text">CAP</span>
                             </div>
-                            <label class="arm-switch"
+                            <label class="arm-switch" id="armCAPDTip"
                                 data-tooltip="Bot su Capital.com Demo: ON = trada anche in background"><input
                                     type="checkbox" id="armCAPD"><span class="arm-slider"></span></label>
                         </div>
@@ -381,7 +381,7 @@
                                 <span class="status-dot"></span>
                                 <span class="status-text">CAPrt</span>
                             </div>
-                            <label class="arm-switch"
+                            <label class="arm-switch" id="armCAPLTip"
                                 data-tooltip="Bot su Capital.com Trading (REALE): ON = armato"><input type="checkbox"
                                     id="armCAPL"><span class="arm-slider"></span></label>
                         </div>
@@ -1086,6 +1086,9 @@
                                     <button id="btnSortOpenPositions" type="button"
                                         data-tooltip="Ordine: dal più recente al più vecchio (clicca per invertire)"
                                         style="background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.35); color:#a78bfa; border-radius:4px; padding:2px 4px; font-size:0.65rem; line-height:1; cursor:pointer; margin-left:6px; flex-shrink:0;">🔽</button>
+                                    <button id="btnExportOpenPositions" type="button"
+                                        data-tooltip="Esporta le posizioni aperte in un file CSV"
+                                        style="background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.35); color:#a78bfa; border-radius:4px; padding:2px 4px; font-size:0.65rem; line-height:1; cursor:pointer; margin-left:4px; flex-shrink:0;">📥</button>
                                 </h3>
                                 <!-- Contatore posizioni SALTATE dal bot (e perché): mostra a colpo d'occhio
                                      quante mosse la strategia ha voluto ma il broker non ha eseguito
@@ -1126,12 +1129,15 @@
                                 style="color: #f59e0b; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; flex-wrap: nowrap;">
                                 <span class="dot"
                                     style="background: #f59e0b; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
-                                <span id="lblPendingOrdersText" style="flex-shrink: 1; text-overflow: ellipsis; overflow: hidden;">Ordinate</span>
+                                <span id="lblPendingOrdersText" style="flex-shrink: 1; text-overflow: ellipsis; overflow: hidden;">Ordini</span>
                                 <span class="pos-count" id="cnt-PENDING"
                                     style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: auto; flex-shrink: 0;">0</span>
                                 <button id="btnSortPendingOrders" type="button"
                                     data-tooltip="Ordine: dal più recente al più vecchio (clicca per invertire)"
                                     style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:#f59e0b; border-radius:4px; padding:2px 4px; font-size:0.65rem; line-height:1; cursor:pointer; flex-shrink:0;">🔽</button>
+                                <button id="btnExportPendingOrders" type="button"
+                                    data-tooltip="Esporta gli ordini in attesa in un file CSV"
+                                    style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:#f59e0b; border-radius:4px; padding:2px 4px; font-size:0.65rem; line-height:1; cursor:pointer; margin-left:4px; flex-shrink:0;">📥</button>
                             </h3>
                         </div>
                         <div id="pendingOrdersList" class="open-positions-list" style="flex: 1; max-height: none;">
@@ -1351,7 +1357,7 @@
                         d="M 95.337 3.3 L 92.137 23.6 C 92.037 24 92.337 24.3 92.737 24.3 L 95.937 24.3 C 96.437 24.3 96.937 23.9 97.037 23.4 L 100.237 3.5 C 100.337 3.1 100.037 2.8 99.637 2.8 L 96.037 2.8 C 95.637 2.8 95.437 3 95.337 3.3 Z"
                         fill="#009cde" />
                 </svg>
-                <p id="lblPaypalSubtitle" class="paypal-subtitle">Ricarica il tuo conto HF MT Personal AI Powered</p>
+                <p id="lblPaypalSubtitle" class="paypal-subtitle">Ricarica il tuo conto Personal HF MT AI Powered</p>
             </div>
 
             <!-- Presets -->
@@ -1461,7 +1467,7 @@
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
                 </div>
-                <h2>HF MT Personal - AI Powered</h2>
+                <h2>Personal HF MT - AI Powered</h2>
                 <h4 style="color: #f59e0b; margin-top: -4px; margin-bottom: 8px; font-style: italic; font-weight: 500;"><span id="lblSubtitleFranca">"Più prudente di nonna Franca!"</span></h4>
                 <span class="version-tag" id="appVersionTag">v.1.0.01a</span>
             </div>
@@ -1591,7 +1597,7 @@
                         rel="noopener noreferrer"
                         style="color: #60a5fa; font-size: 0.75rem;">docs.alpaca.markets/us/docs/about-market-data-api</a>
                     <br><span id="lblAlpacaLiveModalLiability" style="color: #f59e0b; font-size: 0.75rem;">Il
-                        produttore di HF MT Personal AI Powered non si assume alcuna responsabilità per eventuali
+                        produttore di Personal HF MT AI Powered non si assume alcuna responsabilità per eventuali
                         perdite subite utilizzando l'app.</span>
                     <br><span id="lblAlpacaLiveModalRegister" style="font-size: 0.78rem;"><span id="lblNoKeys">Non hai le chiavi? Registrati su</span> <a href="https://alpaca.markets/" target="_blank" rel="noopener noreferrer"
                             style="color: #60a5fa;">alpaca.markets</a> e genera le API Key del conto reale (Live
@@ -1693,7 +1699,7 @@
                         ATTENZIONE: su questo conto si opera con DENARO REALE su CFD con leva: le perdite possono
                         accumularsi rapidamente. Ogni operazione può generare perdite effettive.</span>
                     <br><span id="lblCapitalLiveModalLiability" style="color: #f59e0b; font-size: 0.75rem;">Il
-                        produttore di HF MT Personal AI Powered non si assume alcuna responsabilità per eventuali
+                        produttore di Personal HF MT AI Powered non si assume alcuna responsabilità per eventuali
                         perdite subite utilizzando l'app.</span>
                     <br><span id="lblCapitalLiveModalRegister" style="font-size: 0.78rem;">Genera la chiave del conto
                         reale dalla piattaforma: <b>Impostazioni → Integrazioni API → Genera nuova chiave</b> (richiede
@@ -1742,8 +1748,8 @@
     <script src="radar.js?v=8" defer></script>
     <!-- tengine.js DEVE precedere app.js: dichiara a scope globale il motore di
          trading (strategie, rischio, ordini, bot) che app.js richiama a runtime -->
-    <script src="tengine.js?v=2" defer></script>
-    <script src="app.js?v=29" defer></script>
+    <script src="tengine.js?v=3" defer></script>
+    <script src="app.js?v=30" defer></script>
 </body>
 
 </html>

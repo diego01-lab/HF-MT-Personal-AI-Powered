@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────
-// legal.js — Documenti legali di HF MT Personal AI Powered (5 lingue)
+// legal.js — Documenti legali di Personal HF MT AI Powered (5 lingue)
 // Termini di Servizio, EULA e Privacy Policy mostrati nel modale legale.
 // Il titolo di ogni documento vive qui; le etichette UI (link, bottoni)
 // vivono nei file languages.<lingua>.json.
@@ -17,7 +17,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Ultimo aggiornamento: 4 luglio 2026</p>
 <h4>1. Oggetto</h4>
-<p>HF MT Personal AI Powered ("l'App") è un simulatore educativo di trading algoritmico multi-asset (criptovalute, azioni, forex e materie prime). L'App offre tre modalità operative: <strong>Modalità Test</strong>, con un portafoglio simulato salvato solo sul tuo dispositivo; <strong>Alpaca Paper</strong>, con un conto di paper trading a fondi fittizi fornito da Alpaca Markets; e <strong>ALrt (Alpaca Trading reale)</strong>, che collega il tuo conto Alpaca Live e opera con DENARO REALE.</p>
+<p>Personal HF MT AI Powered ("l'App") è un simulatore educativo di trading algoritmico multi-asset (criptovalute, azioni, forex e materie prime). L'App offre tre modalità operative: <strong>Modalità Test</strong>, con un portafoglio simulato salvato solo sul tuo dispositivo; <strong>Alpaca Paper</strong>, con un conto di paper trading a fondi fittizi fornito da Alpaca Markets; e <strong>ALrt (Alpaca Trading reale)</strong>, che collega il tuo conto Alpaca Live e opera con DENARO REALE.</p>
 <h4>2. Requisiti di età</h4>
 <p>L'uso dell'App è riservato a chi ha compiuto 18 anni o l'età legale prevista nel proprio Paese. Registrandoti o utilizzando l'App dichiari di soddisfare questo requisito.</p>
 <h4>3. Natura educativa — nessuna consulenza finanziaria</h4>
@@ -31,7 +31,7 @@ window.LEGAL_DOCS = {
 <h4>7. Uso corretto</h4>
 <p>Ti impegni a non usare l'App per scopi illeciti e a non tentare di comprometterne la sicurezza. Riconosci che l'App è uno strumento educativo e che ogni uso con denaro reale avviene a tuo esclusivo rischio.</p>
 <h4>8. Limitazione di responsabilità</h4>
-<p>L'App è fornita "così com'è", senza garanzie di alcun tipo. Nei limiti massimi consentiti dalla legge, il titolare non risponde di alcun danno diretto o indiretto derivante dall'uso o dall'impossibilità d'uso dell'App. In particolare, il produttore di HF MT Personal AI Powered non si assume alcuna responsabilità per eventuali perdite economiche, incluse quelle subite su conti di trading reali collegati tramite chiavi API, ottenute utilizzando l'App.</p>
+<p>L'App è fornita "così com'è", senza garanzie di alcun tipo. Nei limiti massimi consentiti dalla legge, il titolare non risponde di alcun danno diretto o indiretto derivante dall'uso o dall'impossibilità d'uso dell'App. In particolare, il produttore di Personal HF MT AI Powered non si assume alcuna responsabilità per eventuali perdite economiche, incluse quelle subite su conti di trading reali collegati tramite chiavi API, ottenute utilizzando l'App.</p>
 <h4>9. Modifiche</h4>
 <p>Questi Termini possono essere aggiornati; la versione corrente è sempre consultabile nella sezione Note Legali dell'App.</p>
 <h4>10. Legge applicabile</h4>
@@ -42,7 +42,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Ultimo aggiornamento: 4 luglio 2026</p>
 <h4>1. Concessione di licenza</h4>
-<p>Ti viene concessa una licenza personale, non esclusiva, non trasferibile e revocabile per installare e usare HF MT Personal AI Powered a soli fini educativi e personali, su dispositivi di tua proprietà.</p>
+<p>Ti viene concessa una licenza personale, non esclusiva, non trasferibile e revocabile per installare e usare Personal HF MT AI Powered a soli fini educativi e personali, su dispositivi di tua proprietà.</p>
 <h4>2. Restrizioni</h4>
 <p>Non è consentito: (a) vendere, noleggiare, sublicenziare o ridistribuire l'App; (b) rimuovere avvisi di titolarità; (c) decompilare o effettuare reverse engineering se non nei limiti inderogabili di legge; (d) usare l'App per fornire servizi finanziari a terzi. L'eventuale uso della modalità di trading reale (ALrt) avviene a tuo esclusivo rischio e sotto la tua piena responsabilità.</p>
 <h4>3. Proprietà intellettuale</h4>
@@ -85,7 +85,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Last updated: July 4, 2026</p>
 <h4>1. Scope</h4>
-<p>HF MT Personal AI Powered ("the App") is an educational multi-asset algorithmic trading simulator (crypto, stocks, forex and commodities). The App offers three operating modes: <strong>Test Mode</strong>, with a simulated portfolio stored only on your device; <strong>Alpaca Paper</strong>, with a paper-trading account using fictitious funds provided by Alpaca Markets; and <strong>ALrt (real Alpaca trading)</strong>, which connects your Alpaca Live account and operates with REAL money.</p>
+<p>Personal HF MT AI Powered ("the App") is an educational multi-asset algorithmic trading simulator (crypto, stocks, forex and commodities). The App offers three operating modes: <strong>Test Mode</strong>, with a simulated portfolio stored only on your device; <strong>Alpaca Paper</strong>, with a paper-trading account using fictitious funds provided by Alpaca Markets; and <strong>ALrt (real Alpaca trading)</strong>, which connects your Alpaca Live account and operates with REAL money.</p>
 <h4>2. Age requirement</h4>
 <p>Use of the App is restricted to persons aged 18 or the legal age in their country. By registering or using the App you declare that you meet this requirement.</p>
 <h4>3. Educational nature — no financial advice</h4>
@@ -99,7 +99,7 @@ window.LEGAL_DOCS = {
 <h4>7. Acceptable use</h4>
 <p>You agree not to use the App for unlawful purposes and not to attempt to compromise its security. You acknowledge that the App is an educational tool and that any use with real money is at your sole risk.</p>
 <h4>8. Limitation of liability</h4>
-<p>The App is provided "as is", without warranties of any kind. To the maximum extent permitted by law, the owner shall not be liable for any direct or indirect damage arising from use or inability to use the App. In particular, the maker of HF MT Personal AI Powered accepts no responsibility for any financial losses, including losses on real trading accounts connected via API keys, incurred while using the App.</p>
+<p>The App is provided "as is", without warranties of any kind. To the maximum extent permitted by law, the owner shall not be liable for any direct or indirect damage arising from use or inability to use the App. In particular, the maker of Personal HF MT AI Powered accepts no responsibility for any financial losses, including losses on real trading accounts connected via API keys, incurred while using the App.</p>
 <h4>9. Changes</h4>
 <p>These Terms may be updated; the current version is always available in the App's Legal Notes section.</p>
 <h4>10. Governing law</h4>
@@ -110,7 +110,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Last updated: July 4, 2026</p>
 <h4>1. License grant</h4>
-<p>You are granted a personal, non-exclusive, non-transferable, revocable license to install and use HF MT Personal AI Powered for personal, educational purposes only, on devices you own.</p>
+<p>You are granted a personal, non-exclusive, non-transferable, revocable license to install and use Personal HF MT AI Powered for personal, educational purposes only, on devices you own.</p>
 <h4>2. Restrictions</h4>
 <p>You may not: (a) sell, rent, sublicense or redistribute the App; (b) remove ownership notices; (c) decompile or reverse engineer it except as permitted by mandatory law; (d) use the App to provide financial services to third parties. Any use of the real-trading mode (ALrt) is at your sole risk and under your full responsibility.</p>
 <h4>3. Intellectual property</h4>
@@ -153,7 +153,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Última actualización: 4 de julio de 2026</p>
 <h4>1. Objeto</h4>
-<p>HF MT Personal AI Powered ("la App") es un simulador educativo de trading algorítmico multiactivo (criptomonedas, acciones, forex y materias primas). La App ofrece tres modos de funcionamiento: <strong>Modo Test</strong>, con una cartera simulada guardada solo en tu dispositivo; <strong>Alpaca Paper</strong>, con una cuenta de paper trading de fondos ficticios proporcionada por Alpaca Markets; y <strong>ALrt (trading real de Alpaca)</strong>, que conecta tu cuenta Alpaca Live y opera con DINERO REAL.</p>
+<p>Personal HF MT AI Powered ("la App") es un simulador educativo de trading algorítmico multiactivo (criptomonedas, acciones, forex y materias primas). La App ofrece tres modos de funcionamiento: <strong>Modo Test</strong>, con una cartera simulada guardada solo en tu dispositivo; <strong>Alpaca Paper</strong>, con una cuenta de paper trading de fondos ficticios proporcionada por Alpaca Markets; y <strong>ALrt (trading real de Alpaca)</strong>, que conecta tu cuenta Alpaca Live y opera con DINERO REAL.</p>
 <h4>2. Requisito de edad</h4>
 <p>El uso de la App está reservado a mayores de 18 años o de la edad legal de su país. Al registrarte o usar la App declaras cumplir este requisito.</p>
 <h4>3. Naturaleza educativa — sin asesoramiento financiero</h4>
@@ -167,7 +167,7 @@ window.LEGAL_DOCS = {
 <h4>7. Uso correcto</h4>
 <p>Te comprometes a no usar la App con fines ilícitos ni a intentar comprometer su seguridad. Reconoces que la App es una herramienta educativa y que todo uso con dinero real es a tu exclusivo riesgo.</p>
 <h4>8. Limitación de responsabilidad</h4>
-<p>La App se proporciona "tal cual", sin garantías de ningún tipo. En la máxima medida permitida por la ley, el titular no responde de daños directos o indirectos derivados del uso o la imposibilidad de uso. En particular, el productor de HF MT Personal AI Powered no asume ninguna responsabilidad por pérdidas económicas, incluidas las sufridas en cuentas de trading reales conectadas mediante claves API, obtenidas al usar la App.</p>
+<p>La App se proporciona "tal cual", sin garantías de ningún tipo. En la máxima medida permitida por la ley, el titular no responde de daños directos o indirectos derivados del uso o la imposibilidad de uso. En particular, el productor de Personal HF MT AI Powered no asume ninguna responsabilidad por pérdidas económicas, incluidas las sufridas en cuentas de trading reales conectadas mediante claves API, obtenidas al usar la App.</p>
 <h4>9. Modificaciones</h4>
 <p>Estos Términos pueden actualizarse; la versión vigente está siempre disponible en la sección Notas Legales de la App.</p>
 <h4>10. Ley aplicable</h4>
@@ -178,7 +178,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Última actualización: 4 de julio de 2026</p>
 <h4>1. Concesión de licencia</h4>
-<p>Se te concede una licencia personal, no exclusiva, intransferible y revocable para instalar y usar HF MT Personal AI Powered solo con fines personales y educativos, en dispositivos de tu propiedad.</p>
+<p>Se te concede una licencia personal, no exclusiva, intransferible y revocable para instalar y usar Personal HF MT AI Powered solo con fines personales y educativos, en dispositivos de tu propiedad.</p>
 <h4>2. Restricciones</h4>
 <p>No está permitido: (a) vender, alquilar, sublicenciar o redistribuir la App; (b) eliminar avisos de titularidad; (c) descompilar o hacer ingeniería inversa salvo en los límites legales inderogables; (d) usar la App para prestar servicios financieros a terceros. El uso del modo de trading real (ALrt) se realiza a tu exclusivo riesgo y bajo tu plena responsabilidad.</p>
 <h4>3. Propiedad intelectual</h4>
@@ -221,7 +221,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Dernière mise à jour : 4 juillet 2026</p>
 <h4>1. Objet</h4>
-<p>HF MT Personal AI Powered (« l'App ») est un simulateur éducatif de trading algorithmique multi-actifs (cryptomonnaies, actions, forex et matières premières). L'App propose trois modes de fonctionnement : le <strong>Mode Test</strong>, avec un portefeuille simulé enregistré uniquement sur votre appareil ; <strong>Alpaca Paper</strong>, avec un compte de paper trading à fonds fictifs fourni par Alpaca Markets ; et <strong>ALrt (trading réel Alpaca)</strong>, qui connecte votre compte Alpaca Live et opère avec de l'ARGENT RÉEL.</p>
+<p>Personal HF MT AI Powered (« l'App ») est un simulateur éducatif de trading algorithmique multi-actifs (cryptomonnaies, actions, forex et matières premières). L'App propose trois modes de fonctionnement : le <strong>Mode Test</strong>, avec un portefeuille simulé enregistré uniquement sur votre appareil ; <strong>Alpaca Paper</strong>, avec un compte de paper trading à fonds fictifs fourni par Alpaca Markets ; et <strong>ALrt (trading réel Alpaca)</strong>, qui connecte votre compte Alpaca Live et opère avec de l'ARGENT RÉEL.</p>
 <h4>2. Condition d'âge</h4>
 <p>L'utilisation de l'App est réservée aux personnes de 18 ans révolus ou ayant l'âge légal de leur pays. En vous inscrivant ou en utilisant l'App, vous déclarez remplir cette condition.</p>
 <h4>3. Nature éducative — aucun conseil financier</h4>
@@ -235,7 +235,7 @@ window.LEGAL_DOCS = {
 <h4>7. Usage conforme</h4>
 <p>Vous vous engagez à ne pas utiliser l'App à des fins illicites et à ne pas tenter d'en compromettre la sécurité. Vous reconnaissez que l'App est un outil éducatif et que tout usage avec de l'argent réel se fait à vos seuls risques.</p>
 <h4>8. Limitation de responsabilité</h4>
-<p>L'App est fournie « en l'état », sans garantie d'aucune sorte. Dans les limites maximales autorisées par la loi, le titulaire ne répond d'aucun dommage direct ou indirect lié à l'utilisation ou à l'impossibilité d'utiliser l'App. En particulier, le producteur de HF MT Personal AI Powered décline toute responsabilité pour les pertes financières, y compris celles subies sur des comptes de trading réels connectés via des clés API, résultant de l'utilisation de l'App.</p>
+<p>L'App est fournie « en l'état », sans garantie d'aucune sorte. Dans les limites maximales autorisées par la loi, le titulaire ne répond d'aucun dommage direct ou indirect lié à l'utilisation ou à l'impossibilité d'utiliser l'App. En particulier, le producteur de Personal HF MT AI Powered décline toute responsabilité pour les pertes financières, y compris celles subies sur des comptes de trading réels connectés via des clés API, résultant de l'utilisation de l'App.</p>
 <h4>9. Modifications</h4>
 <p>Ces Conditions peuvent être mises à jour ; la version en vigueur est toujours consultable dans la section Mentions Légales de l'App.</p>
 <h4>10. Droit applicable</h4>
@@ -246,7 +246,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Dernière mise à jour : 4 juillet 2026</p>
 <h4>1. Concession de licence</h4>
-<p>Il vous est concédé une licence personnelle, non exclusive, non transférable et révocable pour installer et utiliser HF MT Personal AI Powered à des fins personnelles et éducatives uniquement, sur des appareils vous appartenant.</p>
+<p>Il vous est concédé une licence personnelle, non exclusive, non transférable et révocable pour installer et utiliser Personal HF MT AI Powered à des fins personnelles et éducatives uniquement, sur des appareils vous appartenant.</p>
 <h4>2. Restrictions</h4>
 <p>Il est interdit : (a) de vendre, louer, sous-licencier ou redistribuer l'App ; (b) de supprimer les mentions de propriété ; (c) de décompiler ou pratiquer l'ingénierie inverse hors des limites légales impératives ; (d) d'utiliser l'App pour fournir des services financiers à des tiers. Tout usage du mode de trading réel (ALrt) se fait à vos seuls risques et sous votre entière responsabilité.</p>
 <h4>3. Propriété intellectuelle</h4>
@@ -289,7 +289,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Letzte Aktualisierung: 4. Juli 2026</p>
 <h4>1. Gegenstand</h4>
-<p>HF MT Personal AI Powered („die App") ist ein edukativer Multi-Asset-Simulator für algorithmischen Handel (Kryptowährungen, Aktien, Forex und Rohstoffe). Die App bietet drei Betriebsmodi: den <strong>Testmodus</strong> mit einem nur auf Ihrem Gerät gespeicherten simulierten Portfolio; <strong>Alpaca Paper</strong> mit einem Paper-Trading-Konto (fiktive Mittel) von Alpaca Markets; und <strong>ALrt (echter Alpaca-Handel)</strong>, der Ihr Alpaca-Live-Konto verbindet und mit ECHTEM Geld arbeitet.</p>
+<p>Personal HF MT AI Powered („die App") ist ein edukativer Multi-Asset-Simulator für algorithmischen Handel (Kryptowährungen, Aktien, Forex und Rohstoffe). Die App bietet drei Betriebsmodi: den <strong>Testmodus</strong> mit einem nur auf Ihrem Gerät gespeicherten simulierten Portfolio; <strong>Alpaca Paper</strong> mit einem Paper-Trading-Konto (fiktive Mittel) von Alpaca Markets; und <strong>ALrt (echter Alpaca-Handel)</strong>, der Ihr Alpaca-Live-Konto verbindet und mit ECHTEM Geld arbeitet.</p>
 <h4>2. Altersanforderung</h4>
 <p>Die Nutzung der App ist Personen ab 18 Jahren bzw. dem gesetzlichen Mindestalter ihres Landes vorbehalten. Mit der Registrierung oder Nutzung erklären Sie, diese Anforderung zu erfüllen.</p>
 <h4>3. Edukativer Charakter — keine Finanzberatung</h4>
@@ -303,7 +303,7 @@ window.LEGAL_DOCS = {
 <h4>7. Ordnungsgemäße Nutzung</h4>
 <p>Sie verpflichten sich, die App nicht für rechtswidrige Zwecke zu nutzen und ihre Sicherheit nicht zu kompromittieren. Sie erkennen an, dass die App ein Bildungswerkzeug ist und dass jede Nutzung mit echtem Geld auf Ihr alleiniges Risiko erfolgt.</p>
 <h4>8. Haftungsbeschränkung</h4>
-<p>Die App wird „wie besehen" ohne jegliche Gewährleistung bereitgestellt. Im gesetzlich maximal zulässigen Umfang haftet der Inhaber nicht für direkte oder indirekte Schäden aus der Nutzung oder Nichtnutzbarkeit der App. Insbesondere übernimmt der Hersteller von HF MT Personal AI Powered keine Verantwortung für finanzielle Verluste — einschließlich Verlusten auf realen Handelskonten, die über API-Schlüssel verbunden sind —, die bei der Nutzung der App entstehen.</p>
+<p>Die App wird „wie besehen" ohne jegliche Gewährleistung bereitgestellt. Im gesetzlich maximal zulässigen Umfang haftet der Inhaber nicht für direkte oder indirekte Schäden aus der Nutzung oder Nichtnutzbarkeit der App. Insbesondere übernimmt der Hersteller von Personal HF MT AI Powered keine Verantwortung für finanzielle Verluste — einschließlich Verlusten auf realen Handelskonten, die über API-Schlüssel verbunden sind —, die bei der Nutzung der App entstehen.</p>
 <h4>9. Änderungen</h4>
 <p>Diese Bedingungen können aktualisiert werden; die aktuelle Fassung ist stets im Bereich Rechtliche Hinweise der App abrufbar.</p>
 <h4>10. Anwendbares Recht</h4>
@@ -314,7 +314,7 @@ window.LEGAL_DOCS = {
             html: `
 <p class="legal-date">Letzte Aktualisierung: 4. Juli 2026</p>
 <h4>1. Lizenzgewährung</h4>
-<p>Ihnen wird eine persönliche, nicht ausschließliche, nicht übertragbare und widerrufliche Lizenz gewährt, HF MT Personal AI Powered ausschließlich zu persönlichen Bildungszwecken auf eigenen Geräten zu installieren und zu nutzen.</p>
+<p>Ihnen wird eine persönliche, nicht ausschließliche, nicht übertragbare und widerrufliche Lizenz gewährt, Personal HF MT AI Powered ausschließlich zu persönlichen Bildungszwecken auf eigenen Geräten zu installieren und zu nutzen.</p>
 <h4>2. Beschränkungen</h4>
 <p>Untersagt sind: (a) Verkauf, Vermietung, Unterlizenzierung oder Weiterverbreitung der App; (b) Entfernen von Eigentumsvermerken; (c) Dekompilierung oder Reverse Engineering außerhalb zwingender gesetzlicher Grenzen; (d) Nutzung der App zur Erbringung von Finanzdienstleistungen für Dritte. Jede Nutzung des Echtgeld-Handelsmodus (ALrt) erfolgt auf Ihr alleiniges Risiko und unter Ihrer vollen Verantwortung.</p>
 <h4>3. Geistiges Eigentum</h4>

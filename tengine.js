@@ -475,12 +475,12 @@ function updateSkippedCounterUI() {
         // c'è e sta contando; si nasconde solo a bot fermo.
         if (!isBotActive) { el.style.display = 'none'; return; }
         const parts = [];
-        if (c.shortcrypto) parts.push(`SHORT crypto ${c.shortcrypto}`);
-        if (c.nocash) parts.push(`cash ${c.nocash}`);
-        if (c.reject) parts.push(`rifiuti ${c.reject}`);
-        if (c.qty) parts.push(`qty ${c.qty}`);
-        if (c.maxpos) parts.push(`limite ${c.maxpos}`);
-        if (c.spread) parts.push(`spread ${c.spread}`);
+        if (c.shortcrypto) parts.push(`${tr('skip_shortcrypto', 'SHORT crypto')} ${c.shortcrypto}`);
+        if (c.nocash) parts.push(`${tr('skip_cash', 'cash')} ${c.nocash}`);
+        if (c.reject) parts.push(`${tr('skip_reject', 'rifiuti')} ${c.reject}`);
+        if (c.qty) parts.push(`${tr('skip_qty', 'qty')} ${c.qty}`);
+        if (c.maxpos) parts.push(`${tr('skip_maxpos', 'limite')} ${c.maxpos}`);
+        if (c.spread) parts.push(`${tr('skip_spread', 'spread')} ${c.spread}`);
         const totalEl = document.getElementById('skippedTotal');
         const breakEl = document.getElementById('skippedBreakdown');
         if (totalEl) totalEl.textContent = total;
@@ -521,7 +521,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
     // top-of-book è sottile/incompleta e "mente"). Il bot non li apre mai.
     if (HIGH_SPREAD_CRYPTO_BLACKLIST.has(normFillSym(sym))) {
         if (isBotActive) {
-            botNotify('spread', tr('bot_skip_blacklist', `${displaySymbol(sym)}: spread strutturale troppo alto (meme-coin), ingresso saltato dal bot.`), 'warning', 30000);
+            botNotify('spread', tr('bot_skip_blacklist', '{sym}: spread strutturale troppo alto, ingresso saltato dal bot.', { sym: displaySymbol(sym) }), 'warning', 30000);
             bumpSkipped('spread');
             return;
         }
@@ -539,7 +539,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
         const spreadCap = slRef > 0 ? Math.min(MAX_ENTRY_SPREAD_PCT, slRef) : MAX_ENTRY_SPREAD_PCT;
         if (entrySpreadPct > spreadCap) {
             if (isBotActive) {
-                botNotify('spread', tr('bot_skip_spread', `Spread ${displaySymbol(sym)} ${entrySpreadPct.toFixed(2)}% oltre il limite (${spreadCap.toFixed(2)}%): ingresso saltato.`), 'warning', 30000);
+                botNotify('spread', tr('bot_skip_spread', 'Spread {sym} {pct}% oltre il limite ({cap}%): ingresso saltato.', { sym: displaySymbol(sym), pct: entrySpreadPct.toFixed(2), cap: spreadCap.toFixed(2) }), 'warning', 30000);
                 bumpSkipped('spread');
                 return;
             }
@@ -554,7 +554,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
         // SHIB) subito rivendute in perdita in 10-13s alla prima quote reale.
         // Solo in modalità broker: in TEST senza chiavi Alpaca lo spread non è
         // mai noto e questo bloccherebbe ogni trade per sempre.
-        botNotify('spread_unknown', tr('bot_skip_spread_unknown', `Spread ${displaySymbol(sym)} non ancora disponibile: ingresso saltato per sicurezza.`), 'info', 30000);
+        botNotify('spread_unknown', tr('bot_skip_spread_unknown', 'Spread {sym} non ancora disponibile: ingresso saltato per sicurezza.', { sym: displaySymbol(sym) }), 'info', 30000);
         bumpSkipped('spread');
         return;
     }
@@ -565,7 +565,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
         if (Date.now() % 10000 < 500) {
             console.warn(`[BOT] Limite raggiunto (${openCount}/${maxPositionsLimit}). Non apro ${sym}.`);
         }
-        if (isBotActive) { botNotify('maxpos', tr('bot_skip_maxpos', `Limite posizioni aperte raggiunto (${openCount}/${maxPositionsLimit}): nessun nuovo ordine finché non se ne chiude una.`), 'warning', 30000); bumpSkipped('maxpos'); }
+        if (isBotActive) { botNotify('maxpos', tr('bot_skip_maxpos', 'Limite posizioni aperte raggiunto ({open}/{max}): nessun nuovo ordine finché non se ne chiude una.', { open: openCount, max: maxPositionsLimit }), 'warning', 30000); bumpSkipped('maxpos'); }
         return;
     }
 
@@ -676,7 +676,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
                 // Circuit breaker GLOBALE: fondi crypto a zero → tutti gli ordini in pausa
                 globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
                 console.warn(`[BROKER] Cash per Crypto esaurito su Alpaca: TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
-                botNotify('nocashcrypto', tr('bot_skip_nocash', 'Cash crypto Alpaca insufficiente: ordini in pausa per 5 minuti.'), 'warning', 30000);
+                botNotify('nocashcrypto', tr('bot_skip_nocash_crypto', 'Cash crypto Alpaca insufficiente: ordini in pausa per 5 minuti.'), 'warning', 30000);
                 if (isBotActive) bumpSkipped('nocash');
                 return;
             } else {
@@ -694,7 +694,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
             // nessun altro asset avrà fondi sufficienti → pausa tutti gli ordini.
             globalOrderPauseUntil = Date.now() + GLOBAL_ORDER_PAUSE_MS;
             console.warn(`[BROKER] Importo finale troppo basso (${investUsd.toFixed(2)}$) per ${sym}: TUTTI gli ordini sospesi per ${GLOBAL_ORDER_PAUSE_MS / 60000} min.`);
-            botNotify('min_order_10', tr('bot_skip_min10', `Fondi insufficienti (${investUsd.toFixed(2)}$). Tutti gli ordini in pausa per 5 minuti.`), 'warning', 30000);
+            botNotify('min_order_10', tr('bot_skip_min10', 'Fondi insufficienti ({amount}$). Tutti gli ordini in pausa per 5 minuti.', { amount: investUsd.toFixed(2) }), 'warning', 30000);
             return;
         }
     }
@@ -839,7 +839,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
                 orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
                 console.warn(`[BROKER] Fondi insufficienti per $${actualCost.toFixed(2)} su ${sym}. Disponibili: $${(brokerFunds || 0).toFixed(2)}.`);
             }
-            if (isBotActive) { botNotify('nocash', tr('bot_skip_nocash', `Fondi insufficienti sul broker per aprire il trade su ${sym}.`), 'warning', 30000); bumpSkipped('nocash'); }
+            if (isBotActive) { botNotify('nocash', tr('bot_skip_nocash', 'Fondi insufficienti sul broker per aprire il trade su {sym}.', { sym: displaySymbol(sym) }), 'warning', 30000); bumpSkipped('nocash'); }
             return;
         }
 
@@ -893,7 +893,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
                     orderRejectCooldown[sym] = Date.now() + ORDER_REJECT_COOLDOWN_MS;
                     console.warn(`[ORDER] Ordine ${type} ${sym} rifiutato dal broker. Riprovo tra ${ORDER_REJECT_COOLDOWN_MS / 60000} min.`);
                 }
-                if (isBotActive) { botNotify('reject', tr('bot_order_rejected', `Ordine ${sym} rifiutato dal broker: riprovo tra qualche minuto.`), 'error', 20000); bumpSkipped('reject'); }
+                if (isBotActive) { botNotify('reject', tr('bot_order_rejected', 'Ordine {sym} rifiutato dal broker: riprovo tra qualche minuto.', { sym: displaySymbol(sym) }), 'error', 20000); bumpSkipped('reject'); }
                 return;
             }
 
@@ -919,7 +919,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
             // --- SINCRONIZZAZIONE IMMEDIATA ---
             if (typeof playOpenSound === 'function') playOpenSound();
             console.log(`[ORDER] Inviato ordine per ${sym}. Attendo sincronizzazione broker...`);
-            if (isBotActive) botNotify('open', tr('bot_opened', `Posizione aperta: ${type} ${sym.replace('USDT', '')}.`), 'success', 3000);
+            if (isBotActive) botNotify('open', tr('bot_opened', 'Posizione aperta: {type} {sym}.', { type: type, sym: sym.replace('USDT', '') }), 'success', 3000);
             setTimeout(() => {
                 if (brokerViewActive()) syncAlpacaPositions();
             }, 1000);
@@ -928,7 +928,7 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
             // Lo SHORT su azioni richiede almeno 1 quota INTERA (Alpaca non consente
             // frazioni allo scoperto): con un investimento troppo piccolo per il prezzo
             // dell'azione la qty arrotonda a 0. Avviso throttolato (niente spam).
-            botNotify('qty0', tr('bot_skip_qty', `Importo per operazione troppo basso per ${sym.replace('USDT', '')} (lo SHORT azioni richiede ≥ 1 quota intera). Aumenta l'importo per trade.`), 'warning', 30000);
+            botNotify('qty0', tr('bot_skip_qty', "Importo per operazione troppo basso per {sym} (lo SHORT azioni richiede ≥ 1 quota intera). Aumenta l'importo per trade.", { sym: sym.replace('USDT', '') }), 'warning', 30000);
             if (isBotActive) bumpSkipped('qty');
             return;
         }
