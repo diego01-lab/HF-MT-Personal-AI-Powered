@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.07';
+window.APP_VERSION = 'v.1.0.08';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -6419,11 +6419,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return;
                 }
 
-                // Prenotazione preventiva fondi (Previene Race Conditions asincrone su burst multipli)
+                // Prenotazione preventiva fondi (Previene Race Conditions asincrone su burst multipli).
+                // Si prenota SOLO quanto realmente disponibile e si memorizza l'importo
+                // prenotato: prima si deduceva actualCost con clamp a 0 ma si rimborsava
+                // actualCost PIENO sul rifiuto → fondi fantasma (31$ reali diventavano 85$
+                // locali) → loop infinito di ordini sovradimensionati rifiutati con 403.
+                let bookedCash = 0, bookedMargin = 0;
                 if (isCrypto && typeof availableCash !== 'undefined') {
+                    bookedCash = Math.min(Math.max(0, availableCash), actualCost);
                     availableCash = Math.max(0, availableCash - actualCost);
                     window.__lastAlpacaDeduction = Date.now();
                 } else if (typeof availableMargin !== 'undefined') {
+                    bookedMargin = Math.min(Math.max(0, availableMargin), actualCost);
                     availableMargin = Math.max(0, availableMargin - actualCost);
                     window.__lastAlpacaDeduction = Date.now();
                 }
@@ -6433,11 +6440,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // rifiuto (o false se manager assente). Usiamo il motivo di QUESTO ordine.
                     const orderRes = await alpacaCreateOrder(type === 'LONG' ? 'buy' : 'sell', alpacaSym, qtyVal.toString());
                     if (orderRes !== true) {
-                        // Restituzione fondi in caso di ordine rifiutato
+                        // Restituzione fondi in caso di ordine rifiutato: si rimborsa
+                        // ESATTAMENTE quanto prenotato (mai actualCost pieno, vedi sopra)
                         if (isCrypto && typeof availableCash !== 'undefined') {
-                            availableCash += actualCost;
+                            availableCash += bookedCash;
                         } else if (typeof availableMargin !== 'undefined') {
-                            availableMargin += actualCost;
+                            availableMargin += bookedMargin;
                         }
 
                         // Ordine rifiutato dal broker: NON scalare capitale né budget di sessione,
@@ -8606,6 +8614,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
         async function alpacaCreateOrder(side, symbol, qty) {
+            // Pausa globale attiva (fondi esauriti): abortisce anche gli ordini del bot
+            // già "in volo" — lanciati in burst PRIMA che il primo 403 impostasse la
+            // pausa — senza colpire l'API. Il gate in openTrade da solo non basta:
+            // la strategia apre N simboli in parallelo e la pausa arriva a burst partito.
+            if (isBotActive && globalOrderPauseUntil && Date.now() < globalOrderPauseUntil) {
+                return 'paused: ordini sospesi per fondi insufficienti';
+            }
             const mgr = getAlpacaManager();
             if (!mgr) return false;
             try {
