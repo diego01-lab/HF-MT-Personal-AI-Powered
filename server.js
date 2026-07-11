@@ -12,9 +12,7 @@ const WEB_ROOT = __dirname;
 // handler dedicato (solo same-origin); qui lo blocchiamo per evitare bypass.
 const BLOCKED_FILES = new Set(['keys.json', 'key.pem', 'cert.pem', 'alpaca_acc.json']);
 
-// Porte standard. Il server ascolta SEMPRE solo su loopback (127.0.0.1),
-// quindi non è raggiungibile dalla rete locale: espone chiavi e proxy
-// unicamente all'app sulla stessa macchina.
+// Porte standard.
 const HTTP_PORT = 80;
 const HTTPS_PORT = 443;
 
@@ -27,23 +25,30 @@ let enableHttps = false;
 // che risolve a 127.0.0.1 avrebbe Host != localhost e viene rifiutato).
 function isLocalHost(req) {
   const host = (req.headers.host || '').split(':')[0].replace(/^\[|\]$/g, '');
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host === '10.0.2.2' ||           // Standard Android Emulator Loopback
+    host.startsWith('10.0.') ||      // Emulatori Android / Altre subnet
+    host.startsWith('192.168.')     // Dispositivi fisici nella rete locale
+  );
 }
 
 // Richiesta same-origin: niente header Origin (GET/navigazione same-origin)
-// oppure Origin ESATTAMENTE uguale a uno degli endpoint attivi del server
-// (schema E porta comprese). Una pagina servita in HTTP su :80 è same-origin
-// solo verso http://localhost:80; una in HTTPS su :443 solo verso
-// https://localhost:443. Un'altra app locale su porta/schema diversi è
-// cross-origin e viene respinta: non può leggere né sovrascrivere le chiavi.
+// oppure Origin ESATTAMENTE uguale a uno degli endpoint attivi del server.
 function isSameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
   try {
     const u = new URL(origin);
     const h = u.hostname.replace(/^\[|\]$/g, '');
-    const localName = h === 'localhost' || h === '127.0.0.1' || h === '::1';
+    // Inclusione di 10.0.2.2 e delle subnet locali per permettere all'emulatore
+    // di superare il controllo Same-Origin sui proxy Alpaca e sul salvataggio chiavi.
+    const localName = h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '10.0.2.2' || h.startsWith('192.168.');
     if (!localName) return false;
+
     // Il browser omette la porta di default (443 per https, 80 per http).
     const port = u.port || (u.protocol === 'https:' ? '443' : '80');
     if (u.protocol === 'https:' && enableHttps && port === String(HTTPS_PORT)) return true;
@@ -65,9 +70,7 @@ function cleanProxyHeaders(headers) {
   return out;
 }
 
-// Certificati TLS: necessari solo se si avvia in HTTPS. Se mancano proviamo a
-// generarli al volo con openssl; se non è possibile, usciamo con un messaggio
-// chiaro.
+// Certificati TLS: necessari solo se si avvia in HTTPS.
 const KEY_PATH = path.join(WEB_ROOT, 'key.pem');
 const CERT_PATH = path.join(WEB_ROOT, 'cert.pem');
 
@@ -81,7 +84,7 @@ function ensureCertificates() {
       '-keyout', KEY_PATH, '-out', CERT_PATH,
       '-days', '3650', '-nodes',
       '-subj', '/CN=localhost',
-      '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1'
+      '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:10.0.2.2'
     ], { stdio: 'ignore' });
     console.log('✅ Certificati TLS generati (key.pem, cert.pem).');
     return true;
@@ -103,26 +106,18 @@ const mimeTypes = {
 
 const requestHandler = (req, res) => {
   // Difesa DNS rebinding: accetta solo richieste con Host locale.
-  // (il server è pensato per uso locale; un sito di terzi che prova a
-  // raggiungerlo via un dominio rebindato a 127.0.0.1 ha Host non locale)
   if (!isLocalHost(req)) {
     res.writeHead(403);
     res.end('Forbidden host');
     return;
   }
 
-  // Cross-Origin-Opener-Policy: necessario per il login Google in modalità
-  // popup. Senza "same-origin-allow-popups" il popup di accounts.google.com
-  // non può fare postMessage di ritorno alla pagina: header necessario al login Google.
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  // Header di sicurezza di base (non intrusivi: nessun impatto funzionale)
-  res.setHeader('X-Content-Type-Options', 'nosniff');   // niente MIME sniffing
-  res.setHeader('Referrer-Policy', 'no-referrer');      // nessun referrer verso terzi
-  res.setHeader('X-Frame-Options', 'DENY');             // la pagina non è incorniciabile
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
 
-  // Content-Security-Policy: stessa allowlist del meta tag in index.html
-  // (il meta copre anche la WebView Capacitor; l'header copre tutto ciò che
-  // serve questo server e aggiunge frame-ancestors, ignorato nei meta tag).
+  // Content-Security-Policy: aggiornato per supportare le richieste locali dell'emulatore
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com; " +
@@ -133,32 +128,23 @@ const requestHandler = (req, res) => {
     "frame-src https://accounts.google.com; " +
     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
 
-  // HSTS: solo per le connessioni cifrate E solo quando NON è attivo anche
-  // l'HTTP. Se HTTP è abilitato, inviare l'HSTS forzerebbe il browser a
-  // riscrivere http://localhost in https://localhost, rompendo la modalità
-  // HTTP che l'utente ha esplicitamente scelto di tenere accesa.
   if (req.socket.encrypted && !enableHttp) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   }
 
-  // NIENTE CORS permissivo: app e proxy girano sulla stessa origine, quindi
-  // non serve alcun header CORS. Rimuovere il wildcard impedisce ai siti di
-  // terzi di leggere keys.json o usare il proxy.
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
     return;
   }
 
-  // Handle favicon.ico to prevent 404 errors in console
   if (req.url === '/favicon.ico') {
     res.writeHead(204);
     res.end();
     return;
   }
-  // Proxy per Alpaca Trading (Paper) — SOLO same-origin (difesa in profondità:
-  // i browser bloccano già le richieste cross-origin con header APCA custom
-  // al preflight, ma qui le respingiamo comunque esplicitamente)
+
+  // Proxy per Alpaca Trading (Paper)
   if (req.url.startsWith('/proxy/alpaca/')) {
     if (!isSameOrigin(req)) {
       res.writeHead(403);
@@ -206,10 +192,7 @@ const requestHandler = (req, res) => {
     return;
   }
 
-  // Proxy per Alpaca Trading API REALE (api.alpaca.markets) — SOLO same-origin.
-  // Usato unicamente per la verifica di connessione/stato del conto live
-  // (GET /v2/account dal pannello Connessioni Broker): il bot NON invia
-  // ordini attraverso questo proxy.
+  // Proxy per Alpaca Trading API REALE (api.alpaca.markets)
   if (req.url.startsWith('/proxy/alpaca-live/')) {
     if (!isSameOrigin(req)) {
       res.writeHead(403);
@@ -257,7 +240,7 @@ const requestHandler = (req, res) => {
     return;
   }
 
-  // Proxy per Alpaca Data — SOLO same-origin (come sopra)
+  // Proxy per Alpaca Data
   if (req.url.startsWith('/proxy/alpaca-data/')) {
     if (!isSameOrigin(req)) {
       res.writeHead(403);
@@ -298,9 +281,7 @@ const requestHandler = (req, res) => {
     return;
   }
 
-  // Gestione API per salvataggio chiavi — SOLO same-origin.
-  // Senza questo controllo un sito di terzi potrebbe sovrascrivere le
-  // chiavi dell'utente (CSRF) e dirottare il trading su un account ostile.
+  // Gestione API per salvataggio chiavi
   if (req.method === 'POST' && req.url === '/api/save-keys') {
     if (!isSameOrigin(req)) {
       res.writeHead(403);
@@ -310,13 +291,11 @@ const requestHandler = (req, res) => {
     let body = '';
     req.on('data', chunk => {
       body += chunk.toString();
-      if (body.length > 1e6) req.destroy(); // guardia anti-payload abnorme
+      if (body.length > 1e6) req.destroy();
     });
     req.on('end', () => {
       try {
         const data = JSON.parse(body);
-        // Whitelist: si salvano solo i campi chiave attesi, solo stringhe
-        // di lunghezza sana. Campi extra o payload strutturati vengono ignorati.
         if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('payload non valido');
         const ALLOWED_KEYS = ['finnhub_api_key', 'alpaca_key_id', 'alpaca_secret_key',
           'alpaca_live_key_id', 'alpaca_live_secret_key'];
@@ -335,9 +314,7 @@ const requestHandler = (req, res) => {
     return;
   }
 
-  // Gestione richiesta keys.json: se il file non esiste, ritorna {} (200)
-  // invece di 404, evitando errori in console su installazioni fresche.
-  // SOLO same-origin: le chiavi non devono mai essere leggibili da terzi.
+  // Gestione richiesta keys.json
   if (req.method === 'GET' && req.url.split('?')[0] === '/keys.json') {
     if (!isSameOrigin(req)) {
       res.writeHead(403);
@@ -351,9 +328,7 @@ const requestHandler = (req, res) => {
     return;
   }
 
-  // --- Gestore statico con contenimento del path ---
-  // Decodifica e normalizza l'URL, poi verifica che il file risolto resti
-  // dentro WEB_ROOT: blocca i path traversal tipo GET /../../etc/passwd.
+  // --- Gestore statico ---
   let urlPath;
   try {
     urlPath = decodeURIComponent(req.url.split('?')[0]);
@@ -365,13 +340,11 @@ const requestHandler = (req, res) => {
   if (urlPath === '/') urlPath = '/index.html';
 
   const resolved = path.resolve(WEB_ROOT, '.' + urlPath);
-  // Deve stare dentro WEB_ROOT (no fuga dalla cartella servita)
   if (resolved !== WEB_ROOT && !resolved.startsWith(WEB_ROOT + path.sep)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
   }
-  // File sensibili mai serviti dal gestore statico
   if (BLOCKED_FILES.has(path.basename(resolved))) {
     res.writeHead(403);
     res.end('Forbidden');
@@ -391,19 +364,16 @@ const requestHandler = (req, res) => {
         res.end('Errore interno: ' + error.code);
       }
     } else {
-      res.writeHead(200, { 'Content-Type': contentType });
+      // Nessuna cache lato client/WebView: siamo in sviluppo locale e ogni
+      // richiesta deve riflettere il file su disco appena aggiornato (senza
+      // questo header, la WebView di Capacitor può continuare a mostrare
+      // una versione vecchia di index.html/app.js dopo una modifica).
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
       res.end(content, 'utf-8');
     }
   });
 };
 
-// ---------------------------------------------------------------------------
-// Scelta della modalità di avvio: HTTP, HTTPS o entrambe.
-// Precedenza: argomento CLI (`node server.js http|https|both` o `--mode=...`)
-// > variabile d'ambiente SERVER_MODE > menu interattivo. In assenza di un
-// terminale interattivo (es. avvio da task runner) si usa HTTPS come default
-// sicuro.
-// ---------------------------------------------------------------------------
 function normalizeMode(value) {
   const m = String(value || '').trim().toLowerCase().replace(/^--mode=/, '');
   return ['http', 'https', 'both'].includes(m) ? m : null;
@@ -448,8 +418,6 @@ async function resolveMode() {
   return 'https';
 }
 
-// Avvia un singolo server con gestione degli errori di bind (porta occupata
-// o permessi insufficienti sulle porte privilegiate).
 function startServer(server, port, label) {
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
@@ -461,11 +429,12 @@ function startServer(server, port, label) {
     }
     process.exitCode = 1;
   });
-  // Bind SOLO su loopback (127.0.0.1): il server non è raggiungibile dalla
-  // rete locale. Espone chiavi e proxy solo all'app sulla stessa macchina.
-  server.listen(port, '127.0.0.1', () => {
+
+  // MODIFICA CRUCIALE: Cambiato da '127.0.0.1' a '0.0.0.0' per permettere all'emulatore 
+  // Android (sottorete virtuale) di connettersi a questo server.
+  server.listen(port, '0.0.0.0', () => {
     const scheme = label === 'HTTPS' ? 'https' : 'http';
-    console.log(`✅ ${label} in ascolto su ${scheme}://localhost:${port}`);
+    console.log(`✅ ${label} in ascolto su ${scheme}://0.0.0.0:${port}`);
   });
 }
 
@@ -474,11 +443,8 @@ function startServer(server, port, label) {
   enableHttp = mode === 'http' || mode === 'both';
   enableHttps = mode === 'https' || mode === 'both';
 
-  // I certificati servono solo se avviamo l'HTTPS.
   if (enableHttps && !ensureCertificates()) {
     console.error('❌ Impossibile avviare in HTTPS: certificati mancanti e openssl non disponibile.');
-    console.error('   Genera i certificati manualmente in questa cartella con:');
-    console.error('   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 3650 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"');
     process.exit(1);
   }
 
@@ -499,7 +465,7 @@ function startServer(server, port, label) {
   console.log('-------------------------------------------');
   if (enableHttps) {
     console.log('⚠️  In HTTPS il browser mostrerà un avviso (certificato self-signed).');
-    console.log('   Clicca su "Avanzate" → "Procedi su localhost (non sicuro)".');
+    console.log('   Clicca su "Avanzate" → "Procedi su 10.0.2.2 (non sicuro)".');
     console.log('-------------------------------------------');
   }
 })();

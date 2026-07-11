@@ -1,0 +1,28 @@
+{
+    "project_info": {
+        "project_number": "129853397925",
+        "project_id": "hft-individual-ai-powered"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:129853397925:android:7be8ca837db58776",
+                "android_client_info": {
+                    "package_name": "com.hfmtpersonalaipowered.app"
+                }
+            },
+            "oauth_client": [
+                {
+                    "client_id": "129853397925-6397v1cv32t20njsdggmrht4vh3phkpk.apps.googleusercontent.com",
+                    "client_type": 1
+                }
+            ],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyFakeKeyAsDFFG12345llk_FakeKey999"
+                }
+            ]
+        }
+    ],
+    "configuration_version": "1"
+}

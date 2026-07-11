@@ -1,5 +1,8 @@
 {
   "appId": "com.hfmtpersonalaipowered.app",
   "appName": "Personal HF MT AI Powered",
-  "webDir": "www"
+  "webDir": "www",
+  "server": {
+    "url": "https://10.0.2.2"
+  }
 }

@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.11';
+window.APP_VERSION = 'v.1.0.14';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -964,7 +964,9 @@ function updateLanguage() {
         'lblAlpacaLiveModalLiability': 'alpaca_live_modal_liability',
         'lblAlpacaLiveModalRegister': 'alpaca_live_modal_register',
         'saveAlpacaLiveBtn': 'btn_save_config',
-        'testAlpacaLiveBtn': 'btn_test_connection',
+        // 'testAlpacaLiveBtn' rimosso dalla mappa: come il gemello Paper
+        // ('testAlpacaBtn'), il bottone TEST circolare ha testo fisso "TEST" —
+        // la traduzione "Test Connessione" non sta nel cerchio e va a capo.
         'btnAlpacaLiveClose': 'btn_cancel',
         'lblRoiDaily': 'roi_daily',
         'lblEquityTotal': 'equity_total',

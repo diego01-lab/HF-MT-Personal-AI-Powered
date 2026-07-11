@@ -3558,6 +3558,23 @@ html.no-gsi .g_id_signin {
     color: #10b981;
 }
 
+/* Riga azioni: nome dei listini (NYSE · NASDAQ) impilato sopra l'orario.
+   Font minuscolo per non alzare la card: la griglia 2x2 resta compatta. */
+.app-header .market-hours-card .market-stack {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+}
+
+.app-header .market-hours-card .market-label {
+    font-size: 0.52rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
 /* Header: sotto i 1400px i box vanno a capo invece di schiacciarsi */
 @media (max-width: 1400px) {
     .app-header {

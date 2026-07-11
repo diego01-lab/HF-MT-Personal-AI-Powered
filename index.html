@@ -29,7 +29,20 @@
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"
         integrity="sha384-2Yiz1jBuc53MdRCA3ojcpk7cAoW2uFfKcetY6JKbqUetb537Hq2uPJrqM1Mj2AKx" crossorigin="anonymous"
         defer></script>
-    <link rel="stylesheet" href="styles.css?v=15">
+    <link rel="stylesheet" href="styles.css?v=16">
+    <style>
+        /* Toggle "occhio" per rivelare le chiavi/segreti nelle schede broker */
+        .pw-wrap { position: relative; display: block; }
+        .pw-wrap input { padding-right: 42px !important; }
+        .pw-toggle {
+            position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+            background: none; border: none; margin: 0; padding: 4px; cursor: pointer;
+            color: var(--text-secondary, #9aa4b2); opacity: 0.7;
+            display: inline-flex; align-items: center; justify-content: center; line-height: 0;
+        }
+        .pw-toggle:hover { opacity: 1; color: #fff; }
+        .pw-toggle:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; border-radius: 4px; }
+    </style>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <meta name="theme-color" content="#0f172a">
@@ -418,7 +431,10 @@
                     <li id="lblStockTooltip"
                         data-tooltip="Azioni USA (NYSE/NASDAQ): Lun-Ven 15:30 - 22:00 ora italiana.">
                         <span class="market-name">📈</span>
-                        <span class="market-time" id="stockStatus">L-V · 15:30-22:00</span>
+                        <span class="market-stack">
+                            <span class="market-label">NYSE · NASDAQ</span>
+                            <span class="market-time" id="stockStatus">L-V · 15:30-22:00</span>
+                        </span>
                     </li>
                     <li id="lblForexTooltip"
                         data-tooltip="Forex — aperto Lun-Ven 24h. Dati via Finnhub (API Key richiesta).">
@@ -1321,8 +1337,16 @@
                 <li id="lblApiStep2">Copia la tua <b>API Key</b> dalla dashboard.</li>
                 <li id="lblApiStep3">Incollala qui sotto:</li>
             </ol>
-            <input type="text" id="apiKeyInput" placeholder="Inserisci la tua API Key (es. cxyz123...)"
-                class="api-input" />
+            <!-- Il campo password sta in un <form> (submit disabilitato) per
+                 silenziare il warning del browser "[DOM] Password field is not
+                 contained in a form", come nei pannelli Alpaca/Capital. -->
+            <form onsubmit="return false;" autocomplete="off">
+                <div class="pw-wrap">
+                <input type="password" id="apiKeyInput" placeholder="Inserisci la tua API Key (es. cxyz123...)"
+                    class="api-input" autocomplete="current-password" />
+                <button type="button" class="pw-toggle" data-target="apiKeyInput" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                </div>
+            </form>
             <div class="modal-actions" style="align-items: center;">
                 <button id="testFinnhubBtn" class="btn-test-conn" data-tooltip="Test">TEST</button>
                 <button id="cancelApiBtn" class="btn btn-secondary btn-modal-sm">Annulla</button>
@@ -1559,9 +1583,12 @@
                     </div>
                     <div class="input-group" style="margin-top: 15px;">
                         <label>Alpaca Secret Key</label>
+                        <div class="pw-wrap">
                         <input type="password" id="alpacaSecretKey" autocomplete="current-password"
                             placeholder="Inserisci la tua Secret Key..."
                             style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                        <button type="button" class="pw-toggle" data-target="alpacaSecretKey" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                        </div>
                     </div>
                 </form>
 
@@ -1613,9 +1640,12 @@
                     </div>
                     <div class="input-group" style="margin-top: 15px;">
                         <label>Alpaca Secret Key</label>
+                        <div class="pw-wrap">
                         <input type="password" id="alpacaLiveSecretKey" autocomplete="current-password"
                             placeholder="Inserisci la tua Secret Key..."
                             style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                        <button type="button" class="pw-toggle" data-target="alpacaLiveSecretKey" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                        </div>
                     </div>
                 </form>
 
@@ -1659,15 +1689,21 @@
                     </div>
                     <div class="input-group" style="margin-top: 15px;">
                         <label>API Key (Demo)</label>
+                        <div class="pw-wrap">
                         <input type="password" id="capitalDemoKey" autocomplete="off"
                             placeholder="Incolla la API Key generata..."
                             style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                        <button type="button" class="pw-toggle" data-target="capitalDemoKey" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                        </div>
                     </div>
                     <div class="input-group" style="margin-top: 15px;">
                         <label>Password della API Key</label>
+                        <div class="pw-wrap">
                         <input type="password" id="capitalDemoPass" autocomplete="current-password"
                             placeholder="La password impostata alla creazione della chiave..."
                             style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                        <button type="button" class="pw-toggle" data-target="capitalDemoPass" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                        </div>
                     </div>
                 </form>
 
@@ -1716,15 +1752,21 @@
                     </div>
                     <div class="input-group" style="margin-top: 15px;">
                         <label>API Key (Reale)</label>
+                        <div class="pw-wrap">
                         <input type="password" id="capitalLiveKey" autocomplete="off"
                             placeholder="Incolla la API Key del conto reale..."
                             style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                        <button type="button" class="pw-toggle" data-target="capitalLiveKey" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                        </div>
                     </div>
                     <div class="input-group" style="margin-top: 15px;">
                         <label>Password della API Key</label>
+                        <div class="pw-wrap">
                         <input type="password" id="capitalLivePass" autocomplete="current-password"
                             placeholder="La password impostata alla creazione della chiave..."
                             style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; outline: none;">
+                        <button type="button" class="pw-toggle" data-target="capitalLivePass" data-tooltip="Mostra/nascondi la chiave" aria-label="Mostra o nascondi la chiave"></button>
+                        </div>
                     </div>
                 </form>
 
@@ -1749,7 +1791,32 @@
     <!-- tengine.js DEVE precedere app.js: dichiara a scope globale il motore di
          trading (strategie, rischio, ordini, bot) che app.js richiama a runtime -->
     <script src="tengine.js?v=3" defer></script>
-    <script src="app.js?v=30" defer></script>
+    <script src="app.js?v=33" defer></script>
+    <script>
+        // Toggle "occhio": mostra/nasconde in chiaro le chiavi/segreti nelle schede broker.
+        (function () {
+            var EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+            var EYE_OFF = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+            function init() {
+                var btns = document.querySelectorAll('.pw-toggle');
+                for (var i = 0; i < btns.length; i++) {
+                    if (!btns[i].innerHTML.trim()) btns[i].innerHTML = EYE;
+                }
+            }
+            document.addEventListener('click', function (e) {
+                var btn = e.target && e.target.closest ? e.target.closest('.pw-toggle') : null;
+                if (!btn) return;
+                var input = document.getElementById(btn.getAttribute('data-target'));
+                if (!input) return;
+                var reveal = input.type === 'password';
+                input.type = reveal ? 'text' : 'password';
+                btn.innerHTML = reveal ? EYE_OFF : EYE;
+                btn.setAttribute('aria-label', reveal ? 'Nascondi la chiave' : 'Mostra la chiave');
+            });
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+            else init();
+        })();
+    </script>
 </body>
 
 </html>
