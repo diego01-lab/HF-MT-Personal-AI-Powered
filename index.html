@@ -1740,7 +1740,10 @@
     <script src="grafico.js?v=2" defer></script>
     <script src="statusbar.js" defer></script>
     <script src="radar.js?v=8" defer></script>
-    <script src="app.js?v=27" defer></script>
+    <!-- tengine.js DEVE precedere app.js: dichiara a scope globale il motore di
+         trading (strategie, rischio, ordini, bot) che app.js richiama a runtime -->
+    <script src="tengine.js?v=1" defer></script>
+    <script src="app.js?v=28" defer></script>
 </body>
 
 </html>

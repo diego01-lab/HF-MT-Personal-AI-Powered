@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
-    "build": "node -e \"const fs=require('fs'); if(!fs.existsSync('www'))fs.mkdirSync('www'); ['index.html','app.js','legal.js','styles.css','manifest.json','icon.svg','languages.it.json','languages.en.json','languages.es.json','languages.fr.json','languages.de.json'].forEach(f=>fs.copyFileSync(f, 'www/'+f))\"",
+    "build": "node build.js",
     "sync": "cap sync android"
   },
   "keywords": [],
