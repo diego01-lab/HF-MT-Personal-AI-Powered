@@ -62,6 +62,36 @@ const WASH_TRADE_COOLDOWN_MS = 60000;
 // Blackout riapertura dopo una chiusura: il bot non riapre lo stesso simbolo
 // per questo tempo (riduce il ping-pong open/close/reopen e i wash trade).
 const POST_CLOSE_BLACKOUT_MS = 45000;
+// Cooldown post-trade sulla VALUTAZIONE della strategia (gate separato da
+// POST_CLOSE_BLACKOUT_MS, che blocca solo openTrade): prima era un flat 5s
+// per qualunque esito, quasi nullo — il bot rivalutava lo stesso simbolo
+// nelle stesse condizioni che avevano appena causato una chiusura in
+// perdita. Ora la durata dipende dal PnL del trade appena chiuso: dopo una
+// perdita si aspetta qualche minuto prima di rivalutare (il vincolo
+// effettivo, essendo più lungo di POST_CLOSE_BLACKOUT_MS); dopo un guadagno
+// resta breve (il vincolo effettivo resta POST_CLOSE_BLACKOUT_MS=45s).
+const POST_TRADE_COOLDOWN_WIN_MS = 30000;
+const POST_TRADE_COOLDOWN_LOSS_MS = 300000;
+// Filtro piattezza (ATR minimo per aprire): sotto questa soglia il mercato
+// non si muove abbastanza da coprire lo spread/fee prima che TP/SL scattino,
+// quindi il bot paga solo il costo di transazione (cronologia 12/07/2026:
+// 87.9% di chiusure in perdita, media -0.26%, concentrate in -0.2%/-0.5% —
+// coerente col solo costo, non con un movimento avverso). Era stato
+// disattivato con un return in testa alla funzione, che saltava ANCHE il
+// calcolo del segnale e showAISignal: bloccava pure l'aggiornamento del
+// radar. Ora il filtro vive SOLO dentro "if (!pos)" (vedi sotto): gating
+// solo sull'apertura di nuove posizioni, radar sempre aggiornato.
+const ATR_FLATNESS_MIN_PCT = 0.15;
+// Finestra di gara apertura->sync: dopo l'invio di un ordine di apertura,
+// activePositions[sym] resta vuoto finché syncAlpacaPositions() non conferma
+// la posizione (schedulata ~1s dopo, poi la rete ci mette il suo). Se la
+// strategia rivaluta lo stesso simbolo in quella finestra, openTrade() non
+// vede alcuna posizione e ne apre una seconda (visto in produzione: doppi
+// BUY sullo stesso simbolo/qty a distanza di 0-1s, es. HYPEUSD/ONDOUSD).
+// window.__pendingOpenTimes[sym] è già scritto al submit e consumato alla
+// conferma (takePendingOpenTime in app.js): lo riusiamo come lock, con una
+// scadenza di sicurezza nel guard stesso nel caso la sync fallisca/non arrivi.
+const PENDING_OPEN_GUARD_MS = 20000;
 // Circuit breaker GLOBALE: quando il buying power è esaurito, TUTTI gli ordini
 // vengono sospesi per 5 minuti. Evita centinaia di 403 al secondo quando i fondi sono a 0.
 const GLOBAL_ORDER_PAUSE_MS = 300000; // 5 minuti
@@ -175,8 +205,9 @@ function evaluateStrategyAI(sym, history, price) {
         if (stratCooldown[cdKey] && now - stratCooldown[cdKey] < STRAT_COOLDOWN_MS) return;
         stratCooldown[cdKey] = now;
 
-        // POST-TRADE COOLDOWN (5 secondi) per evitare l'overtrading
-        if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < 5000) return;
+        // POST-TRADE COOLDOWN per evitare l'overtrading: durata scritta da
+        // closeTrade in tradeCooldownDurations (più lunga dopo una perdita).
+        if (tradeCooldowns[cdKey] && now - tradeCooldowns[cdKey] < (tradeCooldownDurations[cdKey] || POST_TRADE_COOLDOWN_WIN_MS)) return;
 
         // --- Calcolo Indicatori ---
         const rsi = calculateRSI(history, Math.min(14, history.length - 1));
@@ -196,46 +227,55 @@ function evaluateStrategyAI(sym, history, price) {
 
         if (!rsi || !ema12 || !ema26 || !bb) return;
 
-        // FILTRO VOLATILITA' (ATR): Se il mercato è piatto, ignoriamo i segnali per non pagare commissioni
+        // FILTRO VOLATILITA' (ATR): calcolato qui, applicato più sotto SOLO
+        // al ramo "if (!pos)" (vedi ATR_FLATNESS_MIN_PCT) — non un return
+        // precoce, altrimenti salta anche showAISignal e il radar si blocca.
         const atr = calculateATR(history, Math.min(14, history.length));
         const atrPct = atr ? (atr / price) * 100 : 1;
-        // Disabilitato per HFT Scalper (il radar smetteva di aggiornarsi perché il filtro bloccava quasi tutti i tick)
-        // if (!activePositions[sym] && atrPct < 0.15) {
-        //     return; // Mercato piatto, no trade
-        // }
 
         // --- Sistema a Punti base (bullish/bearish) ---
         let bullScore = 0, bearScore = 0;
         const reasons = [];
+        // Un vero EVENTO (cross EMA/MACD, estremo Bollinger, RSI ipercomprato/
+        // ipervenduto) vs pura CONTINUAZIONE (RSI 55-75/45-25 "momentum", EMA/
+        // MACD "è già bull/bear"). Senza distinguerli, tre segnali di sola
+        // continuazione (RSI momentum +2, EMA già-bull +1, MACD già-positivo
+        // +1 = 4) bastavano da soli a superare la soglia d'ingresso: il bot
+        // entrava in trend già maturi/laterali senza alcuna conferma di svolta
+        // (cronologia 12/07/2026: 87.9% chiusure in perdita, media -0.26%,
+        // concentrate nel range del solo costo di transazione). Richiedere
+        // anche un evento reale (vedi il gate su bullEvent/bearEvent più sotto)
+        // filtra gli ingressi "in coda" a un movimento già scontato dal prezzo.
+        let bullEvent = false, bearEvent = false;
 
         // RSI
         if (rsi > 55 && rsi < 75) { bullScore += 2; reasons.push(`RSI momentum`); }
-        else if (rsi >= 75) { bearScore += 1; reasons.push(`RSI ipercomprato`); }
+        else if (rsi >= 75) { bearScore += 1; bearEvent = true; reasons.push(`RSI ipercomprato`); }
         else if (rsi < 45 && rsi > 25) { bearScore += 2; reasons.push(`RSI bear momentum`); }
-        else if (rsi <= 25) { bullScore += 1; reasons.push(`RSI ipervenduto`); }
+        else if (rsi <= 25) { bullScore += 1; bullEvent = true; reasons.push(`RSI ipervenduto`); }
 
         // EMA crossover
         if (prevEma12 && prevEma26) {
             const wasBull = prevEma12 > prevEma26;
             const isBull = ema12 > ema26;
-            if (!wasBull && isBull) { bullScore += 3; reasons.push('EMA bull cross'); }
-            if (wasBull && !isBull) { bearScore += 3; reasons.push('EMA bear cross'); }
+            if (!wasBull && isBull) { bullScore += 3; bullEvent = true; reasons.push('EMA bull cross'); }
+            if (wasBull && !isBull) { bearScore += 3; bearEvent = true; reasons.push('EMA bear cross'); }
             else if (isBull) { bullScore += 1; }
             else { bearScore += 1; }
         }
 
         // MACD momentum
         if (macd && prevMacd) {
-            if (macd > 0 && prevMacd <= 0) { bullScore += 2; reasons.push('MACD cross up'); }
-            if (macd < 0 && prevMacd >= 0) { bearScore += 2; reasons.push('MACD cross down'); }
+            if (macd > 0 && prevMacd <= 0) { bullScore += 2; bullEvent = true; reasons.push('MACD cross up'); }
+            if (macd < 0 && prevMacd >= 0) { bearScore += 2; bearEvent = true; reasons.push('MACD cross down'); }
             else if (macd > 0) { bullScore += 1; }
             else if (macd < 0) { bearScore += 1; }
         }
 
         // Bollinger Bands
         const bbPos = (price - bb.lower) / (bb.upper - bb.lower);
-        if (bbPos < 0.15) { bullScore += 2; reasons.push('BB lower'); }
-        else if (bbPos > 0.85) { bearScore += 2; reasons.push('BB upper'); }
+        if (bbPos < 0.15) { bullScore += 2; bullEvent = true; reasons.push('BB lower'); }
+        else if (bbPos > 0.85) { bearScore += 2; bearEvent = true; reasons.push('BB upper'); }
 
         // --- LETTURA MODULI AI ATTIVI ---
         const useNLP = document.getElementById('aiModeSentiment')?.checked;
@@ -295,6 +335,10 @@ function evaluateStrategyAI(sym, history, price) {
         const isBearTrend = price < ema26;
 
         if (!pos) {
+            // Mercato piatto: nessuna nuova apertura (il segnale/radar sopra
+            // sono già stati calcolati e mostrati, quindi il radar resta vivo).
+            if (atrPct < ATR_FLATNESS_MIN_PCT) return;
+
             // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
             const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
 
@@ -317,8 +361,10 @@ function evaluateStrategyAI(sym, history, price) {
             // Filtro evidenza minima: HFT mode -> bastano 4 punti per aprire trade rapidi
             const totalEvidence = bullScore + bearScore;
 
-            // APERTURA
-            if (signal === 'BUY' && confidence >= 60 && isBullTrend && totalEvidence >= 3) {
+            // APERTURA — richiede anche un evento reale (bullEvent/bearEvent):
+            // niente ingressi basati solo su segnali di continuazione (vedi
+            // commento su bullEvent/bearEvent più sopra).
+            if (signal === 'BUY' && confidence >= 60 && isBullTrend && totalEvidence >= 3 && bullEvent) {
                 console.log(`💎 [CONFIRMED BUY] ${sym} | Conf: ${confidence}% | Trend: BULL | SL: ${dynamicSL.toFixed(2)}% TP: ${dynamicTP.toFixed(2)}%`);
 
                 const tpInput = document.getElementById('botTargetProfit');
@@ -328,7 +374,7 @@ function evaluateStrategyAI(sym, history, price) {
 
                 openTrade('LONG', price, sym, dynamicTP, dynamicSL, confidence);
             }
-            if (signal === 'SELL' && confidence >= 60 && isBearTrend && totalEvidence >= 3) {
+            if (signal === 'SELL' && confidence >= 60 && isBearTrend && totalEvidence >= 3 && bearEvent) {
                 // Non tentare SHORT se: broker Alpaca attivo E (crypto USDT O account non abilitato allo scoperto)
                 if (brokerViewActive() && (sym.includes('USDT') || window.__alpacaShortNotAllowed)) return;
 
@@ -523,6 +569,13 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
     // vengono instradati su api.alpaca.markets con le chiavi live tramite
     // getBrokerHttp() nelle funzioni d'ordine (alpacaCreateOrder/closeTrade).
     if (activePositions[sym]) return;
+
+    // Ordine di apertura già inviato per questo simbolo, in attesa che
+    // syncAlpacaPositions() lo confermi in activePositions: blocca i doppi
+    // BUY (vedi PENDING_OPEN_GUARD_MS sopra). Scaduto il timeout, si
+    // considera stantio (ordine mai riempito o sync fallita) e si sblocca.
+    const pot = window.__pendingOpenTimes && window.__pendingOpenTimes[normFillSym(sym)];
+    if (pot && Date.now() - pot < PENDING_OPEN_GUARD_MS) return;
 
     // Simbolo respinto di recente dal broker: solo il bot rispetta il
     // cooldown, i bottoni manuali (bot fermo) restano sempre operativi
@@ -986,13 +1039,16 @@ async function closeTrade(sym, price, reason = 'MANUAL') {
 
     pos.isActuallyClosing = true;
 
-    // Applica il cooldown post-trade
-    const cdKey = (window.__ctxOverride ? window.__ctxOverride + ':' : '') + sym;
-    tradeCooldowns[cdKey] = Date.now();
-
     const pnl = pos.type === 'LONG'
         ? (price - pos.entryPrice) * pos.amount
         : (pos.entryPrice - price) * pos.amount;
+
+    // Applica il cooldown post-trade: più lungo dopo una perdita (vedi
+    // POST_TRADE_COOLDOWN_*_MS) per non rientrare subito nelle stesse
+    // condizioni che l'hanno appena generata.
+    const cdKey = (window.__ctxOverride ? window.__ctxOverride + ':' : '') + sym;
+    tradeCooldowns[cdKey] = Date.now();
+    tradeCooldownDurations[cdKey] = pnl < 0 ? POST_TRADE_COOLDOWN_LOSS_MS : POST_TRADE_COOLDOWN_WIN_MS;
 
     // 0. Protezione Dust: se il valore della posizione è trascurabile, la chiudiamo solo localmente
     // ATTENZIONE: Questo filtro si applica SOLO alle chiusure automatiche (TP, SL, BOT)

@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.15';
+window.APP_VERSION = 'v.1.0.16';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -898,6 +898,11 @@ function getSpreadPctFor(sym) {
 }
 let activePositions = {};
 let tradeCooldowns = {};
+// Durata del cooldown per-simbolo scritta da closeTrade insieme a
+// tradeCooldowns: più lunga dopo una perdita (vedi POST_TRADE_COOLDOWN_*_MS
+// in tengine.js), così il bot non rientra subito nelle stesse condizioni
+// che hanno appena generato la perdita.
+let tradeCooldownDurations = {};
 let autoBuyPending = null;
 let lastRenderedPositionsStr = '';
 let portfolioBalance = 0;
@@ -4873,7 +4878,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 const rest = qty - coverQty;
                                 if (rest > EPS) addToBasis(longBasis, ns, rest, price, timestamp);
                                 // La nota di chiusura si riferisce a questo trade: consumala
-                                if (known && known.type === 'SHORT') delete brokerEntryBasis[ns];
+                                // SOLO quando il lotto è davvero esaurito (sb.qty <= EPS). Un
+                                // ordine di copertura che fila in più fill parziali (comune su
+                                // crypto illiquide) altrimenti perdeva il motivo reale (SL/TP/
+                                // BREAKEVEN) dal secondo fill in poi, ricadendo sul generico
+                                // BROKER_SYNC per la maggior parte delle righe di cronologia.
+                                if (known && known.type === 'SHORT' && sb.qty <= EPS) delete brokerEntryBasis[ns];
                             } else if (known && known.type === 'SHORT') {
                                 // Copertura di uno short aperto PRIMA della finestra: usa l'entry annotato
                                 pushRow('SHORT', known.price, qty, (known.price - price) * qty, known.time, known.reason);
@@ -4894,8 +4904,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                             lb.qty -= closeQty;
                             const rest = qty - closeQty;
                             if (rest > EPS) addToBasis(shortBasis, ns, rest, price, timestamp);
-                            // La nota di chiusura si riferisce a questo trade: consumala
-                            if (known && known.type === 'LONG') delete brokerEntryBasis[ns];
+                            // La nota di chiusura si riferisce a questo trade: consumala SOLO
+                            // quando il lotto è davvero esaurito (lb.qty <= EPS). Un ordine di
+                            // chiusura che fila in più fill parziali (comune su crypto
+                            // illiquide) altrimenti perdeva il motivo reale (SL/TP/BREAKEVEN)
+                            // dal secondo fill in poi, ricadendo sul generico BROKER_SYNC per
+                            // la maggior parte delle righe di cronologia (osservato 12/07/2026:
+                            // 45/58 chiusure senza motivo reale).
+                            if (known && known.type === 'LONG' && lb.qty <= EPS) delete brokerEntryBasis[ns];
                             return;
                         }
                         if (known && known.type === 'LONG') {

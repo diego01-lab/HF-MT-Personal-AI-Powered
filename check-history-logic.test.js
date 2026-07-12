@@ -123,5 +123,27 @@ const T = (m) => new Date(Date.UTC(2026, 5, 11, 10, m)).toISOString();
     check('sequenza: long pnl +30', longRow.pnl === 30, longRow.pnl);
 }
 
+// 8. Fix E (12/07/2026): un ordine di chiusura che fila in PIÙ fill parziali
+//    deve propagare il motivo REALE (SL/TP/BREAKEVEN) a TUTTI i fill, non
+//    solo al primo. Prima del fix, brokerEntryBasis veniva cancellato dal
+//    primo match: dal secondo fill in poi il motivo ricadeva sul generico
+//    BROKER_SYNC (osservato in produzione: 45/58 righe di cronologia senza
+//    motivo reale). BUY 100@1.0 poi due SELL parziali (60 + 40) che
+//    esauriscono lo stesso lotto: entrambe le righe devono avere reason SL.
+{
+    const r = runSync([
+        { id: 'b8', side: 'buy', price: '1.0', qty: '100', symbol: 'ARBUSD', transaction_time: T(0) },
+        { id: 's8a', side: 'sell', price: '0.9', qty: '60', symbol: 'ARBUSD', transaction_time: T(30) },
+        { id: 's8b', side: 'sell', price: '0.9', qty: '40', symbol: 'ARBUSD', transaction_time: T(45) },
+    ], { brokerEntryBasis: { 'ARBUSD': { price: 1.0, time: Date.UTC(2026, 5, 11), type: 'LONG', reason: 'SL' } } });
+    const rows = r.tradeHistory;
+    check('fill multipli: due righe (60+40)', rows.length === 2, rows.length);
+    const reasons = rows.map(t => t.reason);
+    check('fill multipli: PRIMO fill motivo reale SL', reasons[0] === 'SL', reasons[0]);
+    check('fill multipli: SECONDO fill motivo reale SL (non BROKER_SYNC)', reasons[1] === 'SL', reasons[1]);
+    check('fill multipli: qty 60 sul primo', rows[0].amount === 60, rows[0].amount);
+    check('fill multipli: qty 40 sul secondo', rows[1].amount === 40, rows[1].amount);
+}
+
 console.log(failures === 0 ? '\nTUTTI I TEST PASSANO' : `\n${failures} TEST FALLITI`);
 process.exit(failures === 0 ? 0 : 1);
