@@ -417,6 +417,28 @@ function getNetBreakevenPct(sym) {
     return 0.15; // Azioni: fee assenti, ma calcoliamo 0.15% di scivolamento/spread
 }
 
+// Decide se un TAKE-PROFIT può scattare davvero. Nasce dal churn da spread:
+// unrealizedPct è calcolato sull'ULTIMO prezzo scambiato (getLivePriceFor), che
+// sta SOPRA il bid a cui la vendita a mercato esegue davvero. Un tick fasullo
+// faceva scattare il "TP" mentre la chiusura filava sotto l'ingresso → perdita
+// etichettata TP (es. UNIUSD/AAVEUSD, -0.24%/-0.40% in 15-22s).
+//   B (netto): il mark lordo deve superare il costo di andata/ritorno stimato
+//     (fee+spread, getNetBreakevenPct) PIÙ lo spread live: così, anche vendendo
+//     un intero spread sotto il mark, il risultato netto resta >= 0. Oltre,
+//     ovviamente, al TP impostato dall'utente/adattivo.
+//   C (grazia): nei primi SL_GRACE_MS la posizione "nasce" spread-negativa; il
+//     TP scatta solo con margine ampio (costo raddoppiato) per non partire su un
+//     tick alla nascita — simmetrico alla grazia già presente sullo SL.
+function tpAllowed(sym, unrealizedPct, effTP, posAge) {
+    if (unrealizedPct < effTP) return false;                 // TP impostato non raggiunto
+    const cost = getNetBreakevenPct(sym);
+    const spreadComp = Math.min(getSpreadPctFor(sym), 3.0);  // 0 se spread sconosciuto
+    const netFloor = cost + spreadComp;                      // soglia lorda per netto >= 0
+    if (unrealizedPct < netFloor) return false;              // profitto netto non garantito
+    if (posAge < SL_GRACE_MS && unrealizedPct < netFloor + cost) return false; // grazia TP
+    return true;
+}
+
 // Main strategy dispatcher — motore tecnico locale (RSI + EMA + MACD + BB) o fallback EMA
 function evaluateStrategy(sym, history, price) {
     // Blacklist spread strutturale A MONTE della strategia: inutile valutare
@@ -1431,7 +1453,7 @@ function manageOpenPositionRisk(sym, pos, livePrice, unrealizedPct, opts) {
             return { effTP, effSL, closed: true };
         }
 
-        if (unrealizedPct >= effTP && !pos.isActuallyClosing && !closePending) {
+        if (tpAllowed(sym, unrealizedPct, effTP, posAge) && !pos.isActuallyClosing && !closePending) {
             closeTrade(sym, livePrice, 'TP');
             return { effTP, effSL, closed: true };
         }
@@ -1479,6 +1501,11 @@ function manageBgRiskCurrentCtx() {
             : (pos.entryPrice / livePrice - 1) * 100;
         const effTP = pos.dynamicTP || userTP;
         const effSL = (userSL === 0) ? 0 : (pos.dynamicSL || userSL);
+        // Età posizione per le grazie anti-spread su TP (tpAllowed) e SL.
+        // Fallback a firstSeenTime se manca openTime, mai Infinity (che
+        // disattiverebbe la grazia proprio sulle aperture del bot).
+        if (!pos.openTime && !pos.firstSeenTime) pos.firstSeenTime = Date.now();
+        const posAge = Date.now() - (pos.openTime || pos.firstSeenTime);
         // Trailing 1.0×ATR (solo in profitto, come il motore principale)
         if (pos.type === 'LONG') { if (!pos.peakPrice || livePrice > pos.peakPrice) pos.peakPrice = livePrice; }
         else { if (!pos.peakPrice || livePrice < pos.peakPrice) pos.peakPrice = livePrice; }
@@ -1495,10 +1522,9 @@ function manageBgRiskCurrentCtx() {
         // Break-even armato SOTTO il TP effettivo (stessa logica del motore principale)
         if (!pos.breakevenArmed && unrealizedPct >= getBreakevenArmPct(sym, effTP)) pos.breakevenArmed = true;
         if (pos.breakevenArmed && unrealizedPct <= (getNetBreakevenPct(sym) + 0.05)) { closeTrade(sym, livePrice, 'BREAKEVEN'); continue; }
-        if (unrealizedPct >= effTP) { closeTrade(sym, livePrice, 'TP'); continue; }
+        if (tpAllowed(sym, unrealizedPct, effTP, posAge)) { closeTrade(sym, livePrice, 'TP'); continue; }
         if (effSL > 0 && unrealizedPct <= -effSL) {
-            // Grazia anti-spread (stessa logica del motore principale)
-            const posAge = pos.openTime ? (Date.now() - pos.openTime) : Infinity;
+            // Grazia anti-spread (stessa logica del motore principale, posAge hoistato sopra)
             if (posAge >= SL_GRACE_MS || unrealizedPct <= -(effSL * 2)) { closeTrade(sym, livePrice, 'SL'); continue; }
         }
     }
