@@ -285,6 +285,8 @@
     "lbl_status": "Stato",
     "lbl_live": "Live",
     "lbl_invested_short": "Inv.",
+    "lbl_fee_est": "Comm.",
+    "tip_fee_est": "Stima fee + spread di andata/ritorno (non è un valore confermato dal broker)",
     "asset_cat_crypto": "Crypto",
     "asset_cat_stock": "Azione",
     "asset_cat_forex": "Forex",

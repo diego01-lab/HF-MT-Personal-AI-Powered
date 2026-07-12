@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.16';
+window.APP_VERSION = 'v.1.0.17';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -6141,6 +6141,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; gap: 12px; white-space: nowrap; margin-top: 2px;">
                             <span>🎯 TP <strong style="color:#10b981;" class="pos-tp"></strong></span>
                             <span>🛡️ SL <strong style="color:#ef4444;" class="pos-sl"></strong></span>
+                            <span title="${tr('tip_fee_est', 'Stima fee + spread di andata/ritorno (non è un valore confermato dal broker)')}">💸 ${tr('lbl_fee_est', 'Comm.')} <strong style="color:#f59e0b;" class="pos-fee"></strong></span>
                         </div>
                         <!-- PnL dinamico ($ e %) sotto la riga TP/SL -->
                         <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;">
@@ -6190,6 +6191,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateT('.pos-inv', `@ ${formatMoney(invested)}`);
                 updateT('.pos-tp', `${effTP.toFixed(2)}%`);
                 updateT('.pos-sl', effSL > 0 ? `${effSL.toFixed(2)}%` : 'OFF');
+                // Stima fee+spread di andata/ritorno (stessa metrica usata per il
+                // breakeven netto e per il filtro anti-churn del TP in tengine.js):
+                // NON è un valore confermato dal broker, solo una stima coerente col
+                // resto dell'app (vedi getNetBreakevenPct).
+                const estFeePct = (typeof getNetBreakevenPct === 'function') ? getNetBreakevenPct(sym) : 0;
+                const estFeeUsd = invested * (estFeePct / 100);
+                updateT('.pos-fee', `${formatMoney(estFeeUsd)} (${estFeePct.toFixed(2)}%)`);
                 // Data e ora apertura posizione
                 const openDateStr = pos.openTime
                     ? new Date(pos.openTime).toLocaleString(uiLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })

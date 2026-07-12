@@ -285,6 +285,8 @@
     "lbl_status": "Status",
     "lbl_live": "Live",
     "lbl_invested_short": "Inv.",
+    "lbl_fee_est": "Fee",
+    "tip_fee_est": "Estimated round-trip fee + spread (not a broker-confirmed value)",
     "asset_cat_crypto": "Crypto",
     "asset_cat_stock": "Stock",
     "asset_cat_forex": "Forex",

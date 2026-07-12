@@ -29,24 +29,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Prepare web directory
-        run: |
-          mkdir -p www
-          cp -r *.js *.html *.css *.json www/ 2>/dev/null || true
-          cp -r brokers www/brokers 2>/dev/null || true
-          # Note: Adjust the build step if a bundler like webpack/vite is used.
-          # Right now it seems to be plain JS/HTML files in the root.
-
-      - name: Install Capacitor CLI
-        run: npm install -g @capacitor/cli
-
-      - name: Add Android Platform
-        run: |
-          npm i @capacitor/android
-          npx cap add android || echo "Android platform already added"
+      - name: Build web bundle (www/)
+        run: npm run build
 
       - name: Sync Capacitor Android
-        run: npx cap sync android
+        run: npm run sync:android
 
       - name: Build Android APK
         working-directory: ./android
@@ -73,22 +60,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Prepare web directory
-        run: |
-          mkdir -p www
-          cp -r *.js *.html *.css *.json www/ 2>/dev/null || true
-          cp -r brokers www/brokers 2>/dev/null || true
-
-      - name: Install Capacitor CLI
-        run: npm install -g @capacitor/cli
-
-      - name: Add iOS Platform
-        run: |
-          npm i @capacitor/ios
-          npx cap add ios || echo "iOS platform already added"
+      - name: Build web bundle (www/)
+        run: npm run build
 
       - name: Sync Capacitor iOS
-        run: npx cap sync ios
+        run: npm run sync:ios
 
       - name: Build iOS App
         working-directory: ./ios/App

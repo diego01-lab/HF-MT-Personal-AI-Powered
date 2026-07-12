@@ -268,6 +268,8 @@
     "lbl_status": "Estado",
     "lbl_live": "Live",
     "lbl_invested_short": "Inv.",
+    "lbl_fee_est": "Com.",
+    "tip_fee_est": "Estimación de comisión + spread de ida y vuelta (no es un valor confirmado por el bróker)",
     "asset_cat_crypto": "Cripto",
     "asset_cat_stock": "Acción",
     "asset_cat_forex": "Forex",

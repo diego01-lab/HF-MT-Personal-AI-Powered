@@ -7,7 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "build": "node build.js",
-    "sync": "node sync-platforms.js"
+    "sync": "node sync-platforms.js",
+    "sync:android": "node sync-platforms.js android",
+    "sync:ios": "node sync-platforms.js ios"
   },
   "keywords": [],
   "author": "",
