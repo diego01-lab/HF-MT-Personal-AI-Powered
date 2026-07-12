@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.17';
+window.APP_VERSION = 'v.1.0.18';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -3459,14 +3459,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (document.getElementById('availableMargin')) document.getElementById('availableMargin').textContent = formatMoney(tradingCapital);
                 if (document.getElementById('totalInvested')) document.getElementById('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
 
-                const dep = getDepositedTotal(getBrokerCtx(), testEquity);
                 const realizedPnl = globalTotalRealizedPnL;
                 if (document.getElementById('sessionRevenue')) {
                     document.getElementById('sessionRevenue').textContent = `${realizedPnl >= 0 ? '+' : ''}${formatMoney(realizedPnl)}`;
                     document.getElementById('sessionRevenue').style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
                 }
                 if (document.getElementById('sessionROI')) {
-                    const pct = dep > 0 ? (realizedPnl / dep) * 100 : 0;
+                    // Stessa formula di updateDashboard (PnL Netto / Capitale Iniziale) per
+                    // evitare che il valore dipenda da quale delle due funzioni gira per ultima.
+                    const netPnl = (typeof window.__trueRealizedPnL === 'number') ? window.__trueRealizedPnL : realizedPnl;
+                    const pct = sessionInitialCapital > 0 ? (netPnl / sessionInitialCapital) * 100 : 0;
                     document.getElementById('sessionROI').textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                     document.getElementById('sessionROI').style.color = pct >= 0 ? '#10b981' : '#ef4444';
                 }
@@ -3508,31 +3510,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Valore Mercato (Long + Short Market Value)
             if (totalInvestedEl) totalInvestedEl.textContent = formatMoney(brokerMarketValue || 0);
 
-            // Calcolo preliminare Unrealized per separare PnL Realizzato
+            // Calcolo preliminare Unrealized per separare PnL Realizzato. Preferisce il
+            // PnL non realizzato certificato dal broker per posizione (stessa logica di
+            // updateDashboard), per non divergere quando le due funzioni girano in ordine diverso.
             let localUnreal = 0;
             let hasLocal = false;
             for (let s in activePositions) {
                 const p = activePositions[s];
-                const lp = getLivePriceFor(s) || p.entryPrice;
-                localUnreal += p.type === 'LONG' ? (lp - p.entryPrice) * p.amount : (p.entryPrice - lp) * p.amount;
+                if (p.brokerUnrealizedPnL !== undefined) {
+                    localUnreal += p.brokerUnrealizedPnL;
+                } else {
+                    const lp = getLivePriceFor(s) || p.entryPrice;
+                    localUnreal += p.type === 'LONG' ? (lp - p.entryPrice) * p.amount : (p.entryPrice - lp) * p.amount;
+                }
                 hasLocal = true;
             }
             const displayUnreal = hasLocal ? localUnreal : brokerUnrealizedPnL;
 
             // PnL Realizzato (Lifetime)
             if (sessionRevenueEl) {
-                const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
                 const realizedPnl = globalTotalRealizedPnL;
                 const sign = realizedPnl >= 0 ? '+' : '';
                 sessionRevenueEl.textContent = `${sign}${formatMoney(realizedPnl)}`;
                 sessionRevenueEl.style.color = realizedPnl >= 0 ? '#10b981' : '#ef4444';
             }
 
-            // ROI Realizzato (Lifetime ROI)
+            // ROI Totale (stessa formula di updateDashboard: PnL Netto / Capitale Iniziale,
+            // per evitare che il valore dipenda dall'ordine di chiamata tra le due funzioni)
             if (sessionROIEl) {
-                const dep = getDepositedTotal(getBrokerCtx(), tradingCapital);
-                const realizedPnl = globalTotalRealizedPnL;
-                const pct = (dep > 0) ? (realizedPnl / dep) * 100 : 0;
+                const netPnl = (typeof window.__trueRealizedPnL === 'number') ? window.__trueRealizedPnL : globalTotalRealizedPnL;
+                const pct = (sessionInitialCapital > 0) ? (netPnl / sessionInitialCapital) * 100 : 0;
                 sessionROIEl.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                 sessionROIEl.style.color = pct >= 0 ? '#10b981' : '#ef4444';
             }
@@ -4472,6 +4479,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     setSyncProgress(75);
                     await syncAlpacaHistory();
                     setSyncProgress(100);
+                    // Vedi commento gemello in checkAlpacaConnection(): ricalcola le
+                    // statistiche aggregate con i dati appena sincronizzati in questo giro.
+                    updateDashboard();
+                    updateWalletUI();
                 } else {
                     dot.className = 'status-dot error';
                     dot.style.backgroundColor = '#ef4444';
@@ -4615,6 +4626,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     setSyncProgress(75);
                     await syncAlpacaHistory();
                     setSyncProgress(100);
+                    // Ricalcola Tasso di successo/PnL Netto/ROI/Commissioni con i dati
+                    // appena sincronizzati (altrimenti restano indietro di un ciclo,
+                    // perché applyBrokerAccountSnapshot li aveva già calcolati PRIMA
+                    // che posizioni/cronologia venissero aggiornate in questo giro).
+                    updateDashboard();
+                    updateWalletUI();
                 } else {
                     const errData = await response.json();
                     console.error("[ALPACA] Dettaglio Errore:", errData);
@@ -5774,6 +5791,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const reasonTip = reasonLabels[trade.reason] || reasonLabels['MANUAL'];
                 const typeTip = typeLabels[trade.type] || '';
 
+                // Stima fee+spread di andata/ritorno (stessa metrica delle posizioni
+                // aperte, vedi getNetBreakevenPct): non è un valore confermato dal
+                // broker, la cronologia non registra la commissione fill-per-fill.
+                const estFeePct = (typeof getNetBreakevenPct === 'function') ? getNetBreakevenPct(tradeSym) : 0;
+                const estFeeUsd = invested * (estFeePct / 100);
+
                 // Layout impilato: sta nella larghezza della colonna senza scrollbar orizzontale.
                 // Header uniforme agli altri pannelli: icona + simbolo bianco 0.85rem,
                 // etichetta categoria maiuscola piccola, badge direzione a pillola.
@@ -5794,6 +5817,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div class="trade-row-mid">
                         <span class="trade-reason" style="background: ${reasonColor}22; color: ${reasonColor}; border: 1px solid ${reasonColor}55;" title="${reasonTip}">${trade.reason || 'MANUAL'}</span>
                         <span class="trade-duration">${tr('lbl_duration', 'Durata')}: <strong>${durationStr}</strong></span>
+                    </div>
+                    <div class="trade-row-mid" style="margin-top: 2px;">
+                        <span class="trade-duration" title="${tr('tip_fee_est', 'Stima fee + spread di andata/ritorno (non è un valore confermato dal broker)')}">💸 ${tr('lbl_fee_est', 'Comm.')} <strong style="color:#f59e0b;">${formatMoney(estFeeUsd)} (${estFeePct.toFixed(2)}%)</strong></span>
                     </div>
                 `;
                 fragment.appendChild(row);
@@ -5841,6 +5867,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const totalTradesEl = document.getElementById('totalTrades');
             let openUnrealizedTotal = 0;
             let openMarketValueTotal = 0;
+            let openFeeTotal = 0;
             for (let sym in activePositions) {
                 const p = activePositions[sym];
                 const livePrice = getLivePriceFor(sym) || p.entryPrice;
@@ -5856,6 +5883,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (livePrice > 0) {
                     openMarketValueTotal += p.amount * livePrice;
                 }
+                // Somma delle commissioni stimate (stessa metrica di ogni card, vedi
+                // getNetBreakevenPct): totale per l'header del pannello Aperte.
+                const pInvested = p.invested || p.entryPrice * p.amount;
+                const pFeePct = (typeof getNetBreakevenPct === 'function') ? getNetBreakevenPct(sym) : 0;
+                openFeeTotal += pInvested * (pFeePct / 100);
             }
 
             let currentCommissions = 0;
@@ -5960,12 +5992,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 historyDailyNetEl.textContent = `${hSign}${formatMoney(totalRealizedPnL)}`;
                 historyDailyNetEl.style.color = totalRealizedPnL > 0 ? '#10b981' : totalRealizedPnL < 0 ? '#ef4444' : '#fff';
             }
+            // Totale commissioni REALI lifetime (stessa fonte del box "Commissioni" in
+            // Gestione Capitale/Prestazioni), così i due valori coincidono sempre.
+            const historyFeeTotalEl = document.getElementById('historyFeeTotal');
+            if (historyFeeTotalEl) {
+                const realCommissions = window.__globalCommissions || 0;
+                historyFeeTotalEl.textContent = `💸 ${formatMoney(realCommissions)}`;
+                historyFeeTotalEl.style.display = realCommissions > 0 ? 'inline-block' : 'none';
+            }
 
             // Riepilogo Netto Latente (Posizioni Aperte)
             const openDailyNetEl = document.getElementById('openDailyNet');
             const openTotalValueEl = document.getElementById('openTotalValue');
             if (openTotalValueEl) {
                 openTotalValueEl.textContent = `Valore: ${formatMoney(openMarketValueTotal)}`;
+            }
+            // Totale commissioni stimate, tra il valore e il conteggio nell'header
+            const openFeeTotalEl = document.getElementById('openFeeTotal');
+            if (openFeeTotalEl) {
+                openFeeTotalEl.textContent = `💸 ${formatMoney(openFeeTotal)}`;
+                openFeeTotalEl.style.display = openFeeTotal > 0 ? 'inline-block' : 'none';
             }
             if (openDailyNetEl) {
                 const oSign = openUnrealizedTotal >= 0 ? '+' : '';
@@ -5974,7 +6020,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (sessionROIEl) {
-                const roi = (sessionInitialCapital > 0) ? (totalRealizedPnL / sessionInitialCapital) * 100 : 0;
+                // PnL Netto (al netto delle commissioni reali) / Capitale Iniziale, per
+                // coerenza col box "PnL Netto" mostrato nello stesso pannello.
+                const roi = (sessionInitialCapital > 0) ? (calculatedNetPnL / sessionInitialCapital) * 100 : 0;
                 sessionROIEl.textContent = `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`;
                 sessionROIEl.style.color = roi >= 0 ? '#10b981' : '#ef4444';
             }
@@ -6141,6 +6189,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; gap: 12px; white-space: nowrap; margin-top: 2px;">
                             <span>🎯 TP <strong style="color:#10b981;" class="pos-tp"></strong></span>
                             <span>🛡️ SL <strong style="color:#ef4444;" class="pos-sl"></strong></span>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; gap: 12px; white-space: nowrap; margin-top: 2px;">
                             <span title="${tr('tip_fee_est', 'Stima fee + spread di andata/ritorno (non è un valore confermato dal broker)')}">💸 ${tr('lbl_fee_est', 'Comm.')} <strong style="color:#f59e0b;" class="pos-fee"></strong></span>
                         </div>
                         <!-- PnL dinamico ($ e %) sotto la riga TP/SL -->

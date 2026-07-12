@@ -310,18 +310,15 @@ select {
     }
 }
 
-/* Dashboard Grid: radar snello | capitale+prestazioni | trading+posizioni+cronologia */
+/* Dashboard Grid: capitale+prestazioni | trading+posizioni+cronologia
+   (il radar non è più una colonna: è una riga orizzontale a larghezza piena,
+   vedi .radar-horizontal, posizionata sotto queste colonne e sopra il Grafico) */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 1.1fr 1.6fr 1.6fr 1.1fr 1.1fr 1.1fr;
+    grid-template-columns: 1.6fr 1.6fr 1.1fr 1.1fr 1.1fr;
     gap: 16px;
     flex: 1;
     min-height: 0;
-}
-
-/* Left Sidebar: contenitore trasparente, il radar è cella diretta della griglia */
-.left-sidebar {
-    display: contents;
 }
 
 /* Chart Section */
@@ -447,18 +444,15 @@ select {
 }
 
 /* Stile scrollbar per le sidebar */
-.sidebar::-webkit-scrollbar,
-.left-sidebar::-webkit-scrollbar {
+.sidebar::-webkit-scrollbar {
     width: 6px;
 }
 
-.sidebar::-webkit-scrollbar-track,
-.left-sidebar::-webkit-scrollbar-track {
+.sidebar::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.sidebar::-webkit-scrollbar-thumb,
-.left-sidebar::-webkit-scrollbar-thumb {
+.sidebar::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 6px;
 }
@@ -945,6 +939,78 @@ select {
     flex: 1;
     display: flex;
     flex-direction: column;
+}
+
+/* Radar orizzontale: riga a larghezza piena (grid-column: 1/-1, width:100%)
+   tra le colonne della dashboard e il Grafico. Titolo/badge/stato compatti
+   a sinistra (altezza piena, bordo separatore); i segnali vanno a capo su
+   più righe (flex-wrap) fino a riempire l'altezza fissa (~2 righe visibili),
+   oltre scorrono verticalmente invece di allargarsi orizzontalmente. */
+.radar-horizontal {
+    grid-column: 1 / -1;
+    width: 100%;
+    flex-direction: row !important;
+    align-items: stretch;
+    gap: 16px;
+    /* !important: .panel-cell (dichiarata più avanti nel foglio, stessa
+       specificità) imposta height: calc(100vh - ...) e vincerebbe nella
+       cascata. Altezza fissa più generosa di prima (76px → 148px) per
+       mostrare almeno due righe di segnali senza scroll orizzontale. */
+    height: 148px !important;
+    min-height: 148px !important;
+    max-height: 148px !important;
+    overflow: hidden !important;
+}
+
+.radar-header-compact {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 0 0 auto;
+    gap: 2px;
+    min-width: 150px;
+    max-width: 220px;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    padding-right: 16px;
+}
+
+.radar-header-compact > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.radar-horizontal #engineStatus {
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+    margin: 0;
+    min-height: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* La lista segnali va a capo su più righe (invece di stare su una riga sola
+   scorrevole orizzontalmente) e scorre VERTICALMENTE oltre le righe che
+   entrano nell'altezza fissa del pannello. */
+.radar-horizontal .radar-scroll-list {
+    flex: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
+    height: 100%;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.radar-horizontal .radar-signal {
+    flex: 0 0 auto;
+    margin-bottom: 0;
 }
 
 .radar-cat-badge {
@@ -1877,26 +1943,6 @@ select optgroup {
 #botControlWrapper [data-tooltip]:hover::after,
 #botControlWrapper [data-tooltip]:hover::before {
     transform: translateX(0) translateY(0);
-}
-
-/* Left sidebar — tooltip apre verso destra */
-.left-sidebar [data-tooltip]::after {
-    left: 0;
-    right: auto;
-    transform: translateX(0) translateY(4px);
-}
-
-.left-sidebar [data-tooltip]:hover::after {
-    transform: translateX(0) translateY(0);
-}
-
-.left-sidebar [data-tooltip]::before {
-    left: 16px;
-    transform: translateY(4px);
-}
-
-.left-sidebar [data-tooltip]:hover::before {
-    transform: translateY(0);
 }
 
 /* Right sidebar — tooltip apre verso sinistra */
@@ -3093,16 +3139,14 @@ html.no-gsi .g_id_signin {
     .trade-list,
     .open-positions-list,
     .radar-scroll-list,
-    .sidebar,
-    .left-sidebar {
+    .sidebar {
         scrollbar-width: none;
     }
 
     .trade-list::-webkit-scrollbar,
     .open-positions-list::-webkit-scrollbar,
     .radar-scroll-list::-webkit-scrollbar,
-    .sidebar::-webkit-scrollbar,
-    .left-sidebar::-webkit-scrollbar {
+    .sidebar::-webkit-scrollbar {
         display: none;
     }
 }
@@ -3150,12 +3194,14 @@ html.no-gsi .g_id_signin {
 }
 
 /* ============================================================
-   GRIGLIA UNICA A 6 PANNELLI UNIFORMI
-   I contenitori intermedi spariscono dal layout (display: contents):
-   i 6 pannelli diventano celle dirette della dashboard-grid, tutte
-   con la stessa larghezza e la stessa altezza, ancorate alla pagina.
+   GRIGLIA UNICA A 5 PANNELLI UNIFORMI (6 in modalità broker, con
+   Ordini in Attesa: vedi .dashboard-grid.has-pending). Il radar NON
+   fa più parte di questa griglia: è una riga orizzontale a sé
+   (.radar-horizontal), fuori da queste colonne. I contenitori
+   intermedi spariscono dal layout (display: contents): i pannelli
+   diventano celle dirette della dashboard-grid, tutte con la stessa
+   larghezza e la stessa altezza, ancorate alla pagina.
    ============================================================ */
-.left-sidebar,
 .middle-column-section,
 .capital-perf-row,
 .sidebar-right,
@@ -3242,11 +3288,11 @@ html.no-gsi .g_id_signin {
     overflow-y: hidden;
 }
 
-/* Colonna Ordini in Attesa Alpaca (7ª cella, tra Posizioni e Cronologia):
+/* Colonna Ordini in Attesa Alpaca (6ª cella, tra Posizioni e Cronologia):
    visibile solo in modalità broker — il JS aggiunge .has-pending alla griglia
-   e le colonne si ridimensionano da 6 a 7 mantenendo larghezze identiche */
+   e le colonne si ridimensionano da 5 a 6 mantenendo larghezze identiche */
 .dashboard-grid.has-pending {
-    grid-template-columns: 0.9fr 1.25fr 1.25fr 0.9fr 1.15fr 0.8fr 1.15fr;
+    grid-template-columns: 1.25fr 1.25fr 0.9fr 1.15fr 0.8fr 1.15fr;
 }
 
 /* Modalità broker (7 colonne desktop → pannelli più stretti): in Gestione

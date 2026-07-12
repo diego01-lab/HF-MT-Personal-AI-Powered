@@ -29,7 +29,7 @@
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"
         integrity="sha384-2Yiz1jBuc53MdRCA3ojcpk7cAoW2uFfKcetY6JKbqUetb537Hq2uPJrqM1Mj2AKx" crossorigin="anonymous"
         defer></script>
-    <link rel="stylesheet" href="styles.css?v=16">
+    <link rel="stylesheet" href="styles.css?v=17">
     <style>
         /* Toggle "occhio" per rivelare le chiavi/segreti nelle schede broker */
         .pw-wrap { position: relative; display: block; }
@@ -489,29 +489,6 @@
 
         <!-- Main Content Grid -->
         <main class="dashboard-grid">
-            <!-- Left Sidebar -->
-            <aside class="left-sidebar">
-                <!-- Market Radar -->
-                <div class="radar-card glass-panel glow panel-cell">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2 id="radarHeading"
-                            data-tooltip="Scansione in tempo reale di TUTTI i mercati (Crypto, Stocks, Forex, Commodities).">
-                            <span id="lblRadarTitle">Radar</span> <span class="pulse"
-                                style="display:inline-block; margin-left: 8px;"></span>
-                        </h2>
-                        <span id="radarCategory" class="radar-cat-badge cat-all"
-                            data-tooltip="Il radar monitora contemporaneamente tutti i mercati globali">LIVE
-                            GLOBALE</span>
-                    </div>
-                    <div id="engineStatus"
-                        style="font-size: 0.7rem; color: var(--text-secondary); margin: -6px 0 10px; min-height: 14px;">
-                    </div>
-                    <div id="radarList" class="radar-scroll-list"></div>
-                </div>
-
-
-            </aside>
-
             <section class="middle-column-section">
                 <!-- ROW: Gestione Capitale + Pannello Prestazioni affiancati -->
                 <div class="capital-perf-row">
@@ -1098,6 +1075,7 @@
                                     <span id="lblOpenPosText">Aperte</span>
                                     <span id="openDailyNet" style="font-size: 0.9rem; font-weight: 800; padding: 2px 4px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin: 0 auto;">$0.00</span>
                                     <span id="openTotalValue" style="display: none;"></span>
+                                    <span id="openFeeTotal" data-tooltip="Stima commissioni delle posizioni APERTE (non ancora realizzate): non coincide con il totale REALE lifetime di Gestione Capitale, calcolato solo sulle chiusure" style="font-size: 0.7rem; font-weight: 700; padding: 2px 5px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; color: #f59e0b; margin-left: 4px; display: none;">💸 $0.00</span>
                                     <span id="perfOpenCountBadge" style="font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 10px; margin-left: 4px; display: none;">0</span>
                                     <button id="btnSortOpenPositions" type="button"
                                         data-tooltip="Ordine: dal più recente al più vecchio (clicca per invertire)"
@@ -1173,6 +1151,7 @@
                                 <span id="lblHistoryText">Cronologia</span>
                                 <span id="historyDailyNet"
                                     style="font-size: 0.95rem; font-weight: 800; padding: 2px 6px; background: rgba(0,0,0,0.3); border-radius: 6px; color: #fff; margin: 0 auto;">$0.00</span>
+                                <span id="historyFeeTotal" data-tooltip="Totale commissioni REALI lifetime (stesso valore del box Commissioni in Gestione Capitale/Prestazioni)" style="font-size: 0.7rem; font-weight: 700; padding: 2px 5px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; color: #f59e0b; margin-right: 4px; display: none;">💸 $0.00</span>
                                 <span id="historyCountBadge" style="font-size: 0.75rem; background: rgba(96,165,250,0.2); padding: 2px 5px; border-radius: 10px; display: none;">0</span>
                             </h2>
                             <!-- Colonna a destra: Esporta CSV + tasto Cancella -->
@@ -1204,6 +1183,23 @@
 
             </aside>
 
+            <!-- Market Radar (orizzontale, tra le colonne e il Grafico) -->
+            <div class="radar-card radar-horizontal glass-panel glow panel-cell">
+                <div class="radar-header-compact">
+                    <div>
+                        <h2 id="radarHeading"
+                            data-tooltip="Scansione in tempo reale di TUTTI i mercati (Crypto, Stocks, Forex, Commodities).">
+                            <span id="lblRadarTitle">Radar</span> <span class="pulse"
+                                style="display:inline-block; margin-left: 8px;"></span>
+                        </h2>
+                        <span id="radarCategory" class="radar-cat-badge cat-all"
+                            data-tooltip="Il radar monitora contemporaneamente tutti i mercati globali">LIVE
+                            GLOBALE</span>
+                    </div>
+                    <div id="engineStatus"></div>
+                </div>
+                <div id="radarList" class="radar-scroll-list"></div>
+            </div>
 
             <section class="chart-section glass-panel"
                 style="grid-column: 1 / -1; height: 500px; min-height: 500px; margin-top: -14px;">
@@ -1341,6 +1337,11 @@
                  silenziare il warning del browser "[DOM] Password field is not
                  contained in a form", come nei pannelli Alpaca/Capital. -->
             <form onsubmit="return false;" autocomplete="off">
+                <!-- Campo fittizio nascosto: Finnhub ha una sola chiave (nessun
+                     identificativo separato), ma senza un campo "username" prima
+                     della password il browser segnala comunque l'avviso di
+                     accessibilità "Password forms should have a username field". -->
+                <input type="text" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true">
                 <div class="pw-wrap">
                 <input type="password" id="apiKeyInput" placeholder="Inserisci la tua API Key (es. cxyz123...)"
                     class="api-input" autocomplete="current-password" />
@@ -1791,7 +1792,7 @@
     <!-- tengine.js DEVE precedere app.js: dichiara a scope globale il motore di
          trading (strategie, rischio, ordini, bot) che app.js richiama a runtime -->
     <script src="tengine.js?v=5" defer></script>
-    <script src="app.js?v=36" defer></script>
+    <script src="app.js?v=38" defer></script>
     <script>
         // Toggle "occhio": mostra/nasconde in chiaro le chiavi/segreti nelle schede broker.
         (function () {
