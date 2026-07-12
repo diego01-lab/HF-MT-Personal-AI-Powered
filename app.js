@@ -5188,7 +5188,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 };
                 const fmtTs = t => t ? new Date(t).toLocaleString('it-IT') : '';
                 const header = ['IdTransazione', 'Simbolo', 'Tipo', 'Apertura', 'Chiusura', 'DurataSec',
-                    'PrezzoEntrata', 'PrezzoUscita', 'Quantita', 'Investito', 'PnL', 'PnLPct', 'Motivo', 'Stato'];
+                    'PrezzoEntrata', 'PrezzoUscita', 'Quantita', 'Investito', 'PnL', 'PnLPct',
+                    'CommissioneStimataUsd', 'CommissioneStimataPct', 'Motivo', 'Stato'];
                 const rows = [...tradeHistory]
                     .sort((a, b) => (b.time || 0) - (a.time || 0))
                     .map(t => {
@@ -5200,10 +5201,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // mai qui. L'id sintetico serve SOLO all'export in modalità TEST, dove
                         // i trade sono locali e privi di id (in broker mode non esistono).
                         const txId = t.id || `local_${t.time || 0}_${t.sym || ''}`;
+                        // Stessa stima mostrata nella riga della cronologia in UI (getNetBreakevenPct)
+                        const estFeePct = (typeof getNetBreakevenPct === 'function') ? getNetBreakevenPct(t.sym) : 0;
+                        const estFeeUsd = invested * (estFeePct / 100);
                         return [
                             txId, displaySymbol(t.sym), t.type, fmtTs(t.entryTime || t.time), fmtTs(t.exitTime || t.time),
                             durSec, t.entryPrice, t.exitPrice, t.amount, invested.toFixed(2),
-                            (t.pnl || 0).toFixed(4), pnlPct.toFixed(2), t.reason || 'MANUAL', t.status || ''
+                            (t.pnl || 0).toFixed(4), pnlPct.toFixed(2),
+                            estFeeUsd.toFixed(4), estFeePct.toFixed(2), t.reason || 'MANUAL', t.status || ''
                         ].map(esc).join(';');
                     });
                 downloadCsv(rows, header, 'cronologia');
@@ -5239,7 +5244,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return;
                 }
                 const header = ['Simbolo', 'Tipo', 'Apertura', 'PrezzoEntrata', 'PrezzoLive', 'Quantita',
-                    'Investito', 'ValoreAttuale', 'PnL', 'PnLPct', 'TP', 'SL', 'Stato'];
+                    'Investito', 'ValoreAttuale', 'PnL', 'PnLPct', 'CommissioneStimataUsd', 'CommissioneStimataPct',
+                    'TP', 'SL', 'Stato'];
                 const rows = syms
                     .map(sym => ({ sym, pos: activePositions[sym] }))
                     .sort((a, b) => ((b.pos.openTime || b.pos.firstSeenTime || 0) - (a.pos.openTime || a.pos.firstSeenTime || 0)))
@@ -5252,11 +5258,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                             : (pos.type === 'LONG' ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice)) * pos.amount;
                         const invested = pos.invested || pos.entryPrice * pos.amount;
                         const pnlPct = invested > 0 ? (unrealized / invested) * 100 : 0;
+                        // Stessa stima mostrata sotto TP/SL nella card della posizione in UI
+                        const estFeePct = (typeof getNetBreakevenPct === 'function') ? getNetBreakevenPct(sym) : 0;
+                        const estFeeUsd = invested * (estFeePct / 100);
                         return [
                             displaySymbol(sym), pos.type,
                             pos.openTime ? new Date(pos.openTime).toLocaleString('it-IT') : '',
                             pos.entryPrice, livePrice, pos.amount, invested.toFixed(2),
                             (invested + unrealized).toFixed(2), unrealized.toFixed(4), pnlPct.toFixed(2),
+                            estFeeUsd.toFixed(4), estFeePct.toFixed(2),
                             pos.dynamicTP ? pos.dynamicTP.toFixed(2) + '%' : '',
                             pos.dynamicSL ? pos.dynamicSL.toFixed(2) + '%' : '',
                             pos.simulated ? 'SIMULATA' : 'APERTA (BROKER)'

@@ -3100,6 +3100,29 @@ html.no-gsi .g_id_signin {
     .stats-card h2 {
         font-size: 0.9rem;
     }
+
+    /* Radar orizzontale: sotto i 480px l'header laterale (min-width 150px)
+       lascerebbe troppo poco spazio ai segnali, che finirebbero tagliati
+       (.radar-scroll-list ha overflow-x:hidden, non scroll). Impiliamo
+       l'header sopra la lista invece che affiancato, a piena larghezza. */
+    .radar-horizontal {
+        flex-direction: column !important;
+        align-items: stretch;
+        height: 200px !important;
+        min-height: 200px !important;
+        max-height: 200px !important;
+        gap: 6px;
+    }
+
+    .radar-header-compact {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        padding-right: 0;
+        padding-bottom: 6px;
+    }
 }
 
 /* --- Touch Improvements (tutti i dispositivi touch) --- */
