@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.18';
+window.APP_VERSION = 'v.1.0.19';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
