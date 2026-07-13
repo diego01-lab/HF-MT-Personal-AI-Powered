@@ -453,6 +453,20 @@ function evaluateStrategyFallback(sym, history, price) {
     }
 }
 
+// Sessione REGOLARE di borsa per le azioni (09:30-16:00 EST). Distinta da
+// isMarketOpen('STOCK') (04:00-20:00 EST, usata per grafico/prezzo): fuori
+// da questa finestra (pre-market/after-hours) lo spread è molto più ampio e
+// il prezzo più erratico, causando churn (aperture/chiusure quasi a pari,
+// osservate in cronologia). Qui blocchiamo solo le NUOVE aperture — le
+// posizioni azionarie già aperte restano gestite (TP/SL) anche fuori sessione.
+function isRegularStockSession() {
+    const est = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const day = est.getDay();
+    if (day === 0 || day === 6) return false;
+    const t = est.getHours() * 60 + est.getMinutes();
+    return t >= 9 * 60 + 30 && t < 16 * 60;
+}
+
 // Helper: Restituisce la stima dei costi percentuali di commissione + spread.
 // Usa getAssetType (non "includes USDT"): i simboli-posizione del broker
 // (PAXGUSD, ADAUSD) non contengono USDT e venivano trattati come azioni,
@@ -538,7 +552,7 @@ function updateSkippedCounterUI() {
         const el = document.getElementById('skippedCounter');
         if (!el) return;
         const c = skippedCounters;
-        const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos + (c.spread || 0);
+        const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos + (c.spread || 0) + (c.exthours || 0);
         // Visibile per TUTTA la sessione col bot attivo (anche a 0), così è chiaro che
         // c'è e sta contando; si nasconde solo a bot fermo.
         if (!isBotActive) { el.style.display = 'none'; return; }
@@ -549,6 +563,7 @@ function updateSkippedCounterUI() {
         if (c.qty) parts.push(`${tr('skip_qty', 'qty')} ${c.qty}`);
         if (c.maxpos) parts.push(`${tr('skip_maxpos', 'limite')} ${c.maxpos}`);
         if (c.spread) parts.push(`${tr('skip_spread', 'spread')} ${c.spread}`);
+        if (c.exthours) parts.push(`${tr('skip_exthours', 'fuori sessione')} ${c.exthours}`);
         const totalEl = document.getElementById('skippedTotal');
         const breakEl = document.getElementById('skippedBreakdown');
         if (totalEl) totalEl.textContent = total;
@@ -557,7 +572,7 @@ function updateSkippedCounterUI() {
     });
 }
 window.resetSkippedCounters = function () {
-    skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = 0;
+    skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = skippedCounters.exthours = 0;
     updateSkippedCounterUI();
 };
 
@@ -569,6 +584,18 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
     // vengono instradati su api.alpaca.markets con le chiavi live tramite
     // getBrokerHttp() nelle funzioni d'ordine (alpacaCreateOrder/closeTrade).
     if (activePositions[sym]) return;
+
+    // Azioni: nuove aperture SOLO in sessione regolare (09:30-16:00 EST).
+    // Fuori da questa finestra (pre-market/after-hours) lo spread si allarga
+    // molto e il prezzo è più erratico: causava churn (aperture/chiusure
+    // quasi a pari in cronologia). Le posizioni già aperte restano gestite.
+    if (getAssetType(sym) === 'STOCK' && !isRegularStockSession()) {
+        if (isBotActive) {
+            botNotify('exthours', tr('bot_skip_exthours', '{sym}: fuori dalla sessione regolare di borsa (09:30-16:00 EST), ingresso saltato.', { sym: displaySymbol(sym) }), 'info', 30000);
+            bumpSkipped('exthours');
+        }
+        return;
+    }
 
     // Ordine di apertura già inviato per questo simbolo, in attesa che
     // syncAlpacaPositions() lo confermi in activePositions: blocca i doppi
@@ -1406,26 +1433,30 @@ async function alpacaCreateOrder(side, symbol, qty) {
 // TP / SL (con grazia anti-spread). Ritorna { effTP, effSL, closed }:
 // closed=true significa che la posizione è stata chiusa (il chiamante salta
 // il rendering della card). manageRisk=false → solo calcolo di effTP/effSL.
+// --- AI Avanzata: TP/SL ricalibrati in tempo reale ---
+// La volatilità corrente (Bande di Bollinger) aggiorna il target e lo stop
+// di OGNI posizione a ogni ciclo, non solo al momento dell'apertura. Condivisa
+// tra il motore in primo piano (manageOpenPositionRisk) e quelli in background
+// (manageBgRiskCurrentCtx): prima erano due copie della stessa formula e solo
+// il contesto in primo piano riceveva il ricalcolo, gli altri restavano
+// congelati al valore d'apertura.
+function recalibrateDynamicTPSL(sym, pos) {
+    const h = bgPriceHistories[sym];
+    if (!h || h.length < 20) return;
+    const bb = calculateBollingerBands(h, Math.min(20, h.length));
+    if (!bb || !bb.middle) return;
+    const volPct = ((bb.upper - bb.lower) / bb.middle) * 100;
+    // getAssetType (non "includes USDT"): i simboli broker (PAXGUSD)
+    // venivano trattati come azioni → SL minimo 0.25% bucato dallo spread
+    const minSL = getAssetType(sym) === 'CRYPTO' ? 1.2 : 0.25;
+    const newSL = Math.min(5.0, Math.max(minSL, volPct / 2));
+    pos.dynamicSL = newSL;
+    pos.dynamicTP = Math.min(15.0, Math.max(getNetBreakevenPct(sym) + 0.15, newSL * 1.5));
+}
+
 function manageOpenPositionRisk(sym, pos, livePrice, unrealizedPct, opts) {
     const { now, userTP, userSL, aiDynamicOn, useRisk, useHedging, manageRisk } = opts;
-    // --- AI Avanzata: TP/SL ricalibrati in tempo reale ---
-    // La volatilità corrente (Bande di Bollinger) aggiorna il target e lo
-    // stop di OGNI posizione a ogni ciclo, non solo al momento dell'apertura.
-    if (aiDynamicOn) {
-        const h = bgPriceHistories[sym];
-        if (h && h.length >= 20) {
-            const bb = calculateBollingerBands(h, Math.min(20, h.length));
-            if (bb && bb.middle) {
-                const volPct = ((bb.upper - bb.lower) / bb.middle) * 100;
-                // getAssetType (non "includes USDT"): i simboli broker (PAXGUSD)
-                // venivano trattati come azioni → SL minimo 0.25% bucato dallo spread
-                const minSL = getAssetType(sym) === 'CRYPTO' ? 1.2 : 0.25;
-                const newSL = Math.min(5.0, Math.max(minSL, volPct / 2));
-                pos.dynamicSL = newSL;
-                pos.dynamicTP = Math.min(15.0, Math.max(getNetBreakevenPct(sym) + 0.15, newSL * 1.5));
-            }
-        }
-    }
+    if (aiDynamicOn) recalibrateDynamicTPSL(sym, pos);
     // Valori effettivi: dinamici per-posizione in AI, campi globali altrimenti.
     // SL globale a 0 = protezione no-loss esplicita dell'utente: mai sovrascritta.
     const effTP = (aiDynamicOn && pos.dynamicTP) ? pos.dynamicTP : userTP;
@@ -1547,11 +1578,16 @@ function runBackgroundEngines(sym, price, type) {
 function manageBgRiskCurrentCtx() {
     const userTP = parseFloat(document.getElementById('botTargetProfit')?.value) || 1.5;
     const userSL = parseFloat(document.getElementById('botStopLoss')?.value) || 1.0;
+    // Toggle globale (stessa UI condivisa da tutti i contesti): se attivo,
+    // ricalibra dynamicTP/dynamicSL anche qui invece di lasciarli congelati
+    // al valore d'apertura (prima solo il contesto in primo piano li aggiornava).
+    const aiDynamicOn = document.getElementById('aiModeToggle')?.checked;
     for (const sym in activePositions) {
         const pos = activePositions[sym];
         if (!pos || pos.isActuallyClosing) continue;
         const livePrice = getLivePriceFor(sym) || pos.entryPrice;
         if (!livePrice || livePrice <= 0) continue;
+        if (aiDynamicOn) recalibrateDynamicTPSL(sym, pos);
         const unrealizedPct = pos.type === 'LONG'
             ? (livePrice / pos.entryPrice - 1) * 100
             : (pos.entryPrice / livePrice - 1) * 100;

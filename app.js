@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.19';
+window.APP_VERSION = 'v.1.0.20';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -784,7 +784,7 @@ function uiLocale() {
 let isBotActive = false;
 let isCapitalExhausted = false;
 let sessionBudgetUsed = 0;
-let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
+let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0, exthours: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
 let isManualMode = true; // Il bot parte sempre FERMO ad ogni avvio — l'utente deve avviarlo manualmente
 let useAlpacaBroker = false; // L'app parte SEMPRE in test mode; il broker si attiva solo dal toggle
 let alpacaKeyId = localStorage.getItem('alpaca_key_id') || '';
