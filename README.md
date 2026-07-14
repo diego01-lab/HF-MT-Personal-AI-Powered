@@ -32,6 +32,11 @@ The bot monitors a basket of cryptocurrencies, stocks, forex pairs and commoditi
 - **Multi-context**: several brokers/portfolios can run in parallel in the background (per-context "parallel" engines), not just the one shown in the foreground.
 - **In-app notifications**, a counter of positions skipped by the bot (by reason: SHORT not allowed, insufficient cash, spread too wide, position limit, outside stock trading session, etc.).
 
+![Multi-asset Radar and live candlestick chart](screenshots/Chart.png)
+
+![Alpaca Paper session with the bot trading (virtual/paper funds)](screenshots/AlpacaPaper.png)
+<sub>Alpaca Paper account connected, bot active in AI Advanced mode — open positions, pending orders and history populated with real paper-trading activity (virtual money, no financial risk).</sub>
+
 ## Supported assets and brokers
 
 | Category | Assets | Data/execution broker |
@@ -137,6 +142,11 @@ Il bot monitora in tempo reale un paniere di criptovalute, azioni, coppie forex 
 - **Multi-lingua**: italiano, inglese, tedesco, spagnolo, francese.
 - **Multi-contesto**: più broker/portafogli possono girare in parallelo in background (motori "paralleli" per contesto), non solo quello visualizzato in primo piano.
 - **Notifiche in-app**, contatore delle posizioni saltate dal bot (per motivo: SHORT non permesso, cash insufficiente, spread troppo ampio, limite posizioni, fuori sessione di borsa, ecc.).
+
+![Radar multi-asset e grafico a candele live](screenshots/Chart.png)
+
+![Sessione Alpaca Paper con il bot in trading (fondi virtuali)](screenshots/AlpacaPaper.png)
+<sub>Conto Alpaca Paper collegato, bot attivo in modalità AI Avanzata — posizioni aperte, ordini in attesa e cronologia popolati con attività reale di paper trading (denaro virtuale, nessun rischio economico).</sub>
 
 ## Asset e broker supportati
 
