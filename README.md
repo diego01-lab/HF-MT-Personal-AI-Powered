@@ -1,7 +1,6 @@
 # Personal HF MT - Powered AI
 
 [![Build Android and iOS Packages](https://github.com/diego01-lab/HF-MT-Personal-AI-Powered/actions/workflows/build.yml/badge.svg)](https://github.com/diego01-lab/HF-MT-Personal-AI-Powered/actions/workflows/build.yml)
-[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
 ---
 
@@ -10,6 +9,9 @@
 Multi-asset, high-frequency algorithmic trading engine/simulator, with real-time market data, two selectable strategy modes (multi-indicator AI and classic EMA crossover) and optional connection to real trading accounts. Available as a **Web**, **Android** and **iOS** app from a single codebase (Capacitor).
 
 > ⚠️ **Disclaimer**: this app is for **educational and demonstration purposes**. No signal, indicator or bot decision constitutes financial advice. **Test** and **Alpaca Paper** modes use only virtual money; **ALrt (Alpaca Live)** mode sends real orders with **real money**, is disabled by default, and requires your own API keys plus an explicit confirmation. Past or simulated performance is not indicative of future results. Full Terms of Service, EULA and Privacy Policy are available inside the app (Legal Notices section, 5 languages).
+
+![Dashboard](screenshots/dashboard.png)
+<sub>Guest session, Test mode, no broker keys configured — empty portfolio shown for illustration only.</sub>
 
 ## What it does
 
@@ -40,6 +42,8 @@ The bot monitors a basket of cryptocurrencies, stocks, forex pairs and commoditi
 | Commodities | Gold, Silver, Brent, WTI, Natural Gas, Copper, Lithium | Capital.com (Demo/Live), OANDA via Finnhub (data) |
 
 Operating modes available in the app: **Test** (local simulated portfolio), **Alpaca Paper** (Alpaca paper trading, fake funds), **ALrt / Alpaca Live** (real account, real money), **Capital.com Demo** and **Capital.com Live** (forex/commodity CFDs).
+
+![Full dashboard, including Radar and chart](screenshots/dashboard-full.png)
 
 ## Architecture
 
@@ -112,6 +116,9 @@ Simulatore/motore di trading algoritmico multi-asset ad alta frequenza, con dati
 
 > ⚠️ **Disclaimer**: l'app ha finalità **educative e dimostrative**. Nessun segnale, indicatore o decisione del bot costituisce consulenza finanziaria. Le modalità **Test** e **Alpaca Paper** usano solo denaro virtuale; la modalità **ALrt (Alpaca Live)** invia invece ordini reali con **denaro reale** ed è disattivata di default, richiede le chiavi API del proprio conto e una conferma esplicita. Performance passate o simulate non sono indicative di risultati futuri. Termini di Servizio, EULA e Privacy Policy completi sono disponibili nell'app (sezione Note Legali, 5 lingue).
 
+![Dashboard](screenshots/dashboard.png)
+<sub>Sessione Ospite, modalità Test, nessuna chiave broker configurata — portafoglio vuoto mostrato a solo scopo illustrativo.</sub>
+
 ## Cosa fa
 
 Il bot monitora in tempo reale un paniere di criptovalute, azioni, coppie forex e materie prime, calcola indicatori tecnici (RSI, EMA, MACD, Bollinger Bands, ATR, momentum) e apre/chiude posizioni in automatico secondo la strategia scelta, con gestione del rischio integrata (stop loss/take profit dinamici, trailing stop, break-even automatico, hedging, limiti di budget ed esposizione). Tutto è osservabile da una dashboard con radar multi-asset, grafico a candele live, cronologia operazioni ed export CSV.
@@ -141,6 +148,8 @@ Il bot monitora in tempo reale un paniere di criptovalute, azioni, coppie forex 
 | Materie prime | Oro, Argento, Brent, WTI, Gas Naturale, Rame, Litio | Capital.com (Demo/Reale), OANDA via Finnhub (dati) |
 
 Modalità operative disponibili in app: **Test** (portafoglio simulato locale), **Alpaca Paper** (paper trading Alpaca, fondi fittizi), **ALrt / Alpaca Live** (conto reale, denaro reale), **Capital.com Demo** e **Capital.com Reale** (CFD forex/materie prime).
+
+![Dashboard completa, con Radar e grafico](screenshots/dashboard-full.png)
 
 ## Architettura
 
