@@ -1,5 +1,8 @@
 # Personal HF MT - Powered AI
 
+[![Build Android and iOS Packages](https://github.com/diego01-lab/HF-MT-Personal-AI-Powered/actions/workflows/build.yml/badge.svg)](https://github.com/diego01-lab/HF-MT-Personal-AI-Powered/actions/workflows/build.yml)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
+
 ---
 
 # English
