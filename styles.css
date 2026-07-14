@@ -2359,6 +2359,15 @@ select optgroup {
     animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* La card di onboarding broker (5 step da quando si è aggiunto Capital.com)
+   può superare l'altezza dello schermo: .login-overlay centra verticalmente,
+   quindi senza uno scroll interno sia l'inizio sia il pulsante finale
+   "Entra nella dashboard" restano tagliati fuori dalla vista, irraggiungibili. */
+#onboardingOverlay .login-card {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
 .login-header h1 {
     font-size: 2.2rem;
     font-weight: 700;
