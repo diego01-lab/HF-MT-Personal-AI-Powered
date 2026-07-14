@@ -35,6 +35,19 @@ jobs:
       - name: Sync Capacitor Android
         run: npm run sync:android
 
+      # Senza questo step, Gradle genera un debug.keystore NUOVO e casuale ad
+      # ogni run (nessuno ne persiste uno tra le VM effimere della CI): la SHA-1
+      # dell'APK risultante non corrisponde MAI a quella registrata come client
+      # OAuth Android su Google Cloud, e il login Google fallisce con
+      # DEVELOPER_ERROR (a volte mostrato all'utente come un fuorviante
+      # "Accesso annullato"). Ripristina qui lo STESSO keystore di debug usato
+      # in locale (secret cifrato, mai nel repo) nel percorso di default che
+      # Gradle usa già automaticamente per le build debug.
+      - name: Restore debug keystore (Google Sign-In SHA-1 coerente con Google Cloud)
+        run: |
+          mkdir -p "$HOME/.android"
+          echo "${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}" | base64 -d > "$HOME/.android/debug.keystore"
+
       - name: Build Android APK
         working-directory: ./android
         run: ./gradlew assembleDebug
