@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.20';
+window.APP_VERSION = 'v.1.0.21';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -413,15 +413,19 @@ window.hasAnyBrokerKey = function () {
     wire('onbBtnFinnhub', 'apiSettingsBtn');
     wire('onbBtnAlpacaPaper', 'alpacaSettingsBtn');
     wire('onbBtnAlpacaLive', 'alpacaLiveSettingsBtn');
+    wire('onbBtnCapitalDemo', 'capitalSettingsBtn');
+    wire('onbBtnCapitalLive', 'capitalLiveSettingsBtn');
 
     function keys() {
         try {
             return {
                 fh: !!localStorage.getItem('finnhub_api_key'),
                 ap: !!localStorage.getItem('alpaca_key_id'),
-                al: !!localStorage.getItem('alpaca_live_key_id')
+                al: !!localStorage.getItem('alpaca_live_key_id'),
+                capd: !!localStorage.getItem('capital_demo_key'),
+                capl: !!localStorage.getItem('capital_live_key')
             };
-        } catch (e) { return { fh: true, ap: false, al: false }; }
+        } catch (e) { return { fh: true, ap: false, al: false, capd: false, capl: false }; }
     }
 
     function refresh() {
@@ -436,7 +440,9 @@ window.hasAnyBrokerKey = function () {
         badge('onbStatusFinnhub', k.fh);
         badge('onbStatusAlpacaPaper', k.ap);
         badge('onbStatusAlpacaLive', k.al);
-        const any = k.fh || k.ap || k.al;
+        badge('onbStatusCapitalDemo', k.capd);
+        badge('onbStatusCapitalLive', k.capl);
+        const any = k.fh || k.ap || k.al || k.capd || k.capl;
         const enter = document.getElementById('onbEnterBtn');
         if (enter) {
             enter.disabled = !any;
@@ -1111,6 +1117,8 @@ function updateLanguage() {
         'lblOnbFinnhubCats': 'onb_fh_cats',
         'lblOnbAlpacaPaperCats': 'onb_ap_cats',
         'lblOnbAlpacaLiveCats': 'onb_al_cats',
+        'lblOnbCapitalDemoCats': 'onb_capd_cats',
+        'lblOnbCapitalLiveCats': 'onb_capl_cats',
         'lblPaypalSubtitle': 'paypal_subtitle',
         'lblNoKeysAlpacaPaper': 'no_keys',
         'lblNoKeysAlpacaLive': 'no_keys',

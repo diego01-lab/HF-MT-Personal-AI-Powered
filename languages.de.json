@@ -313,6 +313,8 @@
     "onb_fh_cats": "US-Aktien · Forex · Rohstoffe — echte Daten, virtuelles Geld",
     "onb_ap_cats": "Krypto · US-Aktien — Paper, virtuelles Geld",
     "onb_al_cats": "Krypto · US-Aktien — ECHTES GELD",
+    "onb_capd_cats": "Forex · Rohstoffe (CFD) — Demo, virtuelles Geld",
+    "onb_capl_cats": "Forex · Rohstoffe (CFD) — ECHTES GELD",
     "paypal_subtitle": "Lade dein Personal HF MT AI Powered Konto auf",
     "no_keys": "Keine Schlüssel? Registriere dich auf",
     "btn_configure": "Konfigurieren",

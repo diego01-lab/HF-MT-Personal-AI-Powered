@@ -250,6 +250,8 @@
     "onb_fh_cats": "US Stocks · Forex · Commodities — live data, paper money",
     "onb_ap_cats": "Crypto · US Stocks — paper money",
     "onb_al_cats": "Crypto · US Stocks — REAL MONEY",
+    "onb_capd_cats": "Forex · Commodities (CFD) — demo, paper money",
+    "onb_capl_cats": "Forex · Commodities (CFD) — REAL MONEY",
     "paypal_subtitle": "Top up your Personal HF MT AI Powered account",
     "no_keys": "Don't have keys? Register at",
     "btn_configure": "Configure",

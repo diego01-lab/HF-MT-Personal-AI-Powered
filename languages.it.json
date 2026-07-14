@@ -250,6 +250,8 @@
     "onb_fh_cats": "Azioni USA · Forex · Materie Prime — dati reali, denaro virtuale",
     "onb_ap_cats": "Crypto · Azioni USA — paper, denaro virtuale",
     "onb_al_cats": "Crypto · Azioni USA — DENARO REALE",
+    "onb_capd_cats": "Forex · Materie Prime (CFD) — demo, denaro virtuale",
+    "onb_capl_cats": "Forex · Materie Prime (CFD) — DENARO REALE",
     "paypal_subtitle": "Ricarica il tuo conto Personal HF MT AI Powered",
     "no_keys": "Non hai le chiavi? Registrati su",
     "btn_configure": "Configura",
