@@ -9,7 +9,10 @@
     "build": "node build.js",
     "sync": "node sync-platforms.js",
     "sync:android": "node sync-platforms.js android",
-    "sync:ios": "node sync-platforms.js ios"
+    "sync:ios": "node sync-platforms.js ios",
+    "sync:dev": "node sync-platforms.js --dev",
+    "sync:android:dev": "node sync-platforms.js android --dev",
+    "sync:ios:dev": "node sync-platforms.js ios --dev"
   },
   "keywords": [],
   "author": "",
