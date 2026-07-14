@@ -467,14 +467,77 @@ function isRegularStockSession() {
     return t >= 9 * 60 + 30 && t < 16 * 60;
 }
 
-// Helper: Restituisce la stima dei costi percentuali di commissione + spread.
+// ─── Modello commissioni per BROKER × categoria ───
+// Percentuale round-trip (fee + spread TIPICO) per contesto broker. Lo spread
+// LIVE misurato (getSpreadPctFor) viene aggiunto A PARTE dai chiamanti che lo
+// conoscono (es. tpAllowed): qui c'è solo la parte strutturale. Ogni broker ha
+// un listino diverso:
+//  - Alpaca (alp/alrt) crypto: taker ~0.25% per lato (tier base) + spread tipico;
+//    azioni: zero commission, restano fee regolatorie in vendita e scivolamento
+//  - Capital.com (capd/capl) CFD: nessuna commissione, il costo è lo spread
+//    (stretto sul forex, più largo sulle materie prime); il costo overnight
+//    NON è ancora modellato
+//  - fh (test locale): valori storici, per continuità di comportamento
+const BROKER_FEE_PCT = {
+    alp: { CRYPTO: 0.65, STOCK: 0.15, FOREX: 0.05, COMMODITY: 0.05 },
+    alrt: { CRYPTO: 0.65, STOCK: 0.15, FOREX: 0.05, COMMODITY: 0.05 },
+    capd: { CRYPTO: 0.65, STOCK: 0.15, FOREX: 0.05, COMMODITY: 0.10 },
+    capl: { CRYPTO: 0.65, STOCK: 0.15, FOREX: 0.05, COMMODITY: 0.10 },
+    fh: { CRYPTO: 0.65, STOCK: 0.15, FOREX: 0.05, COMMODITY: 0.05 },
+};
+
+// Stima BASE (non calibrata) dei costi round-trip per simbolo + contesto broker.
 // Usa getAssetType (non "includes USDT"): i simboli-posizione del broker
 // (PAXGUSD, ADAUSD) non contengono USDT e venivano trattati come azioni,
 // sottostimando i costi crypto di 4 volte.
-function getNetBreakevenPct(sym) {
-    if (getAssetType(sym) === 'CRYPTO') return 0.65; // Crypto: fee Alpaca ~0.25% * 2 + spread
-    if (sym.includes('OANDA')) return 0.05; // Forex/Materie: solo spread implicito
-    return 0.15; // Azioni: fee assenti, ma calcoliamo 0.15% di scivolamento/spread
+function getRawBreakevenPct(sym, ctx) {
+    const c = ctx || ((typeof window !== 'undefined' && typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh');
+    let cat = getAssetType(sym);
+    // Materie prime SENZA prefisso OANDA (es. LIT, che è un ETF azionario):
+    // viaggiano da sempre col costo delle azioni, non con lo spread CFD.
+    if (cat === 'COMMODITY' && String(sym).indexOf('OANDA') === -1) cat = 'STOCK';
+    const table = BROKER_FEE_PCT[c] || BROKER_FEE_PCT.fh;
+    if (table[cat] != null) return table[cat];
+    return cat === 'CRYPTO' ? 0.65 : (String(sym).indexOf('OANDA') !== -1 ? 0.05 : 0.15);
+}
+
+// ─── Calibrazione automatica dal costo REALE osservato ───
+// Per i contesti Alpaca la dashboard deduce le commissioni REALI dal gap tra
+// equity del conto e PnL dei trade. Il rapporto reale/stimato diventa un
+// fattore correttivo per contesto (EMA, clamp 0.5-3x, persistito): la stima
+// converge da sola verso i costi veri del conto (incluso il tier di volume),
+// senza codificare a mano i listini a scaglioni.
+const _feeCalibCache = {};
+function getFeeCalibFactor(ctx) {
+    if (_feeCalibCache[ctx] == null) {
+        let v = 1;
+        try { v = parseFloat(localStorage.getItem('fee_calib_' + ctx)); } catch (e) { }
+        _feeCalibCache[ctx] = (isFinite(v) && v >= 0.5 && v <= 3) ? v : 1;
+    }
+    return _feeCalibCache[ctx];
+}
+function updateFeeCalibration(ctx, realCommissions, rawEstimated, tradeCount) {
+    // Guardie anti-rumore: serve un campione minimo perché il rapporto abbia senso
+    // (poche operazioni o stime sotto 1$ producono fattori assurdi).
+    if (!ctx || !(realCommissions > 0) || !(rawEstimated >= 1) || !(tradeCount >= 10)) return;
+    const target = Math.max(0.5, Math.min(3, realCommissions / rawEstimated));
+    const cur = getFeeCalibFactor(ctx);
+    const next = cur + 0.2 * (target - cur);
+    _feeCalibCache[ctx] = next;
+    try { localStorage.setItem('fee_calib_' + ctx, String(next)); } catch (e) { }
+}
+
+// Stima EFFETTIVA usata da motore e UI: base per-broker × fattore calibrato.
+// Le dipendenze sono guardate con typeof perché i test estraggono questa
+// funzione da sola e la eseguono in sandbox con soli stub: senza tabella e
+// calibrazione ricade sui valori storici (stesso comportamento di sempre).
+function getNetBreakevenPct(sym, ctx) {
+    const c = ctx || ((typeof window !== 'undefined' && typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh');
+    const base = (typeof getRawBreakevenPct === 'function')
+        ? getRawBreakevenPct(sym, c)
+        : (getAssetType(sym) === 'CRYPTO' ? 0.65 : (String(sym).indexOf('OANDA') !== -1 ? 0.05 : 0.15));
+    const f = (typeof getFeeCalibFactor === 'function') ? getFeeCalibFactor(c) : 1;
+    return base * f;
 }
 
 // Decide se un TAKE-PROFIT può scattare davvero. Nasce dal churn da spread:

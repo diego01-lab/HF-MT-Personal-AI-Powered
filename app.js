@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.22';
+window.APP_VERSION = 'v.1.0.23';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -5857,6 +5857,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             let totalGrossProfit = 0;
             let totalGrossLoss = 0;
             let totalRealizedPnL = 0;
+            // Somma delle stime BASE (non calibrate) sui trade visibili: il
+            // rapporto con le commissioni REALI dedotte dall'equity alimenta la
+            // calibrazione automatica del modello fee (updateFeeCalibration).
+            let rawFeeEstTotal = 0;
 
             tradeHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
@@ -5879,6 +5883,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     totalLosingTrades++;
                 } else {
                     totalBreakevenTrades++;
+                }
+                if (typeof getRawBreakevenPct === 'function') {
+                    const tInvested = trade.invested || (trade.entryPrice * trade.amount) || 0;
+                    rawFeeEstTotal += tInvested * (getRawBreakevenPct(trade.sym) / 100);
                 }
             });
 
@@ -5942,6 +5950,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // in modo che corrisponda al calcolo esatto della UI
             window.__trueRealizedPnL = calculatedNetPnL;
             window.__globalCommissions = currentCommissions;
+
+            // Calibrazione fee: solo in modalità broker, dove currentCommissions
+            // è un dato REALE dedotto dall'equity (in test è un ledger locale).
+            // Le guardie anti-rumore (campione minimo) sono dentro la funzione.
+            if (brokerViewActive() && typeof updateFeeCalibration === 'function') {
+                updateFeeCalibration(getBrokerCtx(), currentCommissions, rawFeeEstTotal, totalTrades);
+            }
 
             globalTotalRealizedPnL = totalRealizedPnL;
             const totalPnLEl = document.getElementById('totalPnL');
