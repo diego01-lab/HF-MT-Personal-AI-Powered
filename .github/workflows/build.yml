@@ -41,12 +41,15 @@ jobs:
       # OAuth Android su Google Cloud, e il login Google fallisce con
       # DEVELOPER_ERROR (a volte mostrato all'utente come un fuorviante
       # "Accesso annullato"). Ripristina qui lo STESSO keystore di debug usato
-      # in locale (secret cifrato, mai nel repo) nel percorso di default che
-      # Gradle usa già automaticamente per le build debug.
+      # in locale (secret cifrato, mai nel repo) nel percorso dichiarato
+      # esplicitamente in android/app/build.gradle (signingConfigs.debug).
+      # Il print della SHA-1 e' diagnostico: si confronta a colpo d'occhio nel
+      # log con quella registrata su Google Cloud, senza scaricare l'APK.
       - name: Restore debug keystore (Google Sign-In SHA-1 coerente con Google Cloud)
         run: |
           mkdir -p "$HOME/.android"
           echo "${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}" | base64 -d > "$HOME/.android/debug.keystore"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android -keypass android | grep -i "SHA1:"
 
       - name: Build Android APK
         working-directory: ./android

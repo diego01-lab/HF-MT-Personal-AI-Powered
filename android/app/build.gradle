@@ -16,7 +16,27 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Firma di debug ESPLICITA (non l'implicita di default di Gradle): quella
+    // implicita punta comunque a ~/.android/debug.keystore, ma affidarsi al
+    // rilevamento automatico si e' rivelato inaffidabile in CI (l'APK risultava
+    // firmato con una SHA-1 diversa da quella del file appena ripristinato dal
+    // secret, prima ancora di eseguire ./gradlew). Dichiararla qui rimuove
+    // quell'ambiguita': stesso percorso convenzionale, ma come input di build
+    // esplicito. Il file viene ripristinato dal workflow CI (secret cifrato)
+    // prima della build; in locale e' il debug.keystore che Android Studio usa
+    // sempre di default.
+    signingConfigs {
+        debug {
+            storeFile file("${System.properties['user.home']}/.android/debug.keystore")
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
