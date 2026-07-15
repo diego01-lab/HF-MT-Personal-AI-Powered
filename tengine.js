@@ -486,45 +486,76 @@ const BROKER_FEE_PCT = {
     fh: { CRYPTO: 0.65, STOCK: 0.15, FOREX: 0.05, COMMODITY: 0.05 },
 };
 
+// Categoria ai fini del costo: come getAssetType, ma le materie prime SENZA
+// prefisso OANDA (es. LIT, che è un ETF azionario) viaggiano da sempre col
+// costo delle azioni, non con lo spread CFD. Usata sia dal modello fee sia
+// dall'accumulo delle stime per la calibrazione (app.js).
+function getFeeCategory(sym) {
+    let cat = getAssetType(sym);
+    if (cat === 'COMMODITY' && String(sym).indexOf('OANDA') === -1) cat = 'STOCK';
+    return cat;
+}
+
 // Stima BASE (non calibrata) dei costi round-trip per simbolo + contesto broker.
 // Usa getAssetType (non "includes USDT"): i simboli-posizione del broker
 // (PAXGUSD, ADAUSD) non contengono USDT e venivano trattati come azioni,
 // sottostimando i costi crypto di 4 volte.
 function getRawBreakevenPct(sym, ctx) {
     const c = ctx || ((typeof window !== 'undefined' && typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh');
-    let cat = getAssetType(sym);
-    // Materie prime SENZA prefisso OANDA (es. LIT, che è un ETF azionario):
-    // viaggiano da sempre col costo delle azioni, non con lo spread CFD.
-    if (cat === 'COMMODITY' && String(sym).indexOf('OANDA') === -1) cat = 'STOCK';
+    const cat = (typeof getFeeCategory === 'function') ? getFeeCategory(sym) : getAssetType(sym);
     const table = BROKER_FEE_PCT[c] || BROKER_FEE_PCT.fh;
     if (table[cat] != null) return table[cat];
     return cat === 'CRYPTO' ? 0.65 : (String(sym).indexOf('OANDA') !== -1 ? 0.05 : 0.15);
 }
 
 // ─── Calibrazione automatica dal costo REALE osservato ───
-// Per i contesti Alpaca la dashboard deduce le commissioni REALI dal gap tra
-// equity del conto e PnL dei trade. Il rapporto reale/stimato diventa un
-// fattore correttivo per contesto (EMA, clamp 0.5-3x, persistito): la stima
-// converge da sola verso i costi veri del conto (incluso il tier di volume),
-// senza codificare a mano i listini a scaglioni.
+// Le fee reali del conto (attività FEE/CFEE, vedi syncAlpacaFees) calibrano la
+// stima con un fattore per CONTESTO × CATEGORIA — le fee crypto e azioni hanno
+// nature diverse e un fattore unico per contesto le mescolava, trascinando
+// giù la stima crypto insieme a quella azioni (osservato: fattore al pavimento
+// 0.5 e stima crypto a 0.33%, sotto il listino pubblicato Alpaca).
+// Vincoli:
+//  - pavimento per categoria: la stima crypto non può MAI scendere sotto le
+//    fee pubblicate Alpaca (0.25% × 2 lati = 0.50% round-trip → fattore min
+//    0.77 su base 0.65). Il pavimento protegge la soglia anti-churn del TP
+//    (tpAllowed), nata dall'incidente spread-churn: mai indebolirla su dati
+//    dubbi o incompleti;
+//  - il fattore si muove SOLO quando cambiano i dati fee osservati (firma
+//    anti-ripetizione): updateDashboard gira ogni ~1.5s con gli stessi numeri
+//    e una EMA per-chiamata convergerebbe in pochi secondi, senza smorzare nulla.
+const FEE_CALIB_MIN = { CRYPTO: 0.77, STOCK: 0.2, FOREX: 0.5, COMMODITY: 0.5 };
+const FEE_CALIB_MAX = 3;
 const _feeCalibCache = {};
-function getFeeCalibFactor(ctx) {
-    if (_feeCalibCache[ctx] == null) {
+const _feeCalibLastSig = {};
+function getFeeCalibFactor(ctx, cat) {
+    const key = ctx + '_' + cat;
+    if (_feeCalibCache[key] == null) {
         let v = 1;
-        try { v = parseFloat(localStorage.getItem('fee_calib_' + ctx)); } catch (e) { }
-        _feeCalibCache[ctx] = (isFinite(v) && v >= 0.5 && v <= 3) ? v : 1;
+        try { v = parseFloat(localStorage.getItem('fee_calib_' + key)); } catch (e) { }
+        const lo = FEE_CALIB_MIN[cat] != null ? FEE_CALIB_MIN[cat] : 0.5;
+        _feeCalibCache[key] = (isFinite(v) && v >= lo && v <= FEE_CALIB_MAX) ? v : 1;
     }
-    return _feeCalibCache[ctx];
+    return _feeCalibCache[key];
 }
-function updateFeeCalibration(ctx, realCommissions, rawEstimated, tradeCount) {
+function updateFeeCalibration(ctx, cat, realFees, rawEstimated, tradeCount) {
     // Guardie anti-rumore: serve un campione minimo perché il rapporto abbia senso
-    // (poche operazioni o stime sotto 1$ producono fattori assurdi).
-    if (!ctx || !(realCommissions > 0) || !(rawEstimated >= 1) || !(tradeCount >= 10)) return;
-    const target = Math.max(0.5, Math.min(3, realCommissions / rawEstimated));
-    const cur = getFeeCalibFactor(ctx);
-    const next = cur + 0.2 * (target - cur);
-    _feeCalibCache[ctx] = next;
-    try { localStorage.setItem('fee_calib_' + ctx, String(next)); } catch (e) { }
+    // (poche operazioni o stime sotto 0.5$ producono fattori assurdi).
+    if (!ctx || !cat || !(realFees >= 0) || !(rawEstimated >= 0.5) || !(tradeCount >= 5)) return;
+    const key = ctx + '_' + cat;
+    // Firma dei dati osservati: se le fee non sono cambiate dall'ultimo
+    // aggiornamento, non c'è nuova informazione — nessun passo.
+    const sig = realFees.toFixed(4) + '|' + rawEstimated.toFixed(2);
+    if (_feeCalibLastSig[key] === sig) return;
+    _feeCalibLastSig[key] = sig;
+    const lo = FEE_CALIB_MIN[cat] != null ? FEE_CALIB_MIN[cat] : 0.5;
+    const target = Math.max(lo, Math.min(FEE_CALIB_MAX, realFees / rawEstimated));
+    const cur = getFeeCalibFactor(ctx, cat);
+    // Passo al 50% verso il target: i passi avvengono solo su dati nuovi
+    // (tipicamente una volta per sync fee), quindi la convergenza resta rapida
+    // senza essere isterica.
+    const next = cur + 0.5 * (target - cur);
+    _feeCalibCache[key] = next;
+    try { localStorage.setItem('fee_calib_' + key, String(next)); } catch (e) { }
 }
 
 // Stima EFFETTIVA usata da motore e UI: base per-broker × fattore calibrato.
@@ -536,7 +567,9 @@ function getNetBreakevenPct(sym, ctx) {
     const base = (typeof getRawBreakevenPct === 'function')
         ? getRawBreakevenPct(sym, c)
         : (getAssetType(sym) === 'CRYPTO' ? 0.65 : (String(sym).indexOf('OANDA') !== -1 ? 0.05 : 0.15));
-    const f = (typeof getFeeCalibFactor === 'function') ? getFeeCalibFactor(c) : 1;
+    const f = (typeof getFeeCalibFactor === 'function' && typeof getFeeCategory === 'function')
+        ? getFeeCalibFactor(c, getFeeCategory(sym))
+        : 1;
     return base * f;
 }
 
@@ -1293,7 +1326,8 @@ async function closeTrade(sym, price, reason = 'MANUAL') {
             // Annota entry reale E motivo per il FILL di chiusura in arrivo
             // (vedi syncAlpacaHistory): così in cronologia compare SL/TP/HEDGE
             // invece del generico BROKER_SYNC
-            brokerEntryBasis[normFillSym(sym)] = { price: pos.entryPrice, time: pos.openTime, type: pos.type, reason: reason };
+            brokerEntryBasis[normFillSym(sym)] = { price: pos.entryPrice, time: pos.openTime, type: pos.type, reason: reason, noteAt: Date.now() };
+            if (typeof saveBrokerEntryBasis === 'function') saveBrokerEntryBasis();
             if (pnl > 0) playCashSound(); else playLossSound();
 
             sessionBudgetUsed -= pos.invested;

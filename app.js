@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.24';
+window.APP_VERSION = 'v.1.0.25';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -836,10 +836,24 @@ let recentlyClosed = {}; // sym → timestamp: blocca ri-chiusure/resurrezioni d
 let closingAssets = new Set();
 // Contesti locali (portafogli simulati): condiviso con tengine.js (runBackgroundEngines)
 var LOCAL_CTXS = ['fh', 'capd', 'capl'];
-// Entry note al momento della chiusura (sym normalizzato → {price, time, type}):
-// permette a syncAlpacaHistory di calcolare il PnL corretto anche quando il fill
-// di apertura è più vecchio della finestra di 50 attività scaricata da Alpaca.
+// Entry note al momento della chiusura (sym normalizzato → {price, time, type,
+// reason}): permette a syncAlpacaHistory di calcolare il PnL corretto anche
+// quando il fill di apertura è più vecchio della finestra scaricata da Alpaca,
+// e di etichettare la riga col motivo REALE (SL/TP/AI_REVERSAL/...) invece del
+// generico BROKER_SYNC. PERSISTITO: prima viveva solo in memoria e ogni reload
+// della pagina (es. bump di versione) perdeva le annotazioni non ancora
+// consumate dal sync → cronologia piena di BROKER_SYNC senza motivo reale.
 let brokerEntryBasis = {};
+try {
+    const _beb = JSON.parse(localStorage.getItem('broker_entry_basis')) || {};
+    const _bebCut = Date.now() - 172800000; // 48h: oltre, l'annotazione è stantia
+    for (const k in _beb) {
+        if (_beb[k] && (_beb[k].noteAt || 0) >= _bebCut) brokerEntryBasis[k] = _beb[k];
+    }
+} catch (e) { }
+function saveBrokerEntryBasis() {
+    try { localStorage.setItem('broker_entry_basis', JSON.stringify(brokerEntryBasis)); } catch (e) { }
+}
 // Normalizza i simboli per confrontare fill Alpaca (BTC/USD o BTCUSD) e simboli interni (BTCUSDT)
 function normFillSym(s) { return (s || '').replace('/', '').replace('USDT', 'USD'); }
 // Ora di apertura annotata da openTrade per la posizione che il sync sta per
@@ -2006,6 +2020,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Stato in-memory (cambio chiave a runtime dal modale): riparte pulito
             if (useAlpacaBroker) {
                 tradeHistory = []; activePositions = {}; brokerEntryBasis = {};
+                if (typeof saveBrokerEntryBasis === 'function') saveBrokerEntryBasis();
                 totalPnL = 0; executedTrades = 0; winTrades = 0; grossProfit = 0; grossLoss = 0;
                 globalCommissions = 0;
                 _lastRenderedHistoryJSON = null;
@@ -4861,6 +4876,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const pushRow = (type, entryPrice, closedQty, pnl, entryTime, closeReason) => {
                             if (tradeHistory.some(t => t.id === actId)) return;
 
+                            // Diagnostica: un fill di chiusura con PnL reale ma senza motivo
+                            // annotato significa che la chiusura è avvenuta su un'ALTRA
+                            // istanza dell'app o prima di un reload (annotazione persa).
+                            if (!closeReason && (pnl !== 0 || entryPrice !== price)) {
+                                console.warn(`[SYNC] Fill di chiusura ${ns} senza motivo annotato (chiusa da altra istanza o annotazione persa): etichettata BROKER_SYNC.`);
+                            }
+
                             // Aggiorna le statistiche globali (LIFETIME)
                             if (pnl !== 0 || entryPrice !== price) {
                                 executedTrades++;
@@ -4960,6 +4982,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         pushRow('SHORT', price, qty, 0, null);
                     });
 
+                    // Le annotazioni consumate (delete nei rami sopra) vanno tolte
+                    // anche dalla copia persistita, o al prossimo reload risorgono
+                    // e etichettano col motivo sbagliato un trade successivo.
+                    if (typeof saveBrokerEntryBasis === 'function') saveBrokerEntryBasis();
+
                     // ORA DI APERTURA REALE: il basis ricostruito dai FILL conserva il
                     // timestamp del PRIMO fill della posizione ancora aperta (b.time).
                     // Le posizioni recuperate dal sync broker non hanno created_at e
@@ -5043,7 +5070,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             _feesSyncInFlight = true;
             try {
                 let saved = {};
-                try { saved = JSON.parse(localStorage.getItem('alpaca_fees_cache')) || {}; } catch (e) { }
+                try { saved = JSON.parse(localStorage.getItem('alpaca_fees_cache2')) || {}; } catch (e) { }
                 window.__alpacaFees = window.__alpacaFees || saved;
                 const cached = (window.__alpacaFees[ctxKey] && window.__alpacaFees[ctxKey].list) || [];
                 const knownIds = new Set(cached.map(f => f.id));
@@ -5065,8 +5092,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     for (const act of chunk) {
                         if (knownIds.has(act.id)) { hitCache = true; break; }
                         // net_amount è negativo per gli addebiti: memorizziamo il costo
-                        // (positivo) e la data per i confronti su finestra temporale.
-                        fresh.push({ id: act.id, t: new Date(act.date || act.transaction_time || 0).getTime() || 0, amt: -parseFloat(act.net_amount || 0) });
+                        // (positivo), la data per i confronti su finestra temporale e la
+                        // categoria (CFEE = fee crypto, FEE = fee regolatorie azioni) per
+                        // la calibrazione separata per categoria.
+                        fresh.push({
+                            id: act.id,
+                            t: new Date(act.date || act.transaction_time || 0).getTime() || 0,
+                            amt: -parseFloat(act.net_amount || 0),
+                            cat: act.activity_type === 'CFEE' ? 'CRYPTO' : 'STOCK'
+                        });
                     }
                     if (hitCache || chunk.length < 100) break;
                     pageToken = chunk[chunk.length - 1].id;
@@ -5080,7 +5114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const total = Math.max(0, list.reduce((s, f) => s + (isFinite(f.amt) ? f.amt : 0), 0));
                 window.__alpacaFees[ctxKey] = { total, list, synced: true };
                 _lastFeesSyncAt[ctxKey] = Date.now();
-                try { localStorage.setItem('alpaca_fees_cache', JSON.stringify(window.__alpacaFees)); } catch (e) { }
+                try { localStorage.setItem('alpaca_fees_cache2', JSON.stringify(window.__alpacaFees)); } catch (e) { }
                 if (fresh.length > 0) console.log(`[SYNC] Commissioni reali ${ctxKey}: ${list.length} voci, totale $${total.toFixed(2)}.`);
             } catch (e) {
                 console.warn('[SYNC ERROR] Attività FEE non disponibili:', e);
@@ -5088,19 +5122,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                 _feesSyncInFlight = false;
             }
         }
-        // All'avvio: rendi subito disponibile l'ultimo totale noto (senza rete)
-        try { window.__alpacaFees = window.__alpacaFees || JSON.parse(localStorage.getItem('alpaca_fees_cache')) || {}; } catch (e) { window.__alpacaFees = window.__alpacaFees || {}; }
+        // All'avvio: rendi subito disponibile l'ultimo totale noto (senza rete).
+        // Chiave "2": la v.1.0.24 salvava le voci senza categoria (serve alla
+        // calibrazione per categoria) — si riparte pulito, il refetch è economico.
+        try { window.__alpacaFees = window.__alpacaFees || JSON.parse(localStorage.getItem('alpaca_fees_cache2')) || {}; } catch (e) { window.__alpacaFees = window.__alpacaFees || {}; }
 
-        // Somma delle fee reali del contesto corrente a partire da un timestamp:
-        // serve alla calibrazione per confrontare fee e stime sulla STESSA
-        // finestra di trade (le fee totali sono lifetime, la cronologia no).
+        // Fee reali del contesto corrente a partire da un timestamp, SEPARATE per
+        // categoria ({ CRYPTO, STOCK }): servono alla calibrazione per confrontare
+        // fee e stime sulla STESSA finestra di trade (le fee totali sono lifetime,
+        // la cronologia no) e per categoria (nature di costo diverse).
         // Margine di 1 giorno perché le attività FEE/CFEE hanno data giornaliera.
         function alpacaFeesSince(sinceMs) {
             const ctxKey = window.liveMonitorActive ? 'alrt' : 'alp';
             const entry = window.__alpacaFees && window.__alpacaFees[ctxKey];
             if (!entry || !entry.synced) return null;
             const cutoff = (sinceMs || 0) - 86400000;
-            return Math.max(0, (entry.list || []).reduce((s, f) => s + ((f.t >= cutoff && isFinite(f.amt)) ? f.amt : 0), 0));
+            const byCat = { CRYPTO: 0, STOCK: 0 };
+            for (const f of (entry.list || [])) {
+                if (f.t >= cutoff && isFinite(f.amt)) byCat[f.cat === 'CRYPTO' ? 'CRYPTO' : 'STOCK'] += f.amt;
+            }
+            byCat.CRYPTO = Math.max(0, byCat.CRYPTO);
+            byCat.STOCK = Math.max(0, byCat.STOCK);
+            return byCat;
         }
 
         if (testAlpacaBtn) {
@@ -5940,10 +5983,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             let totalGrossProfit = 0;
             let totalGrossLoss = 0;
             let totalRealizedPnL = 0;
-            // Somma delle stime BASE (non calibrate) sui trade visibili: il
-            // rapporto con le fee REALI della stessa finestra temporale alimenta
-            // la calibrazione automatica del modello fee (updateFeeCalibration).
-            let rawFeeEstTotal = 0;
+            // Somma delle stime BASE (non calibrate) sui trade visibili, PER
+            // CATEGORIA: il rapporto con le fee REALI della stessa finestra e
+            // categoria alimenta la calibrazione (updateFeeCalibration).
+            const rawFeeEstByCat = { CRYPTO: 0, STOCK: 0 };
+            const tradesByCat = { CRYPTO: 0, STOCK: 0 };
             let oldestTradeMs = Infinity; // inizio della finestra dei trade visibili
 
             tradeHistory.forEach(trade => {
@@ -5968,9 +6012,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     totalBreakevenTrades++;
                 }
-                if (typeof getRawBreakevenPct === 'function') {
+                if (typeof getRawBreakevenPct === 'function' && typeof getFeeCategory === 'function') {
                     const tInvested = trade.invested || (trade.entryPrice * trade.amount) || 0;
-                    rawFeeEstTotal += tInvested * (getRawBreakevenPct(trade.sym) / 100);
+                    // Solo CRYPTO/STOCK: sono le uniche categorie con fee reali
+                    // osservabili da Alpaca (CFEE/FEE) contro cui calibrare.
+                    const tCat = getFeeCategory(trade.sym);
+                    if (rawFeeEstByCat[tCat] != null) {
+                        rawFeeEstByCat[tCat] += tInvested * (getRawBreakevenPct(trade.sym) / 100);
+                        tradesByCat[tCat]++;
+                    }
                 }
                 const tTime = trade.exitTime || trade.time || 0;
                 if (tTime > 0 && tTime < oldestTradeMs) oldestTradeMs = tTime;
@@ -6046,18 +6096,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.__trueRealizedPnL = calculatedNetPnL;
             window.__globalCommissions = currentCommissions;
 
-            // Calibrazione fee: SOLO contro le fee reali (FEE/CFEE) e SOLO sulla
-            // stessa finestra temporale dei trade visibili — le fee totali sono
-            // lifetime, la cronologia no, e confrontare finestre diverse
-            // gonfierebbe il fattore. Se la sync fee non ha ancora risposto
-            // (alpacaFeesSince → null) la calibrazione semplicemente non gira:
+            // Calibrazione fee: SOLO contro le fee reali (FEE/CFEE), SOLO sulla
+            // stessa finestra temporale dei trade visibili e SEPARATA per
+            // categoria — un fattore unico mescolava fee crypto (reali) e azioni
+            // (~zero), trascinando la stima crypto sotto il listino Alpaca e
+            // indebolendo la soglia anti-churn del TP. Se la sync fee non ha
+            // ancora risposto (alpacaFeesSince → null) la calibrazione non gira:
             // meglio nessun aggiornamento che uno basato sul proxy dell'equity.
             if (brokerViewActive() && typeof updateFeeCalibration === 'function') {
                 const feesWindow = (typeof alpacaFeesSince === 'function')
                     ? alpacaFeesSince(isFinite(oldestTradeMs) ? oldestTradeMs : 0)
                     : null;
                 if (feesWindow != null) {
-                    updateFeeCalibration(getBrokerCtx(), feesWindow, rawFeeEstTotal, totalTrades);
+                    updateFeeCalibration(getBrokerCtx(), 'CRYPTO', feesWindow.CRYPTO, rawFeeEstByCat.CRYPTO, tradesByCat.CRYPTO);
+                    updateFeeCalibration(getBrokerCtx(), 'STOCK', feesWindow.STOCK, rawFeeEstByCat.STOCK, tradesByCat.STOCK);
                 }
             }
 
