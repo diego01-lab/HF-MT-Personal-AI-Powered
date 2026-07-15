@@ -557,6 +557,17 @@ function updateFeeCalibration(ctx, cat, realFees, rawEstimated, tradeCount) {
     _feeCalibCache[key] = next;
     try { localStorage.setItem('fee_calib_' + key, String(next)); } catch (e) { }
 }
+// Azzera i fattori di calibrazione di un contesto (cambio account: i fattori
+// riflettono il tier di volume del VECCHIO conto). Chiamata da
+// purgeAlpacaLocalData (app.js) quando cambia la API key.
+function resetFeeCalibration(ctx) {
+    for (const cat of ['CRYPTO', 'STOCK', 'FOREX', 'COMMODITY']) {
+        const key = ctx + '_' + cat;
+        delete _feeCalibCache[key];
+        delete _feeCalibLastSig[key];
+        try { localStorage.removeItem('fee_calib_' + key); } catch (e) { }
+    }
+}
 
 // Stima EFFETTIVA usata da motore e UI: base per-broker × fattore calibrato.
 // Le dipendenze sono guardate con typeof perché i test estraggono questa

@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.25';
+window.APP_VERSION = 'v.1.0.26';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -2017,12 +2017,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                 localStorage.setItem('alpaca_activities_cache', JSON.stringify(cache));
             } catch (_) { localStorage.removeItem('alpaca_activities_cache'); }
             if (window.__alpacaActivitiesCache) delete window.__alpacaActivitiesCache[cacheKey];
+            // Fee reali (FEE/CFEE) e calibrazione: sono del VECCHIO conto. Senza
+            // questa pulizia il box Commissioni continuava a mostrare il totale
+            // del portafoglio precedente anche su un conto nuovo di zecca (la
+            // sync fa solo merge incrementale, non sfratta mai le voci vecchie).
+            try {
+                const fees = JSON.parse(localStorage.getItem('alpaca_fees_cache3')) || {};
+                delete fees[ctx];
+                localStorage.setItem('alpaca_fees_cache3', JSON.stringify(fees));
+            } catch (_) { localStorage.removeItem('alpaca_fees_cache3'); }
+            if (window.__alpacaFees) delete window.__alpacaFees[ctx];
+            if (typeof resetFeeCalibration === 'function') resetFeeCalibration(ctx);
             // Stato in-memory (cambio chiave a runtime dal modale): riparte pulito
             if (useAlpacaBroker) {
                 tradeHistory = []; activePositions = {}; brokerEntryBasis = {};
                 if (typeof saveBrokerEntryBasis === 'function') saveBrokerEntryBasis();
                 totalPnL = 0; executedTrades = 0; winTrades = 0; grossProfit = 0; grossLoss = 0;
                 globalCommissions = 0;
+                // Anche l'equity in-memory è del vecchio conto: se restasse, la
+                // prima getDepositedTotal() pre-sync sementerebbe la baseline del
+                // versato col valore SBAGLIATO (gap fantasma etichettato come
+                // commissioni/PnL). A zero, la baseline aspetta il primo snapshot
+                // reale del conto nuovo (getDepositedTotal sementa solo se > 0).
+                tradingCapital = 0; portfolioBalance = 0; sessionInitialCapital = 0;
+                brokerMarketValue = 0; brokerUnrealizedPnL = 0;
                 _lastRenderedHistoryJSON = null;
                 try { if (typeof renderHistory === 'function') renderHistory(); } catch (_) { }
             }
@@ -5070,7 +5088,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             _feesSyncInFlight = true;
             try {
                 let saved = {};
-                try { saved = JSON.parse(localStorage.getItem('alpaca_fees_cache2')) || {}; } catch (e) { }
+                try { saved = JSON.parse(localStorage.getItem('alpaca_fees_cache3')) || {}; } catch (e) { }
                 window.__alpacaFees = window.__alpacaFees || saved;
                 const cached = (window.__alpacaFees[ctxKey] && window.__alpacaFees[ctxKey].list) || [];
                 const knownIds = new Set(cached.map(f => f.id));
@@ -5114,7 +5132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const total = Math.max(0, list.reduce((s, f) => s + (isFinite(f.amt) ? f.amt : 0), 0));
                 window.__alpacaFees[ctxKey] = { total, list, synced: true };
                 _lastFeesSyncAt[ctxKey] = Date.now();
-                try { localStorage.setItem('alpaca_fees_cache2', JSON.stringify(window.__alpacaFees)); } catch (e) { }
+                try { localStorage.setItem('alpaca_fees_cache3', JSON.stringify(window.__alpacaFees)); } catch (e) { }
                 if (fresh.length > 0) console.log(`[SYNC] Commissioni reali ${ctxKey}: ${list.length} voci, totale $${total.toFixed(2)}.`);
             } catch (e) {
                 console.warn('[SYNC ERROR] Attività FEE non disponibili:', e);
@@ -5123,9 +5141,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         // All'avvio: rendi subito disponibile l'ultimo totale noto (senza rete).
-        // Chiave "2": la v.1.0.24 salvava le voci senza categoria (serve alla
-        // calibrazione per categoria) — si riparte pulito, il refetch è economico.
-        try { window.__alpacaFees = window.__alpacaFees || JSON.parse(localStorage.getItem('alpaca_fees_cache2')) || {}; } catch (e) { window.__alpacaFees = window.__alpacaFees || {}; }
+        // Chiave "3": le versioni precedenti (v.1.0.24 senza categoria, v.1.0.25
+        // senza purge al cambio conto) possono contenere voci del VECCHIO
+        // portafoglio — si riparte pulito, il refetch è economico (~60s).
+        try { window.__alpacaFees = window.__alpacaFees || JSON.parse(localStorage.getItem('alpaca_fees_cache3')) || {}; } catch (e) { window.__alpacaFees = window.__alpacaFees || {}; }
 
         // Fee reali del contesto corrente a partire da un timestamp, SEPARATE per
         // categoria ({ CRYPTO, STOCK }): servono alla calibrazione per confrontare
