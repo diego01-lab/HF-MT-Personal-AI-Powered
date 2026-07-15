@@ -625,7 +625,7 @@
                                     $0.00</div>
                             </div>
                             <div class="capital-item glass-panel" id="boxPnlCommissions"
-                                data-tooltip="Valore di tutte le commissioni / spread pagati."
+                                data-tooltip="Commissioni REALI addebitate dal broker (registrazioni FEE/CFEE del conto Alpaca). Spread e slippage non sono commissioni e non sono inclusi."
                                 style="padding: 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); cursor: help;">
                                 <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;"
                                     id="lblPnlCommissions">Commissioni</div>
@@ -812,7 +812,7 @@
                                 </div>
                             </div>
                             <div class="stat-card-mini glass-panel" id="boxCommissions"
-                                data-tooltip="Somma delle commissioni pagate al broker calcolata."
+                                data-tooltip="Commissioni REALI addebitate dal broker (registrazioni FEE/CFEE del conto Alpaca). Spread e slippage non sono commissioni e non sono inclusi."
                                 style="padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: help;">
                                 <span
                                     style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;"
@@ -1808,7 +1808,7 @@
     <!-- tengine.js DEVE precedere app.js: dichiara a scope globale il motore di
          trading (strategie, rischio, ordini, bot) che app.js richiama a runtime -->
     <script src="tengine.js?v=7" defer></script>
-    <script src="app.js?v=43" defer></script>
+    <script src="app.js?v=44" defer></script>
     <script>
         // Toggle "occhio": mostra/nasconde in chiaro le chiavi/segreti nelle schede broker.
         (function () {

@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.23';
+window.APP_VERSION = 'v.1.0.24';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -4486,6 +4486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     await syncAlpacaOrders();
                     setSyncProgress(75);
                     await syncAlpacaHistory();
+                    await syncAlpacaFees(); // throttle interno 60s: quasi sempre no-op
                     setSyncProgress(100);
                     // Vedi commento gemello in checkAlpacaConnection(): ricalcola le
                     // statistiche aggregate con i dati appena sincronizzati in questo giro.
@@ -4633,6 +4634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     await syncAlpacaOrders();
                     setSyncProgress(75);
                     await syncAlpacaHistory();
+                    await syncAlpacaFees(); // throttle interno 60s: quasi sempre no-op
                     setSyncProgress(100);
                     // Ricalcola Tasso di successo/PnL Netto/ROI/Commissioni con i dati
                     // appena sincronizzati (altrimenti restano indietro di un ciclo,
@@ -5018,6 +5020,87 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // eseguiamo UNA finale per avere lo stato più aggiornato.
                 if (_historySyncQueued) { _historySyncQueued = false; syncAlpacaHistory(); }
             }
+        }
+
+        // ─── Commissioni REALI dal broker (attività FEE + CFEE) ───
+        // Il box "Commissioni" mostrava un valore DEDOTTO dal gap tra equity e
+        // PnL dei trade visibili: un proxy che assorbe anche slippage e trade
+        // usciti dalla cronologia (tetto 100 righe), gonfiando il numero — su
+        // Alpaca Paper azioni (commission-free) arrivava a mostrare dollari di
+        // "commissioni" inesistenti. Qui invece si leggono le registrazioni
+        // contabili VERE del conto: FEE (fee regolatorie azioni) e CFEE (fee
+        // crypto). Cache incrementale come syncAlpacaHistory, throttle 60s.
+        // Stato per contesto in window.__alpacaFees = { alp|alrt: { total,
+        // list:[{t,amt}], synced } }, persistito per avere il dato all'avvio.
+        let _feesSyncInFlight = false;
+        let _lastFeesSyncAt = { alp: 0, alrt: 0 };
+        async function syncAlpacaFees() {
+            const src = getBrokerHttp();
+            if (!brokerViewActive() || !src.key || !src.secret) return;
+            const ctxKey = src.live ? 'alrt' : 'alp';
+            const now = Date.now();
+            if (_feesSyncInFlight || now - (_lastFeesSyncAt[ctxKey] || 0) < 60000) return;
+            _feesSyncInFlight = true;
+            try {
+                let saved = {};
+                try { saved = JSON.parse(localStorage.getItem('alpaca_fees_cache')) || {}; } catch (e) { }
+                window.__alpacaFees = window.__alpacaFees || saved;
+                const cached = (window.__alpacaFees[ctxKey] && window.__alpacaFees[ctxKey].list) || [];
+                const knownIds = new Set(cached.map(f => f.id));
+
+                const fresh = [];
+                let pageToken = '';
+                for (let i = 0; i < 10; i++) {
+                    const url = `${src.base}/v2/account/activities?activity_types=FEE,CFEE&direction=desc&page_size=100${pageToken ? '&page_token=' + pageToken : ''}`;
+                    const response = await fetch(url, {
+                        headers: { 'apca-api-key-id': src.key, 'apca-api-secret-key': src.secret }
+                    });
+                    if (!response.ok) {
+                        if (response.status === 429) console.warn('[ALPACA] Rate limit sulle attività FEE: uso la cache.');
+                        break;
+                    }
+                    const chunk = await response.json();
+                    if (!chunk || chunk.length === 0) break;
+                    let hitCache = false;
+                    for (const act of chunk) {
+                        if (knownIds.has(act.id)) { hitCache = true; break; }
+                        // net_amount è negativo per gli addebiti: memorizziamo il costo
+                        // (positivo) e la data per i confronti su finestra temporale.
+                        fresh.push({ id: act.id, t: new Date(act.date || act.transaction_time || 0).getTime() || 0, amt: -parseFloat(act.net_amount || 0) });
+                    }
+                    if (hitCache || chunk.length < 100) break;
+                    pageToken = chunk[chunk.length - 1].id;
+                }
+
+                // Cambio modalità durante la richiesta: non mescolare Paper/Reale
+                if (!brokerViewActive() || getBrokerHttp().live !== src.live) return;
+
+                let list = fresh.concat(cached);
+                if (list.length > 2000) list = list.slice(0, 2000);
+                const total = Math.max(0, list.reduce((s, f) => s + (isFinite(f.amt) ? f.amt : 0), 0));
+                window.__alpacaFees[ctxKey] = { total, list, synced: true };
+                _lastFeesSyncAt[ctxKey] = Date.now();
+                try { localStorage.setItem('alpaca_fees_cache', JSON.stringify(window.__alpacaFees)); } catch (e) { }
+                if (fresh.length > 0) console.log(`[SYNC] Commissioni reali ${ctxKey}: ${list.length} voci, totale $${total.toFixed(2)}.`);
+            } catch (e) {
+                console.warn('[SYNC ERROR] Attività FEE non disponibili:', e);
+            } finally {
+                _feesSyncInFlight = false;
+            }
+        }
+        // All'avvio: rendi subito disponibile l'ultimo totale noto (senza rete)
+        try { window.__alpacaFees = window.__alpacaFees || JSON.parse(localStorage.getItem('alpaca_fees_cache')) || {}; } catch (e) { window.__alpacaFees = window.__alpacaFees || {}; }
+
+        // Somma delle fee reali del contesto corrente a partire da un timestamp:
+        // serve alla calibrazione per confrontare fee e stime sulla STESSA
+        // finestra di trade (le fee totali sono lifetime, la cronologia no).
+        // Margine di 1 giorno perché le attività FEE/CFEE hanno data giornaliera.
+        function alpacaFeesSince(sinceMs) {
+            const ctxKey = window.liveMonitorActive ? 'alrt' : 'alp';
+            const entry = window.__alpacaFees && window.__alpacaFees[ctxKey];
+            if (!entry || !entry.synced) return null;
+            const cutoff = (sinceMs || 0) - 86400000;
+            return Math.max(0, (entry.list || []).reduce((s, f) => s + ((f.t >= cutoff && isFinite(f.amt)) ? f.amt : 0), 0));
         }
 
         if (testAlpacaBtn) {
@@ -5858,9 +5941,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             let totalGrossLoss = 0;
             let totalRealizedPnL = 0;
             // Somma delle stime BASE (non calibrate) sui trade visibili: il
-            // rapporto con le commissioni REALI dedotte dall'equity alimenta la
-            // calibrazione automatica del modello fee (updateFeeCalibration).
+            // rapporto con le fee REALI della stessa finestra temporale alimenta
+            // la calibrazione automatica del modello fee (updateFeeCalibration).
             let rawFeeEstTotal = 0;
+            let oldestTradeMs = Infinity; // inizio della finestra dei trade visibili
 
             tradeHistory.forEach(trade => {
                 // Ulteriore sicurezza: salta se malformato
@@ -5888,6 +5972,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const tInvested = trade.invested || (trade.entryPrice * trade.amount) || 0;
                     rawFeeEstTotal += tInvested * (getRawBreakevenPct(trade.sym) / 100);
                 }
+                const tTime = trade.exitTime || trade.time || 0;
+                if (tTime > 0 && tTime < oldestTradeMs) oldestTradeMs = tTime;
             });
 
             const totalTradesEl = document.getElementById('totalTrades');
@@ -5918,12 +6004,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             let currentCommissions = 0;
             if (brokerViewActive()) {
-                // Sostituiamo il PnL Realizzato calcolato matematicamente per far quadrare i conti
+                // Gap tra equity e PnL dei trade visibili: PRIMA veniva mostrato
+                // come "commissioni", ma assorbe anche slippage e trade usciti
+                // dalla cronologia (tetto 100 righe) — su Alpaca Paper azioni
+                // (commission-free) mostrava dollari di commissioni inesistenti.
+                // Ora è solo diagnostica (window.__equityGapUnexplained): le
+                // commissioni mostrate sono le registrazioni FEE/CFEE reali del
+                // conto (syncAlpacaFees), col vecchio proxy come unico fallback
+                // finché la prima sync non ha risposto.
                 const trueRealizedPnL = totalPnL - openUnrealizedTotal;
                 const gap = trueRealizedPnL - totalRealizedPnL;
-
-                if (gap < -0.01) {
-                    // Se abbiamo perso più di quanto dicono i trade, la differenza sono le commissioni
+                const feesEntry = window.__alpacaFees && window.__alpacaFees[getBrokerCtx()];
+                if (feesEntry && feesEntry.synced) {
+                    currentCommissions = feesEntry.total;
+                    window.__equityGapUnexplained = gap < -0.01 ? Math.abs(gap) : 0;
+                } else if (gap < -0.01) {
                     currentCommissions = Math.abs(gap);
                 }
             } else {
@@ -5951,11 +6046,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.__trueRealizedPnL = calculatedNetPnL;
             window.__globalCommissions = currentCommissions;
 
-            // Calibrazione fee: solo in modalità broker, dove currentCommissions
-            // è un dato REALE dedotto dall'equity (in test è un ledger locale).
-            // Le guardie anti-rumore (campione minimo) sono dentro la funzione.
+            // Calibrazione fee: SOLO contro le fee reali (FEE/CFEE) e SOLO sulla
+            // stessa finestra temporale dei trade visibili — le fee totali sono
+            // lifetime, la cronologia no, e confrontare finestre diverse
+            // gonfierebbe il fattore. Se la sync fee non ha ancora risposto
+            // (alpacaFeesSince → null) la calibrazione semplicemente non gira:
+            // meglio nessun aggiornamento che uno basato sul proxy dell'equity.
             if (brokerViewActive() && typeof updateFeeCalibration === 'function') {
-                updateFeeCalibration(getBrokerCtx(), currentCommissions, rawFeeEstTotal, totalTrades);
+                const feesWindow = (typeof alpacaFeesSince === 'function')
+                    ? alpacaFeesSince(isFinite(oldestTradeMs) ? oldestTradeMs : 0)
+                    : null;
+                if (feesWindow != null) {
+                    updateFeeCalibration(getBrokerCtx(), feesWindow, rawFeeEstTotal, totalTrades);
+                }
             }
 
             globalTotalRealizedPnL = totalRealizedPnL;
@@ -5978,6 +6081,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             if (capitalCommissionsDisplayEl) {
                 capitalCommissionsDisplayEl.textContent = `-${formatMoney(window.__globalCommissions || 0)}`;
+            }
+            // Tooltip diagnostico: mostra anche la quota di equity NON spiegata
+            // dai trade visibili (slippage, righe uscite dalla cronologia) — è il
+            // valore che PRIMA veniva mostrato come "commissioni" e che ora resta
+            // consultabile senza inquinare il numero principale.
+            if (brokerViewActive() && window.__equityGapUnexplained != null) {
+                const tipBase = 'Commissioni REALI addebitate dal broker (registrazioni FEE/CFEE del conto Alpaca).';
+                const tipGap = window.__equityGapUnexplained > 0.01
+                    ? ` Altri costi non spiegati dai trade visibili (spread/slippage/righe oltre il limite cronologia): ${formatMoney(window.__equityGapUnexplained)}.`
+                    : ' Nessun costo aggiuntivo non spiegato rilevato.';
+                const boxPerf = document.getElementById('boxCommissions');
+                const boxCap = document.getElementById('boxPnlCommissions');
+                if (boxPerf) boxPerf.setAttribute('data-tooltip', tipBase + tipGap);
+                if (boxCap) boxCap.setAttribute('data-tooltip', tipBase + tipGap);
             }
             if (totalNetPnLEl) {
                 const net = window.__trueRealizedPnL || 0;
