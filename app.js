@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.26';
+window.APP_VERSION = 'v.1.0.27';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -5165,6 +5165,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             return byCat;
         }
 
+        // Fee crypto MATURATE ma non ancora registrate da Alpaca: le attività
+        // CFEE hanno granularità giornaliera e vengono postate tipicamente a
+        // fine giornata, quindi per ore dopo una chiusura crypto il totale
+        // reale resta fermo (segnalato: "le commissioni non si aggiornano").
+        // Stima: fee attese sui trade CRYPTO chiusi OGGI (calibrate; il
+        // pavimento della calibrazione le tiene >= al listino Alpaca) MENO le
+        // eventuali CFEE già registrate oggi — così quando la registrazione
+        // vera arriva, la componente stimata si riassorbe senza doppi conteggi.
+        function alpacaFeesPendingEstimate() {
+            const ctxKey = window.liveMonitorActive ? 'alrt' : 'alp';
+            const entry = window.__alpacaFees && window.__alpacaFees[ctxKey];
+            if (!entry || !entry.synced) return 0; // senza dati reali resta il fallback sul gap
+            const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0);
+            const cut = dayStart.getTime();
+            let estToday = 0;
+            tradeHistory.forEach(t => {
+                if (!t || !t.sym || !t.fromBroker || !(t.exitTime >= cut)) return;
+                if (typeof getFeeCategory !== 'function' || getFeeCategory(t.sym) !== 'CRYPTO') return;
+                const inv = t.invested || (t.entryPrice * t.amount) || 0;
+                estToday += inv * (getNetBreakevenPct(t.sym) / 100);
+            });
+            let realToday = 0;
+            for (const f of (entry.list || [])) {
+                if (f.t >= cut && isFinite(f.amt)) realToday += f.amt;
+            }
+            return Math.max(0, estToday - realToday);
+        }
+
         if (testAlpacaBtn) {
             testAlpacaBtn.addEventListener('click', async () => {
                 const key = alpacaKeyInput.value.trim();
@@ -6085,7 +6113,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const gap = trueRealizedPnL - totalRealizedPnL;
                 const feesEntry = window.__alpacaFees && window.__alpacaFees[getBrokerCtx()];
                 if (feesEntry && feesEntry.synced) {
-                    currentCommissions = feesEntry.total;
+                    // Registrate dal broker + maturate oggi in attesa di
+                    // registrazione (le CFEE crypto sono postate a fine giornata)
+                    const pendingFees = (typeof alpacaFeesPendingEstimate === 'function') ? alpacaFeesPendingEstimate() : 0;
+                    window.__pendingFeeEstimate = pendingFees;
+                    currentCommissions = feesEntry.total + pendingFees;
                     window.__equityGapUnexplained = gap < -0.01 ? Math.abs(gap) : 0;
                 } else if (gap < -0.01) {
                     currentCommissions = Math.abs(gap);
@@ -6159,13 +6191,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             // consultabile senza inquinare il numero principale.
             if (brokerViewActive() && window.__equityGapUnexplained != null) {
                 const tipBase = 'Commissioni REALI addebitate dal broker (registrazioni FEE/CFEE del conto Alpaca).';
+                const tipPending = (window.__pendingFeeEstimate || 0) > 0.01
+                    ? ` Di cui maturate oggi in attesa di registrazione (stima, le fee crypto sono postate a fine giornata): ${formatMoney(window.__pendingFeeEstimate)}.`
+                    : '';
                 const tipGap = window.__equityGapUnexplained > 0.01
                     ? ` Altri costi non spiegati dai trade visibili (spread/slippage/righe oltre il limite cronologia): ${formatMoney(window.__equityGapUnexplained)}.`
                     : ' Nessun costo aggiuntivo non spiegato rilevato.';
                 const boxPerf = document.getElementById('boxCommissions');
                 const boxCap = document.getElementById('boxPnlCommissions');
-                if (boxPerf) boxPerf.setAttribute('data-tooltip', tipBase + tipGap);
-                if (boxCap) boxCap.setAttribute('data-tooltip', tipBase + tipGap);
+                if (boxPerf) boxPerf.setAttribute('data-tooltip', tipBase + tipPending + tipGap);
+                if (boxCap) boxCap.setAttribute('data-tooltip', tipBase + tipPending + tipGap);
             }
             if (totalNetPnLEl) {
                 const net = window.__trueRealizedPnL || 0;
@@ -6215,11 +6250,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             // Totale commissioni REALI lifetime (stessa fonte del box "Commissioni" in
             // Gestione Capitale/Prestazioni), così i due valori coincidono sempre.
+            // Visibile ogni volta che c'è almeno un'operazione: nascondere il badge
+            // quando le commissioni sono a $0 (conto nuovo, fee non ancora
+            // registrate) faceva sembrare la funzione sparita.
             const historyFeeTotalEl = document.getElementById('historyFeeTotal');
             if (historyFeeTotalEl) {
                 const realCommissions = window.__globalCommissions || 0;
                 historyFeeTotalEl.textContent = `💸 ${formatMoney(realCommissions)}`;
-                historyFeeTotalEl.style.display = realCommissions > 0 ? 'inline-block' : 'none';
+                historyFeeTotalEl.style.display = (realCommissions > 0 || totalTrades > 0) ? 'inline-block' : 'none';
             }
 
             // Riepilogo Netto Latente (Posizioni Aperte)
