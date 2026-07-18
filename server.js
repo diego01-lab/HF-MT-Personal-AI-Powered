@@ -124,7 +124,7 @@ const requestHandler = (req, res) => {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; " +
     "font-src 'self' https://fonts.gstatic.com; " +
     "img-src 'self' data: https:; " +
-    "connect-src 'self' https://paper-api.alpaca.markets https://api.alpaca.markets https://data.alpaca.markets wss://stream.data.alpaca.markets wss://ws.finnhub.io https://finnhub.io https://accounts.google.com; " +
+    "connect-src 'self' https://paper-api.alpaca.markets https://api.alpaca.markets https://data.alpaca.markets wss://stream.data.alpaca.markets wss://ws.finnhub.io https://finnhub.io https://accounts.google.com https://api.alternative.me; " +
     "frame-src https://accounts.google.com; " +
     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
 
@@ -278,6 +278,36 @@ const requestHandler = (req, res) => {
       }
     });
     res.on('error', e => console.error("Client Res Error:", e.message));
+    return;
+  }
+
+  // Proxy per il Crypto Fear & Greed Index (alternative.me): sentiment di
+  // mercato REALE per il modulo NLP del bot. Nessuna chiave richiesta — il
+  // proxy serve solo ad aggirare il CORS del browser (l'app nativa va
+  // diretta, vedi FNG_URL in app.js). L'upstream è fisso: la query del
+  // client viene ignorata, nessun input utente raggiunge la request.
+  if (req.method === 'GET' && req.url.split('?')[0] === '/proxy/fng') {
+    if (!isSameOrigin(req)) {
+      res.writeHead(403);
+      res.end('Cross-origin forbidden');
+      return;
+    }
+    const fngReq = https.request('https://api.alternative.me/fng/?limit=1&format=json', { method: 'GET' }, fngRes => {
+      res.writeHead(fngRes.statusCode, cleanProxyHeaders(fngRes.headers));
+      fngRes.pipe(res);
+      fngRes.on('error', e => console.error('Proxy FNG Res Error:', e.message));
+    });
+    fngReq.end();
+    fngReq.on('error', e => {
+      console.error('Proxy FNG Error:', e.message);
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Proxy FNG Error', message: e.message }));
+      } else {
+        res.end();
+      }
+    });
+    res.on('error', e => console.error('Client Res Error:', e.message));
     return;
   }
 

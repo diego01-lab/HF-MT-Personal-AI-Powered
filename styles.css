@@ -4387,3 +4387,48 @@ html.js-tt [data-tooltip]::before { border-color: transparent !important; }
     gap: 4px;
 }
 .broker-status-col .broker-status { padding: 2px 6px; }
+
+/* ═══ Barra AI Live (sotto l'header): stato in tempo reale dei moduli AI ═══
+   Popolata da renderAiLiveBar() in app.js ogni 2s. Un chip per modulo;
+   chip .off = modulo disattivato dal pannello Logica Algoritmo. */
+.ai-live-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    margin: 10px 0 2px;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 10px;
+}
+.ai-live-chip {
+    flex: 1 1 170px;
+    min-width: 150px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.06);
+    border: 1px solid var(--border-color);
+}
+.ai-live-chip .alc-title {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.ai-live-chip .alc-value {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    line-height: 1.35;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+.ai-live-chip.off { opacity: 0.45; }
+.ai-live-chip .alc-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #10b981; display: inline-block;
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.7);
+}
+.ai-live-chip.off .alc-dot { background: #64748b; box-shadow: none; }

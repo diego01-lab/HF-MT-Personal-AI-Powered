@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.27';
+window.APP_VERSION = 'v.1.0.28';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -905,7 +905,9 @@ window.globalSpreads = window.globalSpreads || {};
 function recordSpread(sym, bid, ask) {
     const b = parseFloat(bid), a = parseFloat(ask);
     if (!(b > 0) || !(a > 0) || a < b) return;
-    window.globalSpreads[sym] = { pct: ((a - b) / ((a + b) / 2)) * 100, t: Date.now() };
+    // bid/ask salvati oltre alla % : servono a valutare il prezzo ESEGUIBILE
+    // di una chiusura (vendi al bid, ricopri all'ask), non solo il costo.
+    window.globalSpreads[sym] = { pct: ((a - b) / ((a + b) / 2)) * 100, t: Date.now(), bid: b, ask: a };
 }
 function getSpreadPctFor(sym) {
     const gs = window.globalSpreads;
@@ -916,6 +918,309 @@ function getSpreadPctFor(sym) {
     if (!q || Date.now() - q.t > 300000) return 0;
     return q.pct;
 }
+// Quote bid/ask FRESCA (max 60s) per decidere/piazzare una chiusura al prezzo
+// eseguibile: una finestra più larga (i 5 min di getSpreadPctFor) va bene per
+// stimare un costo, ma un bid vecchio minuti non è un prezzo a cui si esegue.
+// Ritorna { bid, ask, pct } oppure null se la quote manca o è stantia.
+function getFreshQuoteFor(sym) {
+    const gs = window.globalSpreads;
+    if (!gs) return null;
+    const s = (sym || '').replace('/', '');
+    const q = gs[sym] || gs[s] || (s.endsWith('USD') ? gs[s + 'T'] : null);
+    if (!q || !(q.bid > 0) || !(q.ask > 0) || Date.now() - q.t > 60000) return null;
+    return q;
+}
+window.getFreshQuoteFor = getFreshQuoteFor;
+
+// ─── Sentiment REALE (modulo "NLP Sentiment" del pannello AI) ───
+// Sostituisce il vecchio Math.random(): due sorgenti vere, entrambe in cache.
+//  1) Crypto Fear & Greed Index (alternative.me): sentiment di mercato crypto
+//     globale 0-100, rinfrescato ogni 30 min (via /proxy/fng nel browser,
+//     diretto in app nativa — dominio in allowlist CSP).
+//  2) Alpaca News API (v1beta1/news): titoli REALI per simbolo (azioni e
+//     crypto, stesse chiavi del feed dati), valutati con un lessico bull/bear
+//     e pesati per freschezza; una sola chiamata batch ogni 10 min.
+// tengine.js consuma il risultato via getSymbolSentiment(sym) → punti bull/bear.
+const FNG_URL = IS_NATIVE_APP ? 'https://api.alternative.me/fng/?limit=1&format=json' : '/proxy/fng';
+const SENTI_FNG_REFRESH_MS = 30 * 60 * 1000;
+const SENTI_NEWS_REFRESH_MS = 10 * 60 * 1000;
+const SENTI_NEWS_MAX_AGE_H = 24;      // notizie più vecchie di così: peso ~0
+const sentimentState = { fng: null, fngT: 0, news: {}, newsT: 0 };
+window.sentimentState = sentimentState; // esposto per diagnostica/console
+
+// Lessico minimale per titoli finanziari in inglese (le news Alpaca sono EN).
+// Non è NLP sofisticato ma è DATO REALE: un titolo "hack/lawsuit/plunge" pesa
+// bear, "surge/record/approval" pesa bull. Parole scelte per bassa ambiguità.
+const NEWS_LEX_POS = ['surge', 'surges', 'soar', 'soars', 'rally', 'rallies', 'jump', 'jumps', 'record high', 'all-time high', 'beats', 'beat estimates', 'upgrade', 'upgraded', 'approval', 'approves', 'approved', 'partnership', 'adoption', 'breakout', 'strong growth', 'tops estimates', 'buyback', 'bullish'];
+const NEWS_LEX_NEG = ['crash', 'crashes', 'plunge', 'plunges', 'plummet', 'plummets', 'dump', 'sell-off', 'selloff', 'slump', 'slumps', 'hack', 'hacked', 'exploit', 'breach', 'lawsuit', 'sues', 'sued', 'fraud', 'bankrupt', 'bankruptcy', 'ban', 'banned', 'downgrade', 'downgraded', 'misses', 'missed estimates', 'warning', 'liquidation', 'outage', 'halts', 'bearish', 'recession fears'];
+
+function scoreNewsText(text) {
+    const t = (text || '').toLowerCase();
+    let s = 0;
+    for (const w of NEWS_LEX_POS) { if (t.includes(w)) s++; }
+    for (const w of NEWS_LEX_NEG) { if (t.includes(w)) s--; }
+    return Math.max(-2, Math.min(2, s));
+}
+
+// Simbolo interno → simbolo con cui Alpaca tagga le news (BTCUSDT → BTCUSD,
+// AAPL → AAPL). Forex/commodity (OANDA) non hanno news su questo feed.
+function toNewsSym(sym) {
+    if (!sym || sym.includes('OANDA')) return null;
+    return sym.endsWith('USDT') ? sym.replace('USDT', 'USD') : sym;
+}
+
+async function refreshFearGreed() {
+    try {
+        const res = await fetch(FNG_URL);
+        if (!res.ok) return;
+        const data = await res.json();
+        const v = parseInt(data && data.data && data.data[0] && data.data[0].value);
+        if (v >= 0 && v <= 100) {
+            sentimentState.fng = v;
+            sentimentState.fngT = Date.now();
+            console.log(`[SENTI] Crypto Fear&Greed: ${v} (${data.data[0].value_classification || ''})`);
+        }
+    } catch (e) { /* rete assente: si riprova al prossimo giro */ }
+}
+
+async function refreshNewsSentiment() {
+    try {
+        const bk = (typeof getBrokerHttp === 'function') ? getBrokerHttp() : null;
+        if (!bk || !bk.key) return; // niente chiavi → niente news (il modulo resta muto)
+        // Batch: tutti i simboli effettivamente monitorati dal motore
+        const tracked = Object.keys(window.bgPriceHistories || {});
+        const map = {}; // newsSym → sym interno
+        for (const s of tracked) {
+            const ns = toNewsSym(s);
+            if (ns) map[ns] = s;
+        }
+        const newsSyms = Object.keys(map).slice(0, 45);
+        if (!newsSyms.length) return;
+        const url = `${ALPACA_DATA_BASE}/v1beta1/news?symbols=${encodeURIComponent(newsSyms.join(','))}&limit=50`;
+        const res = await fetch(url, { headers: { 'apca-api-key-id': bk.key, 'apca-api-secret-key': bk.secret } });
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = (data && data.news) || [];
+        const now = Date.now();
+        const agg = {}; // sym interno → { w: Σpesi, ws: Σ(peso×score), n }
+        for (const art of items) {
+            const score = scoreNewsText(`${art.headline || ''} ${art.summary || ''}`);
+            if (score === 0) continue;
+            const ageH = Math.max(0, (now - new Date(art.created_at || now).getTime()) / 3600000);
+            if (ageH > SENTI_NEWS_MAX_AGE_H) continue;
+            const w = Math.exp(-ageH / 8); // mezza vita ~5.5h: le news vecchie contano poco
+            for (const ns of (art.symbols || [])) {
+                const sym = map[ns];
+                if (!sym) continue;
+                const a = agg[sym] || (agg[sym] = { w: 0, ws: 0, n: 0 });
+                a.w += w; a.ws += w * score; a.n++;
+            }
+        }
+        sentimentState.news = agg;
+        sentimentState.newsT = now;
+        const covered = Object.keys(agg).length;
+        if (covered) console.log(`[SENTI] News aggiornate: ${items.length} articoli, ${covered} simboli con segnale.`);
+    } catch (e) { /* rete/quota: si riprova al prossimo giro */ }
+}
+
+// Punti bull(+)/bear(−) per la strategia, clampati a ±4 (il vecchio random
+// arrivava a ±6). Ritorna null se non ci sono dati freschi: un modulo onesto
+// tace quando non sa, non inventa.
+// Ritorna i punti SEPARATI per sorgente, perché hanno nature diverse:
+// le news sono EVENTI freschi (valgono sempre), il Fear&Greed è un indice
+// di REGIME aggiornato una volta al giorno (il chiamante lo applica solo
+// alle NUOVE aperture — sommato a ogni tick saturava il punteggio: log
+// 18/07/2026, SELL "100%" fisso su tutte le crypto con F&G a 25, e ogni
+// LONG sarebbe stato espulso da AI_REVERSAL con net≤−4 permanente).
+function getSymbolSentiment(sym) {
+    const now = Date.now();
+    let newsPoints = 0, fngPoints = 0;
+    let newsLabel = '', fngLabel = '';
+    // News per simbolo (valide se il refresh è avvenuto nell'ultima mezz'ora)
+    if (now - sentimentState.newsT < SENTI_NEWS_REFRESH_MS * 3) {
+        const a = sentimentState.news[sym];
+        if (a && a.w > 0) {
+            const avg = a.ws / a.w; // score medio pesato, in [-2, +2]
+            if (avg <= -1.2) { newsPoints = -4; newsLabel = 'Panic news'; }
+            else if (avg <= -0.4) { newsPoints = -2; newsLabel = 'News negative'; }
+            else if (avg >= 1.2) { newsPoints = 3; newsLabel = 'Euphoria news'; }
+            else if (avg >= 0.4) { newsPoints = 2; newsLabel = 'News positive'; }
+        }
+    }
+    // Fear & Greed: solo crypto, solo agli estremi (indice fresco < 2h).
+    // getAssetType vive nel bridge window (Object.assign in DOMContentLoaded):
+    // guardia typeof per le primissime chiamate all'avvio.
+    const isCryptoSym = (typeof getAssetType === 'function') ? getAssetType(sym) === 'CRYPTO' : /USDT?$/.test(sym || '');
+    if (isCryptoSym && sentimentState.fng !== null && now - sentimentState.fngT < 2 * 3600 * 1000) {
+        const v = sentimentState.fng;
+        // Bande allineate alla classificazione ufficiale alternative.me
+        if (v <= 25) { fngPoints = -2; fngLabel = `Extreme fear ${v}`; }
+        else if (v <= 45) { fngPoints = -1; fngLabel = `Fear ${v}`; }
+        else if (v >= 85) { fngPoints = 2; fngLabel = `Extreme greed ${v}`; }
+        else if (v >= 76) { fngPoints = 1; fngLabel = `Greed ${v}`; }
+    }
+    if (!newsLabel && !fngLabel) return null;
+    return {
+        points: Math.max(-4, Math.min(4, newsPoints + fngPoints)),
+        label: [newsLabel, fngLabel].filter(Boolean).join(' + '),
+        newsPoints, newsLabel, fngPoints, fngLabel
+    };
+}
+window.getSymbolSentiment = getSymbolSentiment;
+
+// Avvio ritardato (il bridge broker e le liste simboli si popolano all'init).
+// Il refresh news gira DUE volte in avvio: a 8s bgPriceHistories contiene
+// ancora pochi simboli (i feed si stanno connettendo) e la prima passata
+// copre solo quelli — verificato il 18/07: 1 simbolo coperto contro i 4 con
+// segnale reale. Il secondo giro a 90s ricopre l'intera lista monitorata.
+setTimeout(refreshFearGreed, 4000);
+setTimeout(refreshNewsSentiment, 8000);
+setTimeout(refreshNewsSentiment, 90000);
+setInterval(refreshFearGreed, SENTI_FNG_REFRESH_MS);
+setInterval(refreshNewsSentiment, SENTI_NEWS_REFRESH_MS);
+
+// ─── Barra AI Live (#aiLiveBar, sotto l'header) ───
+// Un chip per ogni modulo del pannello "Logica Algoritmo" con i dati VIVI
+// dei motori, aggiornato ogni 2s: Fear&Greed e news (sentimentState),
+// accuratezze/voti del predittore (predictorState in tengine.js), TP/SL
+// dinamici delle posizioni, memoria RL, drawdown peggiore per l'hedging.
+// Visibile solo in modalità AI Avanzata; chip .off = modulo spento.
+function _aiChip(id, color, title, value, on) {
+    return `<div class="ai-live-chip${on ? '' : ' off'}" id="${id}">` +
+        `<div class="alc-title" style="color:${color};"><span class="alc-dot"></span>${title}</div>` +
+        `<div class="alc-value">${value}</div></div>`;
+}
+
+// Etichette allineate alle bande UFFICIALI di alternative.me (a 25 l'API
+// risponde "Extreme Fear": prima la soglia interna era 20 e mostravamo
+// "Paura" mentre l'indice ufficiale diceva estrema).
+function _fngLabel(v) {
+    if (v <= 25) return tr('fng_extreme_fear', 'Paura estrema');
+    if (v <= 46) return tr('fng_fear', 'Paura');
+    if (v < 55) return tr('fng_neutral', 'Neutro');
+    if (v < 76) return tr('fng_greed', 'Avidità');
+    return tr('fng_extreme_greed', 'Avidità estrema');
+}
+
+function renderAiLiveBar() {
+    const bar = document.getElementById('aiLiveBar');
+    if (!bar) return;
+    if (!document.getElementById('aiModeToggle')?.checked) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    const offTxt = tr('ai_live_off', 'OFF');
+    const chips = [];
+    const now = Date.now();
+
+    // 1) NLP Sentiment: Fear&Greed live + copertura news + segnale più forte
+    const nlpOn = !!document.getElementById('aiModeSentiment')?.checked;
+    let nlpVal = offTxt;
+    if (nlpOn) {
+        const parts = [];
+        if (sentimentState.fng !== null && now - sentimentState.fngT < 2 * 3600 * 1000) {
+            parts.push(`F&G ${sentimentState.fng} ${_fngLabel(sentimentState.fng)}`);
+        }
+        if (sentimentState.newsT) {
+            const syms = Object.keys(sentimentState.news);
+            let top = null, topAbs = 0.39; // sotto ±0.4 il segnale non genera punti
+            for (const s of syms) {
+                const a = sentimentState.news[s];
+                const avg = a.w > 0 ? a.ws / a.w : 0;
+                if (Math.abs(avg) > topAbs) { topAbs = Math.abs(avg); top = { s, avg }; }
+            }
+            parts.push(`news ${syms.length} sim.${top ? ` · ${displaySymbol(top.s)} ${top.avg > 0 ? '▲' : '▼'}` : ''}`);
+        } else {
+            parts.push(tr('ai_live_news_wait', 'news in attesa…'));
+        }
+        nlpVal = parts.join(' · ');
+    }
+    chips.push(_aiChip('aiLiveNLP', '#c4b5fd', 'NLP Sentiment', nlpVal, nlpOn));
+
+    // 2) Predittore adattivo: simboli pronti, voti live (ultimi 15s), top accuratezza
+    const lstmOn = !!document.getElementById('aiModeLSTM')?.checked;
+    let predVal = offTxt;
+    if (lstmOn) {
+        const ps = window.predictorState || {};
+        const syms = Object.keys(ps);
+        if (!syms.length) predVal = tr('ai_live_pred_wait', 'in avvio…');
+        else {
+            let ready = 0, up = 0, down = 0, best = null;
+            for (const s of syms) {
+                const st = ps[s];
+                if (st.n >= 60) ready++;
+                if (now - (st.lastT || 0) < 15000) {
+                    if (st.lastPts > 0) up++;
+                    else if (st.lastPts < 0) down++;
+                }
+                const acc = Math.max.apply(null, st.acc);
+                if (!best || acc > best.acc) best = { s, acc };
+            }
+            predVal = `${ready}/${syms.length} ${tr('ai_live_pred_ready', 'pronti')} · ▲${up} ▼${down}` +
+                (best && best.acc > 0.52 ? ` · top ${(best.acc * 100).toFixed(0)}% ${displaySymbol(best.s)}` : '');
+        }
+    }
+    chips.push(_aiChip('aiLivePred', '#93c5fd', tr('ai_live_pred', 'Predittore'), predVal, lstmOn));
+
+    // 3) Risk Kelly/ATR: posizioni con TP/SL dinamici e medie correnti
+    const riskOn = !!document.getElementById('aiModeRisk')?.checked;
+    let riskVal = offTxt;
+    if (riskOn) {
+        const poss = Object.values(activePositions || {});
+        const dyn = poss.filter(p => p && p.dynamicTP > 0);
+        if (!poss.length) riskVal = tr('ai_live_risk_idle', 'Kelly+ATR pronti · 0 pos.');
+        else if (!dyn.length) riskVal = `${poss.length} pos. · TP/SL statici`;
+        else {
+            const avgTP = dyn.reduce((s, p) => s + p.dynamicTP, 0) / dyn.length;
+            const avgSL = dyn.reduce((s, p) => s + (p.dynamicSL || 0), 0) / dyn.length;
+            riskVal = `${dyn.length}/${poss.length} din. · TP ${avgTP.toFixed(2)}% SL ${avgSL.toFixed(2)}%`;
+        }
+    }
+    chips.push(_aiChip('aiLiveRisk', '#6ee7b7', 'Risk Kelly/ATR', riskVal, riskOn));
+
+    // 4) Reinforcement Learning: asset penalizzati/premiati e caso peggiore
+    const rlOn = !!document.getElementById('aiModeRL')?.checked;
+    let rlVal = offTxt;
+    if (rlOn) {
+        const mem = window.rlMemory || {};
+        let pen = 0, rew = 0, worst = null;
+        for (const s in mem) {
+            const m = mem[s];
+            const long = (typeof m === 'number') ? m : (m.long || 0);
+            const short = (typeof m === 'number') ? m : (m.short || 0);
+            const minv = Math.min(long, short), maxv = Math.max(long, short);
+            if (minv <= -1) { pen++; if (!worst || minv < worst.v) worst = { s, v: minv }; }
+            else if (maxv >= 1) rew++;
+        }
+        rlVal = (!pen && !rew) ? tr('ai_live_rl_empty', 'memoria neutra')
+            : `${pen}▼ ${rew}▲${worst ? ` · ${displaySymbol(worst.s)} ${worst.v.toFixed(1)}` : ''}`;
+    }
+    chips.push(_aiChip('aiLiveRL', '#5eead4', 'Reinforcement', rlVal, rlOn));
+
+    // 5) Hedging: drawdown peggiore tra le posizioni aperte (soglia −3%)
+    const hedgeOn = !!document.getElementById('aiModeHedging')?.checked;
+    let hedgeVal = offTxt;
+    if (hedgeOn) {
+        let worstP = null, hedged = 0;
+        for (const sym in activePositions) {
+            const p = activePositions[sym];
+            if (!p) continue;
+            if (p.isHedged) hedged++;
+            const lp = getLivePriceFor(sym) || p.entryPrice;
+            if (lp > 0 && p.entryPrice > 0) {
+                const pct = p.type === 'LONG' ? (lp / p.entryPrice - 1) * 100 : (p.entryPrice / lp - 1) * 100;
+                if (!worstP || pct < worstP.pct) worstP = { sym, pct };
+            }
+        }
+        hedgeVal = worstP
+            ? `${tr('ai_live_hedge_worst', 'peggiore')} ${displaySymbol(worstP.sym)} ${worstP.pct >= 0 ? '+' : ''}${worstP.pct.toFixed(2)}%${hedged ? ` · ${hedged} hedge` : ''}`
+            : tr('ai_live_hedge_idle', 'in ascolto · 0 pos.');
+    }
+    chips.push(_aiChip('aiLiveHedge', '#fdba74', 'Hedging', hedgeVal, hedgeOn));
+
+    bar.innerHTML = chips.join('');
+}
+window.renderAiLiveBar = renderAiLiveBar;
+setTimeout(renderAiLiveBar, 3000);
+setInterval(renderAiLiveBar, 2000);
 let activePositions = {};
 let tradeCooldowns = {};
 // Durata del cooldown per-simbolo scritta da closeTrade insieme a
@@ -5962,7 +6267,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const durationMs = trade.exitTime && trade.entryTime ? trade.exitTime - trade.entryTime : 0;
                 const durationStr = formatDuration(durationMs);
 
-                const reasonColors = { 'TP': '#10b981', 'SL': '#ef4444', 'TRAILING_SL': '#f59e0b', 'BREAKEVEN': '#38bdf8', 'HEDGE_PROTECTION': '#f97316', 'SIGNAL': '#8b5cf6', 'MANUAL': '#94a3b8', 'BROKER_SYNC': '#60a5fa' };
+                const reasonColors = { 'TP': '#10b981', 'SL': '#ef4444', 'TRAILING_SL': '#f59e0b', 'BREAKEVEN': '#38bdf8', 'HEDGE_PROTECTION': '#f97316', 'SIGNAL': '#8b5cf6', 'MANUAL': '#94a3b8', 'BROKER_SYNC': '#60a5fa', 'AI_REVERSAL': '#a78bfa', 'EOD_FLAT': '#facc15' };
                 const reasonLabels = {
                     'TP': tr('tip_tp', 'Take Profit: Operazione chiusa in guadagno automatico'),
                     'SL': tr('tip_sl', 'Stop Loss: Operazione chiusa per limitare le perdite'),
@@ -5971,7 +6276,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'HEDGE_PROTECTION': tr('tip_hedge', 'Protezione: chiusura d\'emergenza per crollo oltre la soglia di sicurezza'),
                     'SIGNAL': tr('tip_signal', 'Signal: Operazione aperta/chiusa in base ai segnali del bot'),
                     'MANUAL': tr('tip_manual', 'Manuale: Operazione gestita direttamente dall\'utente'),
-                    'BROKER_SYNC': tr('tip_broker_sync', 'Broker Sync: Operazione sincronizzata direttamente dal conto Alpaca')
+                    'BROKER_SYNC': tr('tip_broker_sync', 'Broker Sync: Operazione sincronizzata direttamente dal conto Alpaca'),
+                    'AI_REVERSAL': tr('tip_ai_reversal', 'Inversione: chiusa dal bot per segnale opposto confermato'),
+                    'EOD_FLAT': tr('tip_eod_flat', 'Fine sessione: azione chiusa prima della campanella per evitare il gap overnight')
                 };
                 const typeLabels = {
                     'LONG': tr('tip_long', 'Long: posizione di acquisto (guadagna se il prezzo sale)'),

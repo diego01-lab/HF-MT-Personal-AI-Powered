@@ -29,8 +29,39 @@ const STRAT_COOLDOWN_MS = 1000;
 const RL_HALF_LIFE_MS = 3 * 3600 * 1000;
 // Anti-churn: età minima di una posizione prima che un segnale opposto
 // possa chiuderla (le inversioni nei primi secondi sono quasi sempre
-// rumore e il giro apri-chiudi brucia lo spread)
-const MIN_REVERSAL_AGE_MS = 60000;
+// rumore e il giro apri-chiudi brucia lo spread). Era 60s: la cronologia
+// 17/07/2026 mostra 159 scalp azioni con detenzione MEDIANA di 64s (cioè
+// questo pavimento), movimento catturato mediano |0.09%| contro ~0.08% di
+// costi round-trip → il bot apriva e richiudeva al primo flip pagando di
+// fatto solo fee+spread a ogni giro.
+const MIN_REVERSAL_AGE_MS = 300000;
+// Spread PRUDENZIALE quando la quote bid/ask non è (ancora) nota: prima
+// valeva 0 e le soglie "nette" (tpAllowed, filtro edge d'ingresso) si
+// abbassavano proprio quando l'informazione mancava — in cronologia 17/07
+// 11 TP su 16 hanno chiuso in perdita reale. Valori tipici osservati:
+// crypto Alpaca 0.2-0.6%, azioni in sessione regolare 0.02-0.08%.
+const UNKNOWN_SPREAD_COMP_CRYPTO = 0.35;
+const UNKNOWN_SPREAD_COMP_STOCK = 0.05;
+// Filtro "edge" d'ingresso: il movimento atteso (metà larghezza Bollinger)
+// deve valere almeno QUESTO multiplo del costo di round-trip (fee+spread),
+// altrimenti anche il trade perfetto consegna quasi tutto al broker.
+const MIN_EDGE_COST_MULT = 2;
+// Orizzonte di detenzione TIPICO per categoria, usato per riscalare il
+// movimento atteso del filtro edge. La larghezza Bollinger è misurata su
+// ~100s di campioni, ma le posizioni vivono molto più a lungo (scalp azioni
+// ≥ MIN_REVERSAL_AGE_MS; crypto con TP ~1.8% ore, dalla cronologia 4h-2gg):
+// senza riscala il confronto con i costi avviene su orizzonti incompatibili
+// e il filtro blocca TUTTO (log 18/07/2026: "atteso 0.00% < 2× costi 1.25%"
+// su ogni crypto, ingressi crypto di fatto azzerati anche a mercato mosso).
+// La riscala usa la radice del tempo (diffusione): raddoppiare l'orizzonte
+// non raddoppia l'escursione attesa, la moltiplica per √2.
+const EDGE_HORIZON_STOCK_S = 600;         // ~10 min: età minima 5 min + corsa al TP
+const EDGE_HORIZON_CRYPTO_S = 4 * 3600;   // ~4h: durata tipica osservata dei TP crypto
+// Tetto DURO alle posizioni crypto simultanee: le altcoin sono fortemente
+// correlate tra loro e a BTC — il basket del 15/07/2026 (10 LONG alt aperti
+// insieme) è sceso in blocco: −34$ netti, il 78% delle perdite del periodo.
+// Oltre questo numero il rischio non si diversifica, si moltiplica.
+const MAX_CONCURRENT_CRYPTO = 4;
 // Grazia anti-spread sullo SL: nei primi secondi il PnL broker sconta lo
 // spread di apertura (la posizione "nasce" già negativa) e lo stop veniva
 // bucato in 4-10s senza alcun movimento reale del mercato. Nei primi 45s
@@ -189,6 +220,50 @@ function calculateMomentum(prices, period = 10) {
     return prices[prices.length - 1] - prices[prices.length - 1 - period];
 }
 
+// ─── Predittore adattivo (modulo "LSTM"/Predictor del pannello AI) ───
+// Sostituisce il vecchio Math.random(): modello REALE e per-simbolo sui
+// prezzi effettivi. Tre segnali di momentum a orizzonti diversi; per ognuno
+// si misura IN CONTINUO (EWMA) quanto ha davvero predetto il movimento
+// successivo su quel simbolo, e il suo voto pesa solo per l'accuratezza
+// oltre il caso (acc − 0.5). Se nessun orizzonte batte il caso il modulo
+// resta muto: un predittore onesto dice "non lo so" invece di inventare.
+const PREDICTOR_HORIZONS = [3, 8, 20];      // campioni (~secondi) di lookback
+const PREDICTOR_WARMUP_TICKS = 60;          // niente voti finché l'accuratezza non è stimata
+const predictorState = {};                  // sym → { acc: [..], n }
+
+function predictorPoints(sym, history) {
+    const need = PREDICTOR_HORIZONS[PREDICTOR_HORIZONS.length - 1] * 2 + 1;
+    if (!history || history.length < need) return 0;
+    const st = predictorState[sym] || (predictorState[sym] = { acc: PREDICTOR_HORIZONS.map(() => 0.5), n: 0 });
+    const L = history.length;
+    let score = 0;
+    for (let i = 0; i < PREDICTOR_HORIZONS.length; i++) {
+        const h = PREDICTOR_HORIZONS[i];
+        // Verifica a posteriori: il momentum di h campioni fa aveva previsto
+        // il movimento poi realizzato? Aggiorna l'accuratezza dell'orizzonte.
+        const pastSig = Math.sign(history[L - 1 - h] - history[L - 1 - 2 * h]);
+        const realized = Math.sign(history[L - 1] - history[L - 1 - h]);
+        if (pastSig !== 0 && realized !== 0) {
+            st.acc[i] = st.acc[i] * 0.98 + (pastSig === realized ? 1 : 0) * 0.02;
+        }
+        // Voto attuale: direzione corrente pesata per il merito storico
+        score += Math.sign(history[L - 1] - history[L - 1 - h]) * (st.acc[i] - 0.5);
+    }
+    st.n++;
+    let pts = 0;
+    if (st.n >= PREDICTOR_WARMUP_TICKS) {
+        if (score >= 0.06) pts = 2;
+        else if (score >= 0.03) pts = 1;
+        else if (score <= -0.06) pts = -2;
+        else if (score <= -0.03) pts = -1;
+    }
+    // Ultimo voto e timestamp: letti dalla Barra AI Live (renderAiLiveBar)
+    st.lastPts = pts;
+    st.lastT = Date.now();
+    return pts;
+}
+window.predictorState = predictorState; // esposto per la Barra AI Live/diagnostica
+
 // ═══════════════════════════════════════════════════════════════════
 // Strategie: motore AI + fallback EMA
 // ═══════════════════════════════════════════════════════════════════
@@ -283,19 +358,35 @@ function evaluateStrategyAI(sym, history, price) {
         const useRL = document.getElementById('aiModeRL')?.checked;
 
         if (useNLP) {
-            const sentimentRandom = Math.random();
-            if (sentimentRandom > 0.96) {
-                bearScore += 6; reasons.push('NLP Panic News (-)');
-                console.log(`📰 [AI NLP] Rilevato panic-sentiment globale su ${sym}. Blocco long.`);
-            } else if (sentimentRandom < 0.04) {
-                bullScore += 6; reasons.push('NLP Euphoria (+)');
+            // Sentiment REALE (getSymbolSentiment in app.js): news per simbolo
+            // via Alpaca News + Fear&Greed crypto. Il vecchio Math.random()
+            // iniettava ±6 punti di rumore che flippava i segnali (log 18/07:
+            // stesso simbolo SELL 82% → BUY 89% in pochi secondi).
+            // DOSAGGIO: le news (eventi freschi) pesano SEMPRE; il Fear&Greed
+            // (indice di regime, 1 aggiornamento al giorno) pesa SOLO senza
+            // posizione aperta — gate d'ingresso, mai carburante di chiusura:
+            // sommato a ogni tick teneva net≤−4 fisso e AI_REVERSAL avrebbe
+            // espulso qualunque LONG crypto allo scadere dell'età minima.
+            const senti = (typeof getSymbolSentiment === 'function') ? getSymbolSentiment(sym) : null;
+            if (senti) {
+                const hasPos = !!activePositions[sym];
+                const sentiPts = hasPos ? (senti.newsPoints || 0) : senti.points;
+                const sentiLabel = hasPos ? senti.newsLabel : senti.label;
+                if (sentiPts > 0) { bullScore += sentiPts; reasons.push(`NLP ${sentiLabel}`); }
+                else if (sentiPts < 0) {
+                    bearScore += -sentiPts;
+                    reasons.push(`NLP ${sentiLabel}`);
+                    if (sentiPts <= -4) console.log(`📰 [AI NLP] News fortemente negative su ${sym} (${sentiLabel}): pressione bear reale.`);
+                }
             }
         }
 
         if (useLSTM) {
-            const lstmScore = Math.random();
-            if (lstmScore > 0.75) { bullScore += 2; reasons.push('LSTM Bullish'); }
-            else if (lstmScore < 0.25) { bearScore += 2; reasons.push('LSTM Bearish'); }
+            // Predittore adattivo REALE (vedi predictorPoints): vota solo se
+            // i suoi orizzonti di momentum battono il caso su QUESTO simbolo.
+            const predPts = predictorPoints(sym, history);
+            if (predPts > 0) { bullScore += predPts; reasons.push('Predictor Bullish'); }
+            else if (predPts < 0) { bearScore += -predPts; reasons.push('Predictor Bearish'); }
         }
 
         if (useRL && window.rlMemory && window.rlMemory[sym] !== undefined) {
@@ -350,13 +441,43 @@ function evaluateStrategyAI(sym, history, price) {
 
             // Considera i costi di commissione: TP deve almeno coprire i costi + un po' di margine
             const netBreakeven = getNetBreakevenPct(sym);
-            const minTarget = netBreakeven + 0.15; // deve guadagnare netto 0.15% minimo
+            // Costo di ROUND-TRIP completo: breakeven strutturale (fee + spread
+            // tipico del listino) + spread LIVE misurato adesso — o una stima
+            // prudenziale per categoria se la quote non è ancora nota.
+            const liveSpreadEntry = getSpreadPctFor(sym);
+            const spreadEstEntry = liveSpreadEntry > 0 ? Math.min(liveSpreadEntry, 3.0)
+                : (getAssetType(sym) === 'CRYPTO' ? UNKNOWN_SPREAD_COMP_CRYPTO : UNKNOWN_SPREAD_COMP_STOCK);
+            const roundTripCostPct = netBreakeven + spreadEstEntry;
+            const minTarget = Math.max(netBreakeven + 0.15, roundTripCostPct + 0.1); // netto minimo reale
 
             // TP: Risk/Reward ratio di 1:1.5, con pavimento scalping
             let dynamicTP = Math.min(15.0, Math.max(minTarget, (dynamicSL * 1.5)));
 
             // Se la volatilità è bassissima, forza SL a ridosso per non rimanere incastrati
             if (dynamicTP === minTarget) dynamicSL = Math.max(minSL, minTarget / 1.5);
+
+            // FILTRO EDGE vs COSTI: la corsa plausibile del prezzo deve valere
+            // almeno MIN_EDGE_COST_MULT volte il costo di round-trip. Sotto
+            // questa soglia anche il trade PERFETTO lascia quasi tutto in
+            // fee+spread (cronologia 17/07/2026: 159 scalp ~60s con movimento
+            // mediano |0.09%| contro ~0.08% di costi → −6.4$ netti).
+            // La metà-larghezza Bollinger (mid → banda, misurata su ~100s di
+            // campioni) viene RISCALATA all'orizzonte di detenzione della
+            // categoria con la radice del tempo — vedi EDGE_HORIZON_*_S: in
+            // un mercato fermo resta ~0 e blocca (giusto: nessun movimento da
+            // catturare), in un mercato mosso l'escursione proiettata supera
+            // i costi e l'ingresso passa.
+            const obsWindowS = Math.max(20, Math.min(history.length, 100)); // campioni ~1s
+            const edgeHorizonS = getAssetType(sym) === 'CRYPTO' ? EDGE_HORIZON_CRYPTO_S : EDGE_HORIZON_STOCK_S;
+            const horizonScale = Math.sqrt(edgeHorizonS / obsWindowS);
+            const expectedMovePct = (volatilityPct / 2) * horizonScale;
+            if (expectedMovePct < roundTripCostPct * MIN_EDGE_COST_MULT) {
+                if (isBotActive && Date.now() % 15000 < 500) {
+                    console.log(`[STRAT] ${sym}: movimento atteso ${expectedMovePct.toFixed(2)}% (su ~${Math.round(edgeHorizonS / 60)} min) < ${MIN_EDGE_COST_MULT}× costi ${roundTripCostPct.toFixed(2)}% — ingresso saltato.`);
+                }
+                if (isBotActive) bumpSkipped('edge');
+                return;
+            }
 
             // Filtro evidenza minima: HFT mode -> bastano 4 punti per aprire trade rapidi
             const totalEvidence = bullScore + bearScore;
@@ -388,23 +509,27 @@ function evaluateStrategyAI(sym, history, price) {
                 openTrade('SHORT', price, sym, dynamicTP, dynamicSL, confidence);
             }
         } else {
-            // CHIUSURA DINAMICA (AI Reversal) — con filtro anti-churn:
-            // nei primi 90s la posizione non viene chiusa da segnali opposti
-            // (rumore) e il segnale contrario deve essere convinto (>= 60%).
+            // CHIUSURA DINAMICA (AI Reversal) — filtro anti-inversione
+            // RIATTIVATO (cronologia 17/07/2026: col filtro spento il bot
+            // flippava al primo segnale opposto allo scadere dell'età minima —
+            // 159 scalp, win rate 43%, payoff 0.94 → aspettativa negativa per
+            // costruzione). Ora l'inversione chiude solo se: la posizione ha
+            // almeno MIN_REVERSAL_AGE_MS, E il segnale opposto è CONVINTO
+            // (>= 75%) e nato da un EVENTO reale (cross/estremo, non semplice
+            // continuazione), oppure lo sbilanciamento è forte (|net| >= 4)
+            // con il trend contro. Le uscite ordinarie restano TP/SL/trailing.
             const posAgeMs = pos.openTime ? (now - pos.openTime) : Infinity;
             const canReverse = posAgeMs >= MIN_REVERSAL_AGE_MS;
-            // OPZIONE A (filtro anti-inversione): DISATTIVATO per HFT Scalper.
-            // Vogliamo flippare rapidamente se il segnale cambia.
             if (pos.type === 'LONG') {
-                const reversal = (signal === 'SELL' && confidence >= 60) || (net <= -2 && !isBullTrend);
+                const reversal = (signal === 'SELL' && confidence >= 75 && bearEvent) || (net <= -4 && !isBullTrend);
                 if (canReverse && reversal) {
-                    console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione HFT (Net:${net})`);
+                    console.log(`[STRAT CLOSE] Chiudo LONG su ${sym} per inversione confermata (Net:${net}, Conf:${confidence}%)`);
                     closeTrade(sym, price, 'AI_REVERSAL');
                 }
             } else if (pos.type === 'SHORT') {
-                const reversal = (signal === 'BUY' && confidence >= 60) || (net >= 2 && !isBearTrend);
+                const reversal = (signal === 'BUY' && confidence >= 75 && bullEvent) || (net >= 4 && !isBearTrend);
                 if (canReverse && reversal) {
-                    console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione HFT (Net:${net})`);
+                    console.log(`[STRAT CLOSE] Chiudo SHORT su ${sym} per inversione confermata (Net:${net}, Conf:${confidence}%)`);
                     closeTrade(sym, price, 'AI_REVERSAL');
                 }
             }
@@ -453,18 +578,37 @@ function evaluateStrategyFallback(sym, history, price) {
     }
 }
 
-// Sessione REGOLARE di borsa per le azioni (09:30-16:00 EST). Distinta da
-// isMarketOpen('STOCK') (04:00-20:00 EST, usata per grafico/prezzo): fuori
-// da questa finestra (pre-market/after-hours) lo spread è molto più ampio e
-// il prezzo più erratico, causando churn (aperture/chiusure quasi a pari,
-// osservate in cronologia). Qui blocchiamo solo le NUOVE aperture — le
-// posizioni azionarie già aperte restano gestite (TP/SL) anche fuori sessione.
-function isRegularStockSession() {
+// Sessione REGOLARE di borsa per le azioni. Distinta da isMarketOpen('STOCK')
+// (04:00-20:00 EST, usata per grafico/prezzo): fuori da questa finestra
+// (pre-market/after-hours) lo spread è molto più ampio e il prezzo più
+// erratico, causando churn (aperture/chiusure quasi a pari, osservate in
+// cronologia). Qui blocchiamo solo le NUOVE aperture — le posizioni azionarie
+// già aperte restano gestite (TP/SL) anche fuori sessione.
+// Gli INGRESSI si fermano a 15:40 EST (non 16:00): una posizione aperta a
+// ridosso della campanella non ha il tempo di essere gestita e finisce
+// overnight, dove lo SL app-side non protegge (il 16→17/07/2026 NFLX ha
+// gappato −11.4% a mercato chiuso). Da 15:50 EST il bot LIQUIDA le azioni
+// ancora aperte (vedi isStockEodFlatWindow).
+const STOCK_ENTRY_CUTOFF_MIN = 15 * 60 + 40; // 15:40 EST: ultimo ingresso azioni
+const STOCK_EOD_FLAT_MIN = 15 * 60 + 50;     // 15:50 EST: inizio liquidazione EOD
+function _estMinutesNow() {
     const est = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const day = est.getDay();
-    if (day === 0 || day === 6) return false;
-    const t = est.getHours() * 60 + est.getMinutes();
-    return t >= 9 * 60 + 30 && t < 16 * 60;
+    if (day === 0 || day === 6) return -1; // weekend
+    return est.getHours() * 60 + est.getMinutes();
+}
+function isRegularStockSession() {
+    const t = _estMinutesNow();
+    return t >= 9 * 60 + 30 && t < STOCK_ENTRY_CUTOFF_MIN;
+}
+// Finestra di liquidazione di fine giornata per le AZIONI (15:50-16:00 EST):
+// il rischio gap overnight non è gestibile dall'app (a mercato chiuso nessun
+// ordine esegue e lo SL viene saltato dal gap di apertura), quindi il bot
+// chiude tutte le posizioni azionarie prima della campanella. Best effort:
+// il risk loop ritenta a ogni tick finché la finestra è aperta.
+function isStockEodFlatWindow() {
+    const t = _estMinutesNow();
+    return t >= STOCK_EOD_FLAT_MIN && t < 16 * 60;
 }
 
 // ─── Modello commissioni per BROKER × categoria ───
@@ -599,10 +743,30 @@ function getNetBreakevenPct(sym, ctx) {
 function tpAllowed(sym, unrealizedPct, effTP, posAge) {
     if (unrealizedPct < effTP) return false;                 // TP impostato non raggiunto
     const cost = getNetBreakevenPct(sym);
-    const spreadComp = Math.min(getSpreadPctFor(sym), 3.0);  // 0 se spread sconosciuto
+    // Spread sconosciuto → compensazione PRUDENZIALE per categoria, non 0:
+    // con 0 il TP passava "alla cieca" proprio quando mancava l'informazione
+    // (cronologia 17/07/2026: 11 TP su 16 chiusi in perdita reale).
+    const liveSpread = getSpreadPctFor(sym);
+    const spreadComp = liveSpread > 0 ? Math.min(liveSpread, 3.0)
+        : (getAssetType(sym) === 'CRYPTO' ? UNKNOWN_SPREAD_COMP_CRYPTO : UNKNOWN_SPREAD_COMP_STOCK);
     const netFloor = cost + spreadComp;                      // soglia lorda per netto >= 0
     if (unrealizedPct < netFloor) return false;              // profitto netto non garantito
     if (posAge < SL_GRACE_MS && unrealizedPct < netFloor + cost) return false; // grazia TP
+    // Verifica sul prezzo ESEGUIBILE: unrealizedPct è calcolato sull'ultimo
+    // scambio, ma una vendita a mercato esegue al BID (e una ricopertura
+    // all'ASK). Se la quote fresca dice che al prezzo eseguibile il profitto
+    // non copre i costi, il "TP" registrerebbe una perdita: niente chiusura.
+    const pos = activePositions[sym];
+    const q = (typeof getFreshQuoteFor === 'function') ? getFreshQuoteFor(sym) : null;
+    if (pos && q && pos.entryPrice > 0) {
+        const execPx = pos.type === 'LONG' ? q.bid : q.ask;
+        if (execPx > 0) {
+            const execPct = pos.type === 'LONG'
+                ? (execPx / pos.entryPrice - 1) * 100
+                : (pos.entryPrice / execPx - 1) * 100;
+            if (execPct < cost) return false;                // al bid/ask il netto non c'è
+        }
+    }
     return true;
 }
 
@@ -659,7 +823,7 @@ function updateSkippedCounterUI() {
         const el = document.getElementById('skippedCounter');
         if (!el) return;
         const c = skippedCounters;
-        const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos + (c.spread || 0) + (c.exthours || 0);
+        const total = c.shortcrypto + c.nocash + c.reject + c.qty + c.maxpos + (c.spread || 0) + (c.exthours || 0) + (c.edge || 0) + (c.maxcrypto || 0);
         // Visibile per TUTTA la sessione col bot attivo (anche a 0), così è chiaro che
         // c'è e sta contando; si nasconde solo a bot fermo.
         if (!isBotActive) { el.style.display = 'none'; return; }
@@ -671,6 +835,8 @@ function updateSkippedCounterUI() {
         if (c.maxpos) parts.push(`${tr('skip_maxpos', 'limite')} ${c.maxpos}`);
         if (c.spread) parts.push(`${tr('skip_spread', 'spread')} ${c.spread}`);
         if (c.exthours) parts.push(`${tr('skip_exthours', 'fuori sessione')} ${c.exthours}`);
+        if (c.edge) parts.push(`${tr('skip_edge', 'movimento < costi')} ${c.edge}`);
+        if (c.maxcrypto) parts.push(`${tr('skip_maxcrypto', 'tetto crypto')} ${c.maxcrypto}`);
         const totalEl = document.getElementById('skippedTotal');
         const breakEl = document.getElementById('skippedBreakdown');
         if (totalEl) totalEl.textContent = total;
@@ -679,7 +845,7 @@ function updateSkippedCounterUI() {
     });
 }
 window.resetSkippedCounters = function () {
-    skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = skippedCounters.exthours = 0;
+    skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = skippedCounters.exthours = skippedCounters.edge = skippedCounters.maxcrypto = 0;
     updateSkippedCounterUI();
 };
 
@@ -776,6 +942,19 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
         }
         if (isBotActive) { botNotify('maxpos', tr('bot_skip_maxpos', 'Limite posizioni aperte raggiunto ({open}/{max}): nessun nuovo ordine finché non se ne chiude una.', { open: openCount, max: maxPositionsLimit }), 'warning', 30000); bumpSkipped('maxpos'); }
         return;
+    }
+
+    // Tetto DURO crypto: le altcoin si muovono in blocco con BTC — dieci LONG
+    // alt simultanei non sono diversificazione, sono la stessa scommessa presa
+    // dieci volte con fee 10× (basket 15/07/2026: −34$ netti, 78% delle
+    // perdite). Vale solo per il bot: gli ordini manuali restano liberi.
+    if (isBotActive && getAssetType(sym) === 'CRYPTO') {
+        const cryptoOpen = Object.keys(activePositions).filter(s => getAssetType(s) === 'CRYPTO').length;
+        if (cryptoOpen >= MAX_CONCURRENT_CRYPTO) {
+            botNotify('maxcrypto', tr('bot_skip_maxcrypto', 'Già {n} posizioni crypto aperte (fortemente correlate): nessun nuovo ingresso crypto finché non se ne chiude una.', { n: cryptoOpen }), 'warning', 30000);
+            bumpSkipped('maxcrypto');
+            return;
+        }
     }
 
     // Diversificazione per categoria: distribuisce le posizioni equamente tra le categorie attive.
@@ -1230,10 +1409,60 @@ async function closeTrade(sym, price, reason = 'MANUAL') {
                 }
             } catch (e) { console.warn('[ALPACA] Cancellazione ordini pendenti pre-chiusura fallita:', e); }
 
-            // Metodo 1: Liquidazione Totale (DELETE) tramite Manager
+            // Metodo 0 (solo CRYPTO, chiusure lato profitto): LIMIT IOC al bid.
+            // La liquidazione a mercato attraversa TUTTO lo spread (0.1-1%+
+            // sulle crypto) ed era la causa dei "TP" registrati in perdita
+            // reale (cronologia 17/07/2026: 11 TP su 16, netto −15.6$). Il
+            // limit al bid fissa il PEGGIOR prezzo accettabile: se l'IOC non
+            // riempie, la posizione riappare al sync e il risk loop ritenta
+            // con una quote aggiornata. Per SL/HEDGE resta il market di
+            // Metodo 1: una chiusura di protezione deve essere CERTA, non
+            // ottimale (un limit mancato in un crollo peggiora la perdita).
             let liquidationSuccess = false;
             let liquidationErr = '';
-            try {
+            const priceProtectedClose = ['TP', 'BREAKEVEN', 'TRAILING_SL'].includes(reason);
+            const freshQ = (typeof getFreshQuoteFor === 'function') ? getFreshQuoteFor(sym) : null;
+            if (priceProtectedClose && pos.type === 'LONG' && getAssetType(sym) === 'CRYPTO' && freshQ && freshQ.bid > 0) {
+                try {
+                    let orderSym = alpacaSym.replace('OANDA:', '').replace('_', '/');
+                    if (!orderSym.includes('/') && orderSym.endsWith('USD') && orderSym.length >= 6) {
+                        orderSym = orderSym.slice(0, -3) + '/USD'; // BTCUSD → BTC/USD
+                    }
+                    const lp = freshQ.bid;
+                    let limitStr;
+                    if (lp < 0.0001) limitStr = lp.toFixed(8);
+                    else if (lp < 0.01) limitStr = lp.toFixed(6);
+                    else limitStr = lp.toFixed(4);
+                    const iocResp = await fetch(`${ALPACA_BASE}/v2/orders`, {
+                        method: 'POST',
+                        headers: {
+                            'apca-api-key-id': alpacaKeyId,
+                            'apca-api-secret-key': alpacaSecretKey,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            symbol: orderSym,
+                            qty: String(pos.amount),
+                            side: 'sell',
+                            type: 'limit',
+                            limit_price: limitStr,
+                            time_in_force: 'ioc'
+                        })
+                    });
+                    if (iocResp.ok) {
+                        liquidationSuccess = true;
+                        console.log(`[ALPACA] Chiusura crypto ${orderSym} inviata come LIMIT IOC al bid ${limitStr} (motivo ${reason}).`);
+                    } else {
+                        const iocErr = await iocResp.text();
+                        console.warn(`[ALPACA] LIMIT IOC ${orderSym} rifiutato, passo alla liquidazione a mercato:`, iocErr);
+                    }
+                } catch (e) {
+                    console.warn('[ALPACA] LIMIT IOC fallito, passo alla liquidazione a mercato:', e);
+                }
+            }
+
+            // Metodo 1: Liquidazione Totale (DELETE) tramite Manager
+            if (!liquidationSuccess) try {
                 const mgr = getAlpacaManager();
                 if (mgr) {
                     await mgr.closePosition(identifier);
@@ -1573,6 +1802,19 @@ function manageOpenPositionRisk(sym, pos, livePrice, unrealizedPct, opts) {
     if (manageRisk) {
         const closePending = closingAssets.has(sym) || (Date.now() - (recentlyClosed[sym] || 0) < 30000);
 
+        // -- Liquidazione EOD azioni (anti gap overnight) --
+        // Dalle 15:50 EST il bot chiude le posizioni azionarie ancora aperte:
+        // a mercato chiuso lo SL app-side non può eseguire e il gap di apertura
+        // lo salta (16→17/07/2026: NFLX −11.4%, un quinto delle perdite azioni
+        // di giornata). Solo col bot attivo: le posizioni manuali a bot fermo
+        // restano una scelta dell'utente.
+        if (isBotActive && getAssetType(sym) === 'STOCK' && isStockEodFlatWindow()
+            && !pos.isActuallyClosing && !closePending) {
+            console.log(`[EOD] Chiusura di fine sessione per ${sym}: niente posizioni azionarie overnight.`);
+            closeTrade(sym, livePrice, 'EOD_FLAT');
+            return { effTP, effSL, closed: true };
+        }
+
         // Quota del drawdown che NON è movimento di mercato: il mark è al bid
         // mentre si è comprato all'ask. Le soglie di PERDITA (SL, hedging) la
         // compensano, altrimenti su asset a spread largo scattano senza che il
@@ -1695,6 +1937,12 @@ function manageBgRiskCurrentCtx() {
         if (!pos || pos.isActuallyClosing) continue;
         const livePrice = getLivePriceFor(sym) || pos.entryPrice;
         if (!livePrice || livePrice <= 0) continue;
+        // Liquidazione EOD azioni: stessa regola del motore principale (le
+        // posizioni dei contesti in background sono aperte dal bot locale).
+        if (getAssetType(sym) === 'STOCK' && isStockEodFlatWindow()) {
+            closeTrade(sym, livePrice, 'EOD_FLAT');
+            continue;
+        }
         if (aiDynamicOn) recalibrateDynamicTPSL(sym, pos);
         const unrealizedPct = pos.type === 'LONG'
             ? (livePrice / pos.entryPrice - 1) * 100
