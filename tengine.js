@@ -57,6 +57,14 @@ const MIN_EDGE_COST_MULT = 2;
 // non raddoppia l'escursione attesa, la moltiplica per √2.
 const EDGE_HORIZON_STOCK_S = 600;         // ~10 min: età minima 5 min + corsa al TP
 const EDGE_HORIZON_CRYPTO_S = 4 * 3600;   // ~4h: durata tipica osservata dei TP crypto
+// Guardie anti-artefatto sull'INGRESSO: con uno storico troppo corto gli
+// indicatori sono rumore, e una larghezza Bollinger irrealistica su ~100s
+// (18/07/2026: BB 5.3% su mercato piatto, causata dal mix di feed di venue
+// diverse) indica dati sporchi o un flash-move — in entrambi i casi meglio
+// NON aprire. La proprietà della cronologia (claimHistorySource in app.js)
+// previene il mix alla fonte; queste soglie sono la difesa in profondità.
+const ENTRY_MIN_HISTORY = 40;   // campioni (~40s) minimi per fidarsi degli indicatori
+const ENTRY_MAX_VOL_PCT = 4;    // larghezza BB oltre questa % su ~100s = dato anomalo
 // Tetto DURO alle posizioni crypto simultanee: le altcoin sono fortemente
 // correlate tra loro e a BTC — il basket del 15/07/2026 (10 LONG alt aperti
 // insieme) è sceso in blocco: −34$ netti, il 78% delle perdite del periodo.
@@ -153,6 +161,30 @@ var botActiveByCtx = {
     capd: false,
     capl: false
 };
+// Modalità "AI Avanzata" PER SCHEDA broker (stesso principio di botActiveByCtx:
+// ogni scheda ha il SUO interruttore). Preferenza persistente per contesto
+// ('sim_ai_mode_<ctx>'); alla prima esecuzione si migra dal vecchio flag
+// globale 'sim_ai_mode' (default storico: true).
+var aiModeByCtx = (function () {
+    const legacy = localStorage.getItem('sim_ai_mode');
+    const def = legacy === null ? true : legacy === 'true';
+    const m = {};
+    for (const c of ['fh', 'alp', 'alrt', 'capd', 'capl']) {
+        const v = localStorage.getItem('sim_ai_mode_' + c);
+        m[c] = v === null ? def : v === 'true';
+    }
+    return m;
+})();
+window.aiModeByCtx = aiModeByCtx;
+// Modalità AI del contesto richiesto (default: contesto CORRENTE, override
+// dei motori in background compreso): l'engine non legge mai la checkbox
+// direttamente — la checkbox riflette solo la scheda attiva.
+function isAiModeOn(ctx) {
+    const c = ctx || window.__ctxOverride
+        || ((typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh');
+    return aiModeByCtx[c] !== false;
+}
+window.isAiModeOn = isAiModeOn;
 // Position Limit Logic
 let maxPositionsLimit = parseInt(localStorage.getItem('sim_max_positions')) || 3;
 const EMA_SHORT_PERIOD = 12;
@@ -430,8 +462,22 @@ function evaluateStrategyAI(sym, history, price) {
             // sono già stati calcolati e mostrati, quindi il radar resta vivo).
             if (atrPct < ATR_FLATNESS_MIN_PCT) return;
 
+            // Storico troppo corto: indicatori non affidabili, niente ingressi
+            // (il segnale/radar sopra restano comunque aggiornati).
+            if (history.length < ENTRY_MIN_HISTORY) return;
+
             // Calcolo dinamico TP/SL basato sulla volatilità (Bollinger Bands)
             const volatilityPct = bb && bb.middle ? ((bb.upper - bb.lower) / bb.middle) * 100 : 2;
+
+            // Volatilità irrealistica su ~100s: dato sporco (mix/salto di feed)
+            // o flash-move — in entrambi i casi aprire ORA è la scelta sbagliata.
+            if (volatilityPct > ENTRY_MAX_VOL_PCT) {
+                if (isBotActive && Date.now() % 15000 < 500) {
+                    console.log(`[STRAT] ${sym}: larghezza Bollinger ${volatilityPct.toFixed(2)}% su ~100s anomala (feed sporco o flash-move) — ingresso saltato.`);
+                }
+                if (isBotActive) bumpSkipped('edge');
+                return;
+            }
 
             // SL minimo crypto 1.2%: deve stare SOPRA lo spread tipico di
             // apertura, altrimenti la posizione nasce già a un passo dallo stop.
@@ -470,7 +516,15 @@ function evaluateStrategyAI(sym, history, price) {
             const obsWindowS = Math.max(20, Math.min(history.length, 100)); // campioni ~1s
             const edgeHorizonS = getAssetType(sym) === 'CRYPTO' ? EDGE_HORIZON_CRYPTO_S : EDGE_HORIZON_STOCK_S;
             const horizonScale = Math.sqrt(edgeHorizonS / obsWindowS);
-            const expectedMovePct = (volatilityPct / 2) * horizonScale;
+            // Volatilità NETTA dello spread: il mid delle quote rimbalza di
+            // ~±spread/2 anche a prezzo fermo (alt illiquide: spread 0.3-0.6%
+            // ⇒ BB "0.4%" di solo flicker). Quel rumore non è movimento
+            // catturabile — è esattamente il costo che si paga — e proiettato
+            // ×12 sfondava la soglia (18/07 ore 20:00: 4 SHORT sim su
+            // UNI/ARB/DOT/ADA aperti al secondo esatto di fine warm-up).
+            // Si proietta solo l'ECCEDENZA della banda oltre lo spread.
+            const cleanVolPct = Math.max(0, volatilityPct - spreadEstEntry);
+            const expectedMovePct = (cleanVolPct / 2) * horizonScale;
             if (expectedMovePct < roundTripCostPct * MIN_EDGE_COST_MULT) {
                 if (isBotActive && Date.now() % 15000 < 500) {
                     console.log(`[STRAT] ${sym}: movimento atteso ${expectedMovePct.toFixed(2)}% (su ~${Math.round(edgeHorizonS / 60)} min) < ${MIN_EDGE_COST_MULT}× costi ${roundTripCostPct.toFixed(2)}% — ingresso saltato.`);
@@ -779,10 +833,9 @@ function evaluateStrategy(sym, history, price) {
     // già una posizione sul simbolo (aperta manualmente), la valutazione resta
     // attiva perché serve alla chiusura dinamica AI_REVERSAL.
     if (HIGH_SPREAD_CRYPTO_BLACKLIST.has(normFillSym(sym)) && !activePositions[sym]) return;
-    const aiToggle = document.getElementById('aiModeToggle');
-    const isAiMode = aiToggle && aiToggle.checked;
-
-    if (isAiMode) {
+    // Modalità AI PER SCHEDA: i motori in background usano quella del LORO
+    // contesto (__ctxOverride), non la checkbox della scheda a video.
+    if (isAiModeOn()) {
         evaluateStrategyAI(sym, history, price);
     } else {
         evaluateStrategyFallback(sym, history, price);
@@ -845,7 +898,7 @@ function updateSkippedCounterUI() {
     });
 }
 window.resetSkippedCounters = function () {
-    skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = skippedCounters.exthours = skippedCounters.edge = skippedCounters.maxcrypto = 0;
+    skippedCounters.shortcrypto = skippedCounters.nocash = skippedCounters.reject = skippedCounters.qty = skippedCounters.maxpos = skippedCounters.spread = skippedCounters.exthours = skippedCounters.edge = skippedCounters.maxcrypto = 0;
     updateSkippedCounterUI();
 };
 
@@ -1928,10 +1981,10 @@ function runBackgroundEngines(sym, price, type) {
 function manageBgRiskCurrentCtx() {
     const userTP = parseFloat(document.getElementById('botTargetProfit')?.value) || 1.5;
     const userSL = parseFloat(document.getElementById('botStopLoss')?.value) || 1.0;
-    // Toggle globale (stessa UI condivisa da tutti i contesti): se attivo,
-    // ricalibra dynamicTP/dynamicSL anche qui invece di lasciarli congelati
-    // al valore d'apertura (prima solo il contesto in primo piano li aggiornava).
-    const aiDynamicOn = document.getElementById('aiModeToggle')?.checked;
+    // Modalità AI PER SCHEDA (aiModeByCtx): questo loop gira dentro
+    // execInCtx con __ctxOverride impostato, quindi isAiModeOn() risolve
+    // la modalità del contesto in background, non della scheda a video.
+    const aiDynamicOn = isAiModeOn();
     for (const sym in activePositions) {
         const pos = activePositions[sym];
         if (!pos || pos.isActuallyClosing) continue;

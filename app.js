@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.28';
+window.APP_VERSION = 'v.1.0.30';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -790,7 +790,15 @@ function uiLocale() {
 let isBotActive = false;
 let isCapitalExhausted = false;
 let sessionBudgetUsed = 0;
-let skippedCounters = { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0, exthours: 0 }; // Totale investito nella sessione corrente (in $) — globale per accesso pre-init
+// Contatori "posizioni saltate" PER SCHEDA broker: ogni contesto ha il SUO
+// oggetto (come botActiveByCtx/aiModeByCtx). skippedCounters punta sempre a
+// quello della scheda ATTIVA; skippedByCtx parcheggia gli altri. I motori in
+// background usano il loro oggetto via context-swap (execInCtx/loadGlobalsFrom).
+function freshSkippedCounters() {
+    return { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0, exthours: 0, edge: 0, maxcrypto: 0 };
+}
+let skippedCounters = freshSkippedCounters(); // scheda attiva (l'app parte in FH)
+let skippedByCtx = {};                        // ctx → contatori parcheggiati
 let isManualMode = true; // Il bot parte sempre FERMO ad ogni avvio — l'utente deve avviarlo manualmente
 let useAlpacaBroker = false; // L'app parte SEMPRE in test mode; il broker si attiva solo dal toggle
 let alpacaKeyId = localStorage.getItem('alpaca_key_id') || '';
@@ -1105,7 +1113,7 @@ function _fngLabel(v) {
 function renderAiLiveBar() {
     const bar = document.getElementById('aiLiveBar');
     if (!bar) return;
-    if (!document.getElementById('aiModeToggle')?.checked) { bar.style.display = 'none'; return; }
+    if (typeof isAiModeOn === 'function' ? !isAiModeOn() : !document.getElementById('aiModeToggle')?.checked) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
     const offTxt = tr('ai_live_off', 'OFF');
     const chips = [];
@@ -1605,7 +1613,9 @@ function updateBotStatusLabel() {
     if (!botStatusEl || (!translations[currentLang] && !translations.IT)) return;
 
     const t = translations[currentLang] || translations.IT;
-    const isAiMode = localStorage.getItem('sim_ai_mode') !== 'false'; // Default true
+    // Modalità AI PER SCHEDA (aiModeByCtx in tengine.js): l'etichetta riflette
+    // il contesto broker attivo, non più un flag globale.
+    const isAiMode = (typeof isAiModeOn === 'function') ? isAiModeOn() : true;
 
     // Aggiornamento testuale del titolo strategia nel pannello info
     if (algoTitleEl) {
@@ -2480,6 +2490,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 totalPnL = 0; activePositions = {}; tradeHistory = [];
                 executedTrades = 0; winTrades = 0; grossProfit = 0; grossLoss = 0;
                 sessionBudgetUsed = 0; globalCommissions = 0;
+                skippedCounters = freshSkippedCounters(); // niente contatori ereditati dalla scheda precedente
             } else {
                 sessionInitialCapital = !isNaN(parseFloat(s.sessionInitialCapital)) ? parseFloat(s.sessionInitialCapital) : TEST_DEFAULT_CAPITAL;
                 tradingCapital = !isNaN(parseFloat(s.tradingCapital)) ? parseFloat(s.tradingCapital) : TEST_DEFAULT_CAPITAL;
@@ -2492,7 +2503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 grossLoss = parseFloat(s.grossLoss) || 0;
                 sessionBudgetUsed = parseFloat(s.sessionBudgetUsed) || 0;
                 globalCommissions = parseFloat(s.globalCommissions) || 0;
-                skippedCounters = s.skippedCounters || { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0, spread: 0 };
+                skippedCounters = s.skippedCounters || freshSkippedCounters();
             }
             isCapitalExhausted = false;
         }
@@ -2505,7 +2516,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             // FASE D1: memorizza lo stato bot della scheda lasciata e ripristina
             // quello della scheda di arrivo (ogni scheda ha il SUO interruttore).
             botActiveByCtx[prevCtx] = isBotActive;
+            // Contatori "saltate" PER SCHEDA: parcheggia quelli della scheda
+            // lasciata; per i contesti locali loadLocalCtxState ripristina i
+            // suoi (e la mappa viene riallineata sotto), per alp/alrt si
+            // aggancia l'oggetto dedicato del contesto (in-memory).
+            skippedByCtx[prevCtx] = skippedCounters;
             if (LOCAL_CTXS.includes(newCtx)) loadLocalCtxState(newCtx);
+            if (LOCAL_CTXS.includes(newCtx)) {
+                skippedByCtx[newCtx] = skippedCounters;
+            } else {
+                skippedCounters = skippedByCtx[newCtx] || (skippedByCtx[newCtx] = freshSkippedCounters());
+            }
+            try { if (typeof updateSkippedCounterUI === 'function') updateSkippedCounterUI(); } catch (_) { }
             console.log(`[CTX] Cambio contesto broker: ${prevCtx} → ${newCtx}`);
             const wantBot = !!botActiveByCtx[newCtx];
             if (wantBot !== isBotActive) {
@@ -2516,6 +2538,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             try { if (typeof window.updateTabBotDots === 'function') window.updateTabBotDots(); } catch (_) { }
             try { if (typeof window.syncConnToggles === 'function') window.syncConnToggles(); } catch (_) { }
+            // Modalità AI per scheda: la checkbox mostra quella del contesto di
+            // arrivo (l'engine legge comunque aiModeByCtx, mai la checkbox).
+            try {
+                const aiTgl = document.getElementById('aiModeToggle');
+                if (aiTgl && typeof isAiModeOn === 'function') {
+                    aiTgl.checked = isAiModeOn(newCtx);
+                    updateBotStatusLabel();
+                }
+            } catch (_) { }
             // Riallinea categorie/combo/legenda/serie del grafico alla scheda (punti 3-6)
             try { if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability(); } catch (_) { }
             try { updateWalletUI(); } catch (_) { }
@@ -2554,7 +2585,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } : {
                 sessionInitialCapital: TEST_DEFAULT_CAPITAL, tradingCapital: TEST_DEFAULT_CAPITAL,
                 totalPnL: 0, activePositions: {}, tradeHistory: [], executedTrades: 0,
-                winTrades: 0, grossProfit: 0, grossLoss: 0, sessionBudgetUsed: 0, skippedCounters: { shortcrypto: 0, nocash: 0, reject: 0, qty: 0, maxpos: 0 }
+                winTrades: 0, grossProfit: 0, grossLoss: 0, sessionBudgetUsed: 0, skippedCounters: freshSkippedCounters()
             };
         }
         function snapshotGlobalsTo(ctx) {
@@ -2576,6 +2607,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             grossProfit = s.grossProfit;
             grossLoss = s.grossLoss;
             sessionBudgetUsed = s.sessionBudgetUsed;
+            // Senza questo, i bumpSkipped() dei motori in BACKGROUND finivano
+            // nei contatori della scheda a video (osservato: "Saltate: 3293"
+            // su una scheda ferma — erano gli skip degli altri contesti).
+            skippedCounters = s.skippedCounters || freshSkippedCounters();
             return true;
         }
         // Esegue fn nel contesto LOCALE indicato. fn DEVE essere sincrona.
@@ -5982,16 +6017,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const aiModeToggle = document.getElementById('aiModeToggle');
         if (aiModeToggle) {
-            // Ripristina stato salvato
-            const savedAiMode = localStorage.getItem('sim_ai_mode');
-            if (savedAiMode !== null) {
-                aiModeToggle.checked = (savedAiMode === 'true');
-            }
+            // Modalità AI PER SCHEDA (aiModeByCtx, vedi tengine.js): la checkbox
+            // riflette e modifica SOLO il contesto broker attivo. All'avvio il
+            // contesto è sempre FH.
+            aiModeToggle.checked = (typeof isAiModeOn === 'function') ? isAiModeOn() : true;
 
             aiModeToggle.addEventListener('change', (e) => {
-                localStorage.setItem('sim_ai_mode', e.target.checked);
+                const ctx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
+                if (window.aiModeByCtx) window.aiModeByCtx[ctx] = e.target.checked;
+                localStorage.setItem('sim_ai_mode_' + ctx, e.target.checked);
                 updateBotStatusLabel();
-                console.log(`[SYSTEM] Logica Algoritmo: ${e.target.checked ? 'AI Avanzata' : 'Standard EMA'}`);
+                console.log(`[SYSTEM] Logica Algoritmo (${ctx}): ${e.target.checked ? 'AI Avanzata' : 'Standard EMA'}`);
             });
         }
 
@@ -6657,7 +6693,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Cache DOM lookups outside the loop for performance
             const userTP = parseFloat(document.getElementById('botTargetProfit')?.value) || 1.5;
             const userSL = parseFloat(document.getElementById('botStopLoss')?.value) || 0;
-            const aiDynamicOn = document.getElementById('aiModeToggle')?.checked;
+            const aiDynamicOn = (typeof isAiModeOn === 'function') ? isAiModeOn() : true; // modalità AI della scheda corrente
             const useRisk = document.getElementById('aiModeRisk')?.checked;
             const useHedging = document.getElementById('aiModeHedging')?.checked;
 
@@ -6829,7 +6865,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // l'indicazione corrente dell'AI per l'asset selezionato sul grafico,
             // in OGNI modalità (test inclusa). Non tocchiamo i campi mentre
             // l'utente li sta modificando, e SL a 0 (no-loss) non viene sovrascritto.
-            const aiFieldsOn = document.getElementById('aiModeToggle')?.checked;
+            const aiFieldsOn = (typeof isAiModeOn === 'function') ? isAiModeOn() : true;
             if (aiFieldsOn) {
                 const tpField = document.getElementById('botTargetProfit');
                 const slField = document.getElementById('botStopLoss');
@@ -7393,6 +7429,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             return true;
         }
 
+        // ─── Proprietà della cronologia indicatori: UNA fonte per simbolo ───
+        // I feed girano in parallelo (Finnhub/Binance, Alpaca WS, polling REST,
+        // Capital) e prezzi della STESSA moneta da venue diverse differiscono
+        // di 0.1-0.5%: il push alternato nella stessa history creava uno
+        // zig-zag artificiale — RSI inchiodato a "ipercomprato" su tutto il
+        // listino, larghezze Bollinger del 3-5% su mercati piatti (export
+        // posizioni 18/07: SL 1.78% ⇒ BB 5.3%), filtro edge sfondato e SHORT
+        // simulati aperti su volatilità inesistente. Regola: la PRIMA fonte
+        // che pubblica un simbolo diventa proprietaria della sua cronologia;
+        // se tace per HISTORY_SOURCE_TIMEOUT_MS, il primo tick di un'altra
+        // fonte subentra (failover). Il GRAFICO mantiene la sua logica
+        // isAuthoritative separata (può seguire la fonte migliore per scheda).
+        const HISTORY_SOURCE_TIMEOUT_MS = 10000;
+        const _historySourceBySym = {}; // sym → { src, t }
+        function claimHistorySource(sym, sourceCtx, now) {
+            const cur = _historySourceBySym[sym];
+            if (!cur || cur.src === sourceCtx) {
+                _historySourceBySym[sym] = { src: sourceCtx, t: now };
+                return true;
+            }
+            if (now - cur.t > HISTORY_SOURCE_TIMEOUT_MS) {
+                console.log(`[FEED] ${sym}: cronologia indicatori passa da '${cur.src}' a '${sourceCtx}' (fonte precedente silente da ${((now - cur.t) / 1000).toFixed(0)}s).`);
+                _historySourceBySym[sym] = { src: sourceCtx, t: now };
+                return true;
+            }
+            return false;
+        }
+
         function updateBackgroundHistoryAndStrategy(sym, price, now, type, sourceCtx = 'fh') {
             if (!isMarketOpen(type)) return;
             // FASE C: i DATI fluiscono per tutte le categorie in ogni modalità (feed
@@ -7449,6 +7513,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     autoBuyPending = null;
                 }
             }
+
+            // UNA fonte per la cronologia indicatori (vedi claimHistorySource):
+            // i tick delle fonti non proprietarie si fermano QUI — il grafico
+            // sopra è già stato servito con la sua logica isAuthoritative.
+            if (!claimHistorySource(sym, sourceCtx, now)) return;
 
             // Throttling: storico indicatori + strategia una volta al secondo per simbolo
             if (lastUpdateTracker[sym] && now - lastUpdateTracker[sym] < 1000) return;
