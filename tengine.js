@@ -45,7 +45,12 @@ const UNKNOWN_SPREAD_COMP_STOCK = 0.05;
 // Filtro "edge" d'ingresso: il movimento atteso (metà larghezza Bollinger)
 // deve valere almeno QUESTO multiplo del costo di round-trip (fee+spread),
 // altrimenti anche il trade perfetto consegna quasi tutto al broker.
+// Soglia PIÙ ALTA per le azioni (2.5 vs 2, dal 20/07/2026): i micro-scalp
+// azionari a bassa volatilità (INTC ~$98, −6.4$ su 34 trade) passavano il 2×
+// e poi chiudevano a pari. Le crypto restano a 2 per non sopprimerle ancora
+// (già poco attive in mercato piatto — vedi analisi 18/07).
 const MIN_EDGE_COST_MULT = 2;
+const MIN_EDGE_COST_MULT_STOCK = 2.5;
 // Orizzonte di detenzione TIPICO per categoria, usato per riscalare il
 // movimento atteso del filtro edge. La larghezza Bollinger è misurata su
 // ~100s di campioni, ma le posizioni vivono molto più a lungo (scalp azioni
@@ -109,7 +114,12 @@ const POST_CLOSE_BLACKOUT_MS = 45000;
 // perdita si aspetta qualche minuto prima di rivalutare (il vincolo
 // effettivo, essendo più lungo di POST_CLOSE_BLACKOUT_MS); dopo un guadagno
 // resta breve (il vincolo effettivo resta POST_CLOSE_BLACKOUT_MS=45s).
-const POST_TRADE_COOLDOWN_WIN_MS = 30000;
+// Alzato 30s → 180s (20/07/2026): la cronologia mostrava lo STESSO titolo
+// riaperto in pochi minuti decine di volte (INTC 34×, NVDA 22×, TSLA 17×,
+// GOOGL 16× in una sessione), ogni giro pagando spread+fee per chiudere a
+// pari (netto −18$, payoff 0.39). Il cooldown è per CONTESTO+simbolo: blocca
+// il martellamento di un nome senza fermare gli ingressi su altri simboli.
+const POST_TRADE_COOLDOWN_WIN_MS = 180000;
 const POST_TRADE_COOLDOWN_LOSS_MS = 300000;
 // Filtro piattezza (ATR minimo per aprire): sotto questa soglia il mercato
 // non si muove abbastanza da coprire lo spread/fee prima che TP/SL scattino,
@@ -143,6 +153,15 @@ let globalOrderPauseUntil = 0;
 // con la costante fissa 1.5% > TP dinamico (~1.13%) il TP chiudeva prima
 // e la protezione non si armava MAI (codice morto).
 const BREAKEVEN_ARM_PCT = 1.5;
+// Cushion minimo prima che il TRAILING SL possa chiudere un vincente. Prima
+// si attivava appena unrealizedPct >= breakeven (~0.15%): tagliava i vincenti
+// a ~+0.15% mentre i perdenti correvano a −0.3/−0.5% (payoff 0.39, netto
+// −18$, cronologia 20/07/2026). Ora il trailing arma solo dopo aver raggiunto
+// una frazione consistente del TP; sotto quella soglia decide il TP (chiusura
+// pulita al target) o lo stop a break-even (arma al 70% del TP e protegge a
+// pari chi ritraccia). Effetto: il vincente medio si avvicina alla dimensione
+// del perdente medio, riportando il payoff verso l'equilibrio.
+const TRAILING_ARM_TP_FRAC = 0.8;
 // Soglia di armamento: 70% del TP effettivo, mai sopra il tetto e mai
 // sotto i costi stimati +0.1% (deve stare sopra la soglia di CHIUSURA a
 // pari, che è netBreakeven, altrimenti chiuderebbe subito dopo l'arm).
@@ -525,9 +544,10 @@ function evaluateStrategyAI(sym, history, price) {
             // Si proietta solo l'ECCEDENZA della banda oltre lo spread.
             const cleanVolPct = Math.max(0, volatilityPct - spreadEstEntry);
             const expectedMovePct = (cleanVolPct / 2) * horizonScale;
-            if (expectedMovePct < roundTripCostPct * MIN_EDGE_COST_MULT) {
+            const edgeMult = getAssetType(sym) === 'CRYPTO' ? MIN_EDGE_COST_MULT : MIN_EDGE_COST_MULT_STOCK;
+            if (expectedMovePct < roundTripCostPct * edgeMult) {
                 if (isBotActive && Date.now() % 15000 < 500) {
-                    console.log(`[STRAT] ${sym}: movimento atteso ${expectedMovePct.toFixed(2)}% (su ~${Math.round(edgeHorizonS / 60)} min) < ${MIN_EDGE_COST_MULT}× costi ${roundTripCostPct.toFixed(2)}% — ingresso saltato.`);
+                    console.log(`[STRAT] ${sym}: movimento atteso ${expectedMovePct.toFixed(2)}% (su ~${Math.round(edgeHorizonS / 60)} min) < ${edgeMult}× costi ${roundTripCostPct.toFixed(2)}% — ingresso saltato.`);
                 }
                 if (isBotActive) bumpSkipped('edge');
                 return;
@@ -1904,8 +1924,12 @@ function manageOpenPositionRisk(sym, pos, livePrice, unrealizedPct, opts) {
                     : (livePrice >= pos.peakPrice + trailingDistance);
 
                 const netBreakeven = getNetBreakevenPct(sym);
-                if (isReversing && unrealizedPct >= netBreakeven && !pos.isActuallyClosing && !closePending) {
-                    console.log(`[AI RISK] Trailing SL su ${sym}. Peak: ${pos.peakPrice.toFixed(4)}, Attuale: ${livePrice.toFixed(4)}, ATR: ${currentATR.toFixed(4)}`);
+                // Il trailing arma solo con un cushion reale (frazione del TP),
+                // non a +breakeven: lascia correre i vincenti verso il target
+                // invece di tagliarli a ~+0.15% (vedi TRAILING_ARM_TP_FRAC).
+                const trailArmPct = Math.max(netBreakeven + 0.1, (effTP || 0) * TRAILING_ARM_TP_FRAC);
+                if (isReversing && unrealizedPct >= trailArmPct && !pos.isActuallyClosing && !closePending) {
+                    console.log(`[AI RISK] Trailing SL su ${sym} (arm ${trailArmPct.toFixed(2)}%). Peak: ${pos.peakPrice.toFixed(4)}, Attuale: ${livePrice.toFixed(4)}, ATR: ${currentATR.toFixed(4)}`);
                     closeTrade(sym, livePrice, 'TRAILING_SL');
                     return { effTP, effSL, closed: true };
                 }

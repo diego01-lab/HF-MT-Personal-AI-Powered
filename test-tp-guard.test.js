@@ -15,12 +15,16 @@ function extract(name) {
 }
 
 // Ambiente stub: assetType/spread configurabili per scenario, SL_GRACE_MS reale.
+// activePositions/getFreshQuoteFor stubbati: senza posizione/quote fresca il
+// controllo sul prezzo eseguibile (ramo aggiunto in tpAllowed) ricade sul
+// fallback "nessuna quote → decidono i gate netti", che è ciò che questi
+// scenari verificano.
 function makeTpAllowed({ assetType = 'CRYPTO', spreadPct = 0.1 } = {}) {
     const fn = new Function(
-        'getAssetType', 'getSpreadPctFor', 'SL_GRACE_MS',
+        'getAssetType', 'getSpreadPctFor', 'SL_GRACE_MS', 'activePositions', 'getFreshQuoteFor',
         extract('getNetBreakevenPct') + '\n' + extract('tpAllowed') + '\n return tpAllowed;'
     );
-    return fn(() => assetType, () => spreadPct, 45000);
+    return fn(() => assetType, () => spreadPct, 45000, {}, () => null);
 }
 
 let failures = 0;
