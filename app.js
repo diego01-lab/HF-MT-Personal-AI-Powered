@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.31';
+window.APP_VERSION = 'v.1.0.35';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -3215,7 +3215,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const el = document.getElementById('armCAPD');
                     if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                     if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
-                    showNotification('🟢 Capital.com Demo attivo: dati reali Forex/Materie Prime dal tuo conto demo. In questa versione gli ordini del bot sono simulati localmente (routing ordini su Capital.com in arrivo).', 'info');
+                    showNotification('🟢 Capital.com Demo attivo: la scheda rispecchia il conto demo reale — saldo, posizioni e storico letti da Capital.com. Il routing ordini del bot su Capital arriva a breve (Step 2).', 'info');
                 }
             } else if (stage === 4) {
                 // Capital.com Trading REALE
@@ -3227,7 +3227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     updateTriSwitchLabel(4);
                     setTimeout(() => {
-                        if (!confirm('⚠️ CONTO REALE CAPITAL.COM\n\nStai per collegare il conto Capital.com REALE.\nIn questa versione il conto è in MONITORAGGIO (dati e saldo): gli ordini del bot restano simulati localmente e NON vengono inviati a Capital.com.\n\nVuoi continuare?')) {
+                        if (!confirm('⚠️ CONTO REALE CAPITAL.COM\n\nStai per collegare il conto Capital.com REALE.\nIn questa fase il conto è in MONITORAGGIO: saldo, posizioni e storico vengono letti dal conto reale, ma il bot NON invia ordini a Capital.com (il routing ordini reale arriva nello Step 2).\n\nVuoi continuare?')) {
                             showNotification('Collegamento conto reale Capital.com annullato: mantengo la selezione precedente.', 'info');
                             if (brokerTriSwitch) brokerTriSwitch.value = String(prevStage);
                             updateTriSwitchLabel(prevStage);
@@ -3240,7 +3240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
                         if (brokerTriSwitch) brokerTriSwitch.value = '4';
                         updateTriSwitchLabel(4);
-                        showNotification('🔴 Capital.com REALE collegato in monitoraggio: dati e saldo dal conto reale. Ordini del bot simulati localmente in questa versione.', 'warning');
+                        showNotification('🔴 Capital.com REALE collegato in monitoraggio: saldo, posizioni e storico dal conto reale. Il bot NON invia ancora ordini (routing reale nello Step 2).', 'warning');
                         handleCtxTransition(prevCtx); // FASE B: carica il portafoglio capl
                     }, 0);
                     return; // esce subito dal gestore 'change'
@@ -4517,16 +4517,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const acc = accs.find(a => a.preferred) || accs[0];
                     if (acc) {
                         setCapitalLed('active');
-                        const bal = acc.balance ? (acc.balance.balance ?? 0) : 0;
-                        const avail = acc.balance ? (acc.balance.available ?? 0) : 0;
-                        console.log(`[CAPITAL] Account Sync (${window.capitalMode}): saldo=${bal} ${acc.currency || ''}, disponibile=${avail}`);
-                        // Header multi-broker: niente override diretto col NAV — il totale
-                        // è la somma di tutti i broker (updateGlobalPortfolioHeader).
+                        const b = acc.balance || {};
+                        const bal = parseFloat(b.balance ?? 0) || 0;
+                        const avail = parseFloat(b.available ?? 0) || 0;
+                        const opl = parseFloat(b.profitLoss ?? 0) || 0;
+                        console.log(`[CAPITAL] Account Sync (${window.capitalMode}): saldo=${bal} ${acc.currency || ''}, disponibile=${avail}, P/L aperto=${opl}`);
+                        // Porta l'EQUITY REALE del conto Capital nelle box Gestione Capitale
+                        // (equivalente di applyBrokerAccountSnapshot per Alpaca). Solo in
+                        // foreground (niente __ctxOverride): il valore appartiene alla scheda
+                        // Capital attiva. Prima le box usavano la formula locale perché gli
+                        // ordini erano simulati — ora la scheda rispecchia il conto reale.
+                        if (!window.__ctxOverride) {
+                            const equity = bal + opl;
+                            tradingCapital = equity;
+                            availableCash = avail;
+                            availableMargin = avail;
+                            brokerUnrealizedPnL = opl;
+                            window.capitalAccountId = acc.accountId || null;
+                            sessionInitialCapital = (typeof getDepositedTotal === 'function')
+                                ? getDepositedTotal(getBrokerCtx(), equity) : sessionInitialCapital;
+                            try { localStorage.setItem('sim_trading_capital', String(tradingCapital)); } catch (_) { }
+                            if (typeof updateWalletUI === 'function') updateWalletUI();
+                            if (typeof updateDashboard === 'function') updateDashboard();
+                        }
                         if (typeof window.updateGlobalPortfolioHeader === 'function') window.updateGlobalPortfolioHeader();
-                        // Nota: le box Versato/Attuale NON usano il NAV del conto demo
-                        // Capital (gli ordini sono ancora simulati localmente): restano
-                        // sulla formula lifetime del contesto capd/capl. Con il routing
-                        // ordini reale su Capital passeranno all'equity del conto.
                     }
                 } else if (res && (res.status === 401 || res.status === 403)) {
                     setCapitalLed('error');
@@ -4535,6 +4549,100 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setCapitalLed('error');
                 console.warn('[CAPITAL] Errore sync account:', e && e.message ? e.message : e);
             }
+        }
+
+        // Posizioni aperte REALI sul conto Capital → activePositions (come
+        // syncAlpacaPositions). Solo foreground: quando capd/capl è la scheda
+        // attiva, activePositions contiene esattamente le posizioni di quel conto.
+        async function syncCapitalPositions() {
+            if (window.capitalMode === 'off' || window.__ctxOverride) return;
+            const mgr = getCapitalManager();
+            if (!mgr || typeof mgr.getPositions !== 'function') return;
+            try {
+                const positions = await mgr.getPositions();
+                if (window.capitalMode === 'off') return; // scheda cambiata durante l'await
+                let anyChanges = false;
+                const liveSyms = new Set();
+                for (const p of positions) {
+                    const posObj = p.position || {};
+                    const mkt = p.market || {};
+                    const sym = CAPITAL_EPIC_TO_SYM[mkt.epic] || mkt.epic;
+                    if (!sym) continue;
+                    liveSyms.add(sym);
+                    const isLong = String(posObj.direction).toUpperCase() === 'BUY';
+                    const size = Math.abs(parseFloat(posObj.size || 0)) || 0;
+                    const entryPrice = parseFloat(posObj.level || 0) || 0;
+                    if (!activePositions[sym] || !activePositions[sym].type) {
+                        activePositions[sym] = {
+                            type: isLong ? 'LONG' : 'SHORT',
+                            entryPrice: entryPrice,
+                            amount: size,
+                            invested: size * entryPrice,
+                            dynTP: null, dynSL: null,
+                            highestPrice: entryPrice, lowestPrice: entryPrice,
+                            isBot: false, confidence: 50,
+                            simulated: false, isCapital: true,
+                            dealId: posObj.dealId || null,
+                            openTime: posObj.createdDateUTC ? new Date(posObj.createdDateUTC).getTime()
+                                : (posObj.createdDate ? new Date(posObj.createdDate).getTime() : Date.now())
+                        };
+                        anyChanges = true;
+                    } else {
+                        activePositions[sym].dealId = posObj.dealId || activePositions[sym].dealId;
+                        activePositions[sym].isCapital = true;
+                        activePositions[sym].simulated = false;
+                    }
+                    if (posObj.upl !== undefined) activePositions[sym].brokerUnrealizedPnL = parseFloat(posObj.upl || 0);
+                }
+                // Rimuovi le posizioni non più presenti sul broker (chiuse altrove)
+                for (const sym in activePositions) {
+                    if (!liveSyms.has(sym) && !closingAssets.has(sym)) { delete activePositions[sym]; anyChanges = true; }
+                }
+                if (anyChanges) { persistData(); if (typeof renderOpenPositions === 'function') renderOpenPositions(); }
+            } catch (e) { console.warn('[CAPITAL] Errore sync posizioni:', e && e.message ? e.message : e); }
+        }
+
+        // Storico transazioni REALI (TRADE con P&L) → tradeHistory. Difensiva:
+        // lo schema esatto dei campi P&L/livelli varia, quindi logga la prima
+        // transazione grezza per calibrare la mappatura sui dati veri del conto.
+        let _capitalHistLoggedSchema = false;
+        async function syncCapitalHistory() {
+            if (window.capitalMode === 'off' || window.__ctxOverride) return;
+            const mgr = getCapitalManager();
+            if (!mgr || typeof mgr.getTransactions !== 'function') return;
+            try {
+                const txns = await mgr.getTransactions(86400); // ultime 24h
+                if (window.capitalMode === 'off') return;
+                if (txns.length && !_capitalHistLoggedSchema) {
+                    _capitalHistLoggedSchema = true;
+                    console.log('[CAPITAL] Schema transazione (per calibrazione storico):', JSON.stringify(txns[0]));
+                }
+                let added = false;
+                for (const t of txns) {
+                    if (String(t.transactionType || '').toUpperCase().indexOf('TRADE') < 0) continue;
+                    const ref = t.reference || ((t.dateUtc || t.date || '') + '_' + (t.instrumentName || ''));
+                    const id = 'cap_' + ref;
+                    if (tradeHistory.some(h => h.id === id)) continue;
+                    // P&L: Capital lo fornisce spesso come stringa con valuta (es. "USD1.23").
+                    const pnlRaw = (t.profitAndLoss != null ? t.profitAndLoss : (t.pnl != null ? t.pnl : ''));
+                    const pnl = parseFloat(String(pnlRaw).replace(/[^0-9.\-]/g, '')) || 0;
+                    const open = parseFloat(t.openLevel || 0) || 0;
+                    const close = parseFloat(t.closeLevel || t.level || 0) || 0;
+                    const size = parseFloat(String(t.size).replace(/[^0-9.\-]/g, '')) || 0;
+                    const epic = t.epic || null;
+                    const sym = (epic && CAPITAL_EPIC_TO_SYM[epic]) || t.instrumentName || epic || '?';
+                    const ts = new Date(t.dateUtc || t.date || Date.now()).getTime() || Date.now();
+                    tradeHistory.push({
+                        id: id, sym: sym,
+                        type: (String(t.size).trim().startsWith('-')) ? 'SHORT' : 'LONG',
+                        entryPrice: open, exitPrice: close, amount: Math.abs(size),
+                        pnl: pnl, time: ts, timestamp: ts, entryTime: ts, exitTime: ts,
+                        fromBroker: true, reason: 'BROKER_SYNC', status: 'COMPLETATO (BROKER)'
+                    });
+                    added = true;
+                }
+                if (added) { persistData(); if (typeof renderHistory === 'function') renderHistory(); if (typeof updateDashboard === 'function') updateDashboard(); }
+            } catch (e) { console.warn('[CAPITAL] Errore sync storico:', e && e.message ? e.message : e); }
         }
 
         // Prezzi in tempo reale (polling 3s) — GET /api/v1/markets?epics=...
@@ -4594,7 +4702,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     setCapitalLed('active');
                 } catch (e) { /* errore di rete: riprova al prossimo giro */ }
             }, 3000);
-            syncCapitalAccount(); // primo sync immediato del conto
+            syncCapitalAccount();   // primo sync immediato del conto
+            syncCapitalPositions(); // posizioni reali dal broker
+            syncCapitalHistory();   // storico reale dal broker
         }
         function stopCapitalPolling() {
             if (capitalPollingInterval) { clearInterval(capitalPollingInterval); capitalPollingInterval = null; }
@@ -4621,8 +4731,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await new Promise(r => setTimeout(r, 150)); // rispetta il rate limit
             }
         }
-        // Sync periodico del conto Capital.com (allineato al ritmo degli altri broker)
-        setInterval(() => { if (window.capitalMode !== 'off') syncCapitalAccount(); }, 30000);
+        // Sync periodico del conto Capital.com (allineato al ritmo degli altri broker):
+        // conto + posizioni ogni 10s (le posizioni cambiano più spesso), storico ogni 30s.
+        setInterval(() => { if (window.capitalMode !== 'off') { syncCapitalAccount(); syncCapitalPositions(); } }, 10000);
+        setInterval(() => { if (window.capitalMode !== 'off') syncCapitalHistory(); }, 30000);
         // Niente auto-avvio del feed Capital al load: la connessione parte SOLO su
         // scelta dell'utente (leva CAP o attivazione della scheda Capital).
 
@@ -4680,6 +4792,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             // Test connessione: crea una sessione con i valori inseriti (non salvati)
+            // HTTP dual-mode (fetch nel browser, CapacitorHttp nel nativo) per il
+            // test connessione Capital. PRIMA era CHIAMATA a riga sotto ma MAI
+            // definita: ogni click sul test lanciava ReferenceError → catch →
+            // "Connessione fallita" col bottone sempre rosso, a prescindere da
+            // credenziali/429. Stesso tipo di bug già corretto per capitalAuthed.
+            async function capitalHttp(base, path, { method = 'GET', headers = {}, body = null } = {}) {
+                const url = base + path;
+                const CH = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp;
+                if (CH) {
+                    const res = await CH.request({ url, method, headers, data: body ? JSON.parse(body) : undefined });
+                    return { ok: res.status >= 200 && res.status < 300, status: res.status };
+                }
+                const res = await fetch(url, { method, headers, body });
+                return { ok: res.ok, status: res.status };
+            }
+
             async function testCapital(btn, mode, identEl, keyEl, passEl) {
                 const i = identEl ? identEl.value.trim() : '', k = keyEl ? keyEl.value.trim() : '', p = passEl ? passEl.value.trim() : '';
                 if (!i || !k || !p) { showNotification(tr('keys_required_test', 'Inserisci email, API Key e password per il test'), 'error'); return; }
@@ -4693,8 +4821,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                         body: JSON.stringify({ identifier: i, password: p })
                     });
                     connOk = res.ok;
-                    showNotification(connOk ? tr('conn_ok', 'Connessione riuscita: chiavi valide.')
-                        : tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), connOk ? 'success' : 'error');
+                    if (connOk) {
+                        showNotification(tr('conn_ok', 'Connessione riuscita: chiavi valide.'), 'success');
+                    } else if (res.status === 429) {
+                        // Le chiavi possono essere valide: è il rate-limit di Capital.
+                        showNotification(tr('conn_429', 'Capital.com: troppe richieste (429). Le chiavi possono essere valide — attendi circa un minuto e riprova.'), 'warning');
+                    } else if (res.status === 401 || res.status === 400) {
+                        showNotification(tr('conn_bad_creds', 'Connessione fallita (codice {code}): email, API Key o password non validi.', { code: res.status }), 'error');
+                    } else {
+                        showNotification(tr('conn_fail_code', 'Connessione fallita (codice {code}): servizio non raggiungibile o chiavi non valide.', { code: res.status }), 'error');
+                    }
                 } catch (e) {
                     showNotification(tr('conn_fail', 'Connessione fallita: email/API Key/password non validi o servizio non raggiungibile.'), 'error');
                 }

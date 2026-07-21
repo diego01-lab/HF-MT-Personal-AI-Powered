@@ -931,6 +931,17 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
     // getBrokerHttp() nelle funzioni d'ordine (alpacaCreateOrder/closeTrade).
     if (activePositions[sym]) return;
 
+    // Capital.com (capd/capl) — STEP 1: la scheda è in MONITORAGGIO del conto
+    // reale (posizioni/saldo/storico letti dal broker via syncCapital*). Il bot
+    // NON apre posizioni: creerebbe voci locali che il sync del broker
+    // cancellerebbe. Il routing ordini reale su Capital arriva nello Step 2.
+    if (window.capitalMode && window.capitalMode !== 'off') {
+        if (isBotActive && !window.__ctxOverride) {
+            botNotify('capmon', tr('bot_skip_capital_monitor', 'Capital.com in monitoraggio del conto reale: nessun ordine inviato (routing ordini in arrivo).'), 'info', 60000);
+        }
+        return;
+    }
+
     // Azioni: nuove aperture SOLO in sessione regolare (09:30-16:00 EST).
     // Fuori da questa finestra (pre-market/after-hours) lo spread si allarga
     // molto e il prezzo è più erratico: causava churn (aperture/chiusure
@@ -1990,6 +2001,11 @@ function runBackgroundEngines(sym, price, type) {
     const activeCtx = (typeof window.getBrokerCtx === 'function') ? window.getBrokerCtx() : 'fh';
     for (const ctx of LOCAL_CTXS) {
         if (ctx === activeCtx) continue;
+        // Capital.com (capd/capl) è un broker REALE (come Alpaca): opera solo
+        // quando è la scheda attiva, mai in background simulato. In monitoraggio
+        // (Step 1) e col futuro routing reale (Step 2) la simulazione headless
+        // creerebbe posizioni fantasma in conflitto col conto vero.
+        if (ctx === 'capd' || ctx === 'capl') continue;
         if (!botActiveByCtx[ctx]) continue;
         if (!ctxSupportsCategory(ctx, type)) continue;
         if (!enabledTradingCategories.includes(type)) continue;

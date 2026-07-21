@@ -6,14 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <!-- Content-Security-Policy: difesa XSS. Allowlist minima per i servizi usati:
          unpkg (grafico), Google Identity (login), Google Fonts, Alpaca/Finnhub
-         (REST + WebSocket). 'unsafe-inline' negli script è richiesto dagli
-         handler onclick inline generati dinamicamente dall'app. -->
+         (REST + WebSocket), Capital.com demo+live (REST). 'unsafe-inline' negli
+         script è richiesto dagli handler onclick inline generati dall'app. -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self';
         script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com;
         font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data: https:;
-        connect-src 'self' https://paper-api.alpaca.markets https://api.alpaca.markets https://data.alpaca.markets wss://stream.data.alpaca.markets wss://ws.finnhub.io https://finnhub.io https://accounts.google.com https://api.alternative.me;
+        connect-src 'self' https://paper-api.alpaca.markets https://api.alpaca.markets https://data.alpaca.markets wss://stream.data.alpaca.markets wss://ws.finnhub.io https://finnhub.io https://accounts.google.com https://api.alternative.me https://demo-api-capital.backend-capital.com https://api-capital.backend-capital.com;
         frame-src https://accounts.google.com;
         object-src 'none';
         base-uri 'self';
@@ -1809,15 +1809,15 @@
     <script src="brokers/finnhub.js" defer></script>
     <script src="brokers/alpacapaper.js?v=5" defer></script>
     <script src="brokers/alpacareal.js?v=5" defer></script>
-    <script src="brokers/capitalcomdemo.js" defer></script>
-    <script src="brokers/capitalcomtrading.js" defer></script>
+    <script src="brokers/capitalcomdemo.js?v=2" defer></script>
+    <script src="brokers/capitalcomtrading.js?v=2" defer></script>
     <script src="grafico.js?v=2" defer></script>
     <script src="statusbar.js" defer></script>
     <script src="radar.js?v=8" defer></script>
     <!-- tengine.js DEVE precedere app.js: dichiara a scope globale il motore di
          trading (strategie, rischio, ordini, bot) che app.js richiama a runtime -->
-    <script src="tengine.js?v=19" defer></script>
-    <script src="app.js?v=56" defer></script>
+    <script src="tengine.js?v=20" defer></script>
+    <script src="app.js?v=60" defer></script>
     <script>
         // Toggle "occhio": mostra/nasconde in chiaro le chiavi/segreti nelle schede broker.
         (function () {
