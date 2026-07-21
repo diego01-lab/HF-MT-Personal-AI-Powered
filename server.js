@@ -281,6 +281,44 @@ const requestHandler = (req, res) => {
     return;
   }
 
+  // Proxy per Capital.com (demo + reale): il browser blocca alcune richieste
+  // cross-origin verso Capital — in particolare il preflight delle DELETE
+  // (chiusura posizione), a cui Capital non risponde con gli header CORS. Il
+  // server inoltra lato server (niente CORS) e rimanda anche CST/X-SECURITY-TOKEN
+  // (header di risposta del login). L'app nativa va diretta (CapacitorHttp).
+  if (req.url.startsWith('/proxy/capital-demo/') || req.url.startsWith('/proxy/capital-live/')) {
+    if (!isSameOrigin(req)) {
+      res.writeHead(403);
+      res.end('Cross-origin forbidden');
+      return;
+    }
+    const isLive = req.url.startsWith('/proxy/capital-live/');
+    const base = isLive ? 'https://api-capital.backend-capital.com' : 'https://demo-api-capital.backend-capital.com';
+    const capUrl = base + req.url.replace(isLive ? '/proxy/capital-live' : '/proxy/capital-demo', '');
+    const fwdHeaders = { 'Content-Type': 'application/json' };
+    if (req.headers['x-cap-api-key']) fwdHeaders['X-CAP-API-KEY'] = req.headers['x-cap-api-key'];
+    if (req.headers['cst']) fwdHeaders['CST'] = req.headers['cst'];
+    if (req.headers['x-security-token']) fwdHeaders['X-SECURITY-TOKEN'] = req.headers['x-security-token'];
+
+    const proxyReq = https.request(capUrl, { method: req.method, headers: fwdHeaders }, proxyRes => {
+      res.writeHead(proxyRes.statusCode, cleanProxyHeaders(proxyRes.headers));
+      proxyRes.pipe(res);
+      proxyRes.on('error', e => console.error("Proxy Capital Res Error:", e.message));
+    });
+
+    req.pipe(proxyReq);
+    req.on('error', e => { console.error("Client Req Error:", e.message); proxyReq.destroy(); });
+    proxyReq.on('error', e => {
+      console.error("Proxy Capital Error:", e.message);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Proxy Capital Error', message: e.message }));
+      } else { res.end(); }
+    });
+    res.on('error', e => console.error("Client Res Error:", e.message));
+    return;
+  }
+
   // Proxy per il Crypto Fear & Greed Index (alternative.me): sentiment di
   // mercato REALE per il modulo NLP del bot. Nessuna chiave richiesta — il
   // proxy serve solo ad aggirare il CORS del browser (l'app nativa va

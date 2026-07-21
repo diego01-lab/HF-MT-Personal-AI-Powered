@@ -33,15 +33,17 @@ window.CapitalDemoManager = (function() {
     }
 
     async function httpReq(path, { method = 'GET', headers = {}, body = null } = {}) {
-        const url = BASE_URL + path;
         const CH = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp;
         if (CH) {
-            const res = await CH.request({ url, method, headers, data: body ? JSON.parse(body) : undefined });
+            // Nativo (Android/iOS): niente CORS, chiamata DIRETTA a Capital.
+            const res = await CH.request({ url: BASE_URL + path, method, headers, data: body ? JSON.parse(body) : undefined });
             const lower = {};
             Object.entries(res.headers || {}).forEach(([k, v]) => { lower[k.toLowerCase()] = v; });
             return { ok: res.status >= 200 && res.status < 300, status: res.status, json: async () => res.data, headers: lower };
         }
-        const res = await fetch(url, { method, headers, body });
+        // Web browser: passa dal proxy del server locale (stesso-origine) per
+        // aggirare il CORS di Capital (blocca il preflight delle DELETE ecc.).
+        const res = await fetch('/proxy/capital-demo' + path, { method, headers, body });
         return {
             ok: res.ok, status: res.status, json: () => res.json(),
             headers: { get cst() { return res.headers.get('CST'); }, get 'x-security-token'() { return res.headers.get('X-SECURITY-TOKEN'); } }
@@ -175,6 +177,66 @@ window.CapitalDemoManager = (function() {
         return [];
     }
 
+    // Dettagli mercato di un epic (regole di dealing: minDealSize ecc.).
+    async function getMarketDetails(epic) {
+        try {
+            const res = await authedReq('/api/v1/markets/' + encodeURIComponent(epic));
+            if (res.ok) return await res.json();
+        } catch (e) { console.warn("[CapitalDemoManager] Errore getMarketDetails:", e); }
+        return null;
+    }
+
+    // Conferma di un deal (POST/DELETE su Capital sono asincroni: restituiscono un
+    // dealReference, l'esito reale va letto da /confirms). Ritorna dealStatus +
+    // dealId + level, o null se non confermabile.
+    async function confirmDeal(dealReference) {
+        if (!dealReference) return null;
+        try {
+            await new Promise(r => setTimeout(r, 500)); // il deal può non essere immediato
+            const res = await authedReq('/api/v1/confirms/' + encodeURIComponent(dealReference));
+            if (res.ok) {
+                const d = await res.json();
+                return { dealStatus: d.dealStatus, dealId: d.dealId, level: d.level, size: d.size, reason: d.reason || d.rejectReason || '' };
+            }
+        } catch (e) { console.warn("[CapitalDemoManager] Errore confirmDeal:", e); }
+        return null;
+    }
+
+    // Apre una posizione a mercato. direction 'BUY'/'SELL', size in unità dello
+    // strumento. Ritorna { ok, dealId, level, size, reason }.
+    async function createPosition(direction, epic, size) {
+        try {
+            const res = await authedReq('/api/v1/positions', {
+                method: 'POST',
+                body: JSON.stringify({ direction: direction, epic: epic, size: size })
+            });
+            if (!res.ok) {
+                let msg = ''; try { msg = JSON.stringify(await res.json()); } catch (_) { }
+                return { ok: false, status: res.status, reason: msg };
+            }
+            const data = await res.json();
+            const conf = await confirmDeal(data.dealReference);
+            if (conf && conf.dealStatus === 'ACCEPTED') {
+                return { ok: true, dealId: conf.dealId, level: conf.level, size: conf.size, dealReference: data.dealReference };
+            }
+            return { ok: false, reason: (conf && conf.reason) || 'deal non confermato', dealReference: data.dealReference };
+        } catch (e) { return { ok: false, reason: String(e) }; }
+    }
+
+    // Chiude una posizione per dealId. Ritorna { ok, dealReference, confirmed }.
+    async function closePosition(dealId) {
+        try {
+            const res = await authedReq('/api/v1/positions/' + encodeURIComponent(dealId), { method: 'DELETE' });
+            if (!res.ok) {
+                let msg = ''; try { msg = JSON.stringify(await res.json()); } catch (_) { }
+                return { ok: false, status: res.status, reason: msg };
+            }
+            const data = await res.json();
+            const conf = await confirmDeal(data.dealReference);
+            return { ok: true, dealReference: data.dealReference, confirmed: conf };
+        } catch (e) { return { ok: false, reason: String(e) }; }
+    }
+
     function startPolling() {
         if (pollingInterval) clearInterval(pollingInterval);
         pollingInterval = setInterval(async () => {
@@ -203,6 +265,9 @@ window.CapitalDemoManager = (function() {
         getAccount,
         getPositions,
         getTransactions,
+        getMarketDetails,
+        createPosition,
+        closePosition,
         startPolling,
         stopPolling
     };

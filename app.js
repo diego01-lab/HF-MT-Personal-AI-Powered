@@ -253,7 +253,7 @@ window.parseJwt = function (token) {
 // Versione app: SORGENTE UNICA per Web/Android/iOS. Mostrata accanto a data/ora,
 // nel modale "Informazioni app" e sotto il login. Il suffisso lettera identifica
 // la singola build; il numero va tenuto allineato al versionName Android/iOS.
-window.APP_VERSION = 'v.1.0.35';
+window.APP_VERSION = 'v.1.0.40';
 (function applyAppVersion() {
     const v = window.APP_VERSION;
     ['appVersion', 'appVersionTag', 'loginBuildTag'].forEach(id => {
@@ -3215,7 +3215,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const el = document.getElementById('armCAPD');
                     if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); }
                     if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
-                    showNotification('🟢 Capital.com Demo attivo: la scheda rispecchia il conto demo reale — saldo, posizioni e storico letti da Capital.com. Il routing ordini del bot su Capital arriva a breve (Step 2).', 'info');
+                    showNotification('🟢 Capital.com Demo attivo: il bot invia ORDINI REALI sul conto demo (denaro virtuale) — saldo, posizioni e storico dal broker. In questa versione la dimensione ordine è la minima di mercato (calibrazione dopo la verifica dal vivo).', 'info');
                 }
             } else if (stage === 4) {
                 // Capital.com Trading REALE
@@ -3227,7 +3227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     updateTriSwitchLabel(4);
                     setTimeout(() => {
-                        if (!confirm('⚠️ CONTO REALE CAPITAL.COM\n\nStai per collegare il conto Capital.com REALE.\nIn questa fase il conto è in MONITORAGGIO: saldo, posizioni e storico vengono letti dal conto reale, ma il bot NON invia ordini a Capital.com (il routing ordini reale arriva nello Step 2).\n\nVuoi continuare?')) {
+                        if (!confirm('⚠️ CONTO REALE CAPITAL.COM\n\nStai per collegare il conto Capital.com REALE.\nIl conto è in MONITORAGGIO: saldo, posizioni e storico vengono letti dal conto reale, ma il bot NON invia ordini su denaro vero (il routing reale è attivo SOLO sul demo, per sicurezza).\n\nVuoi continuare?')) {
                             showNotification('Collegamento conto reale Capital.com annullato: mantengo la selezione precedente.', 'info');
                             if (brokerTriSwitch) brokerTriSwitch.value = String(prevStage);
                             updateTriSwitchLabel(prevStage);
@@ -3240,7 +3240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (typeof window.refreshCategoryAvailability === 'function') window.refreshCategoryAvailability();
                         if (brokerTriSwitch) brokerTriSwitch.value = '4';
                         updateTriSwitchLabel(4);
-                        showNotification('🔴 Capital.com REALE collegato in monitoraggio: saldo, posizioni e storico dal conto reale. Il bot NON invia ancora ordini (routing reale nello Step 2).', 'warning');
+                        showNotification('🔴 Capital.com REALE collegato in monitoraggio: saldo, posizioni e storico dal conto reale. Il bot NON invia ordini su denaro vero (il routing reale è attivo solo sul demo).', 'warning');
                         handleCtxTransition(prevCtx); // FASE B: carica il portafoglio capl
                     }, 0);
                     return; // esce subito dal gestore 'change'
@@ -3782,11 +3782,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             for (let s in activePositions) {
                 const p = activePositions[s];
                 investedTotal += p.invested;
-                const livePrice = getLivePriceFor(s) || p.entryPrice;
-                const unreal = p.type === 'LONG'
-                    ? (livePrice - p.entryPrice) * p.amount
-                    : (p.entryPrice - livePrice) * p.amount;
+                // P&L reale del broker quando disponibile (Capital/Alpaca): il calcolo
+                // locale (entry-live)×qty è SBAGLIATO sui CFD/Forex (valore-pip e
+                // moltiplicatore di contratto ≠ prezzo×quantità — es. USD/JPY size 100
+                // dava −5.5 contro −0.02 reali). Fallback locale solo se manca l'upl.
+                let unreal;
+                if (p.brokerUnrealizedPnL !== undefined && (p.isCapital || brokerViewActive())) {
+                    unreal = p.brokerUnrealizedPnL;
+                } else {
+                    const livePrice = getLivePriceFor(s) || p.entryPrice;
+                    unreal = p.type === 'LONG' ? (livePrice - p.entryPrice) * p.amount : (p.entryPrice - livePrice) * p.amount;
+                }
                 unrealizedTotal += unreal;
+            }
+            // Capital: il totale non realizzato AUTOREVOLE è il P/L aperto del conto
+            // (window.capitalOpenPnL da /accounts, sempre disponibile e corretto),
+            // non la somma per-posizione (che dipende dall'upl per-posizione).
+            if (window.capitalMode && window.capitalMode !== 'off' && typeof window.capitalOpenPnL === 'number') {
+                unrealizedTotal = window.capitalOpenPnL;
             }
 
             // Aggiornamento anteprima investimento per la UI (per entrambe le modalità)
@@ -3818,27 +3831,47 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             if (_syncBroker && _syncTest && _syncContainer) {
                 const _brokerish = brokerViewActive();
-                _syncContainer.style.background = window.liveMonitorActive ? 'rgba(239,68,68,0.08)'
-                    : (useAlpacaBroker ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)');
-                _syncContainer.style.border = window.liveMonitorActive ? '1px solid rgba(239,68,68,0.2)'
-                    : (useAlpacaBroker ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(245,158,11,0.2)');
+                // Capital.com (capd/capl) NON è "test locale": è monitoraggio del
+                // conto reale (saldo/posizioni/storico letti dal broker). Riusa il
+                // badge "test" come badge di MONITORAGGIO (verde demo / rosso live).
+                const _capMon = !!(window.capitalMode && window.capitalMode !== 'off');
+                _syncContainer.style.background = _capMon ? (window.capitalMode === 'live' ? 'rgba(239,68,68,0.08)' : 'rgba(52,211,153,0.1)')
+                    : (window.liveMonitorActive ? 'rgba(239,68,68,0.08)'
+                    : (useAlpacaBroker ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)'));
+                _syncContainer.style.border = _capMon ? (window.capitalMode === 'live' ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(52,211,153,0.2)')
+                    : (window.liveMonitorActive ? '1px solid rgba(239,68,68,0.2)'
+                    : (useAlpacaBroker ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(245,158,11,0.2)'));
                 _syncBroker.style.display = _brokerish ? 'inline' : 'none';
                 _syncBroker.style.color = window.liveMonitorActive ? '#f87171' : '#3b82f6';
-                _syncTest.style.display = _brokerish ? 'none' : 'inline';
+                if (_capMon) {
+                    _syncTest.textContent = window.capitalMode === 'live' ? 'Monitoraggio Capital.com (reale)' : 'Monitoraggio Capital.com Demo';
+                    _syncTest.style.color = window.capitalMode === 'live' ? '#f87171' : '#34d399';
+                    _syncTest.style.display = 'inline';
+                } else {
+                    _syncTest.textContent = tr('sync_test', 'Modalità Test Locale — DB Locale');
+                    _syncTest.style.color = '#f59e0b';
+                    _syncTest.style.display = _brokerish ? 'none' : 'inline';
+                }
             }
 
             // --- MODALITÀ TEST (locale, solo Finnhub) ---
             if (!brokerViewActive()) {
-                // Equity = cash disponibile + posizioni aperte + PnL non realizzato
-                const testEquity = tradingCapital + investedTotal + unrealizedTotal;
+                // Capital.com: tradingCapital è GIÀ l'equity reale del conto (balance
+                // + P/L dal broker), che INCLUDE già le posizioni aperte. Sommare
+                // invested+unrealized locali raddoppierebbe (bug: €11k → $27k, il
+                // nozionale delle posizioni contato sopra il NAV). Per i veri contesti
+                // di test locale (Finnhub) resta la formula cash + posizioni.
+                const _capMon = !!(window.capitalMode && window.capitalMode !== 'off');
+                const testEquity = _capMon ? tradingCapital : (tradingCapital + investedTotal + unrealizedTotal);
+                const _cashDisplay = _capMon ? availableMargin : tradingCapital;
                 const $ = id => document.getElementById(id);
                 if (document.getElementById('tradingCapital')) document.getElementById('tradingCapital').textContent = formatMoney(testEquity);
                 if (document.getElementById('initialCapital')) document.getElementById('initialCapital').textContent = formatMoney(sessionInitialCapital);
-                if (document.getElementById('walletBalanceSide')) document.getElementById('walletBalanceSide').textContent = formatMoney(tradingCapital);
+                if (document.getElementById('walletBalanceSide')) document.getElementById('walletBalanceSide').textContent = formatMoney(_cashDisplay);
                 // Header: SOMMA degli equity di tutti i broker (multi-dashboard)
                 if (typeof updateGlobalPortfolioHeader === 'function') updateGlobalPortfolioHeader();
-                if (document.getElementById('availableMargin')) document.getElementById('availableMargin').textContent = formatMoney(tradingCapital);
-                if (document.getElementById('totalInvested')) document.getElementById('totalInvested').textContent = formatMoney(investedTotal + unrealizedTotal);
+                if (document.getElementById('availableMargin')) document.getElementById('availableMargin').textContent = formatMoney(_cashDisplay);
+                if (document.getElementById('totalInvested')) document.getElementById('totalInvested').textContent = formatMoney(_capMon ? 0 : (investedTotal + unrealizedTotal));
 
                 const realizedPnl = globalTotalRealizedPnL;
                 if (document.getElementById('sessionRevenue')) {
@@ -4533,6 +4566,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             availableCash = avail;
                             availableMargin = avail;
                             brokerUnrealizedPnL = opl;
+                            // P/L aperto REALE del conto (autorevole): usato come totale
+                            // non realizzato, perché la somma per-posizione dipende
+                            // dall'upl per-posizione non sempre disponibile.
+                            window.capitalOpenPnL = opl;
                             window.capitalAccountId = acc.accountId || null;
                             sessionInitialCapital = (typeof getDepositedTotal === 'function')
                                 ? getDepositedTotal(getBrokerCtx(), equity) : sessionInitialCapital;
@@ -4554,6 +4591,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Posizioni aperte REALI sul conto Capital → activePositions (come
         // syncAlpacaPositions). Solo foreground: quando capd/capl è la scheda
         // attiva, activePositions contiene esattamente le posizioni di quel conto.
+        let _capitalPosLoggedSchema = false;
         async function syncCapitalPositions() {
             if (window.capitalMode === 'off' || window.__ctxOverride) return;
             const mgr = getCapitalManager();
@@ -4561,6 +4599,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const positions = await mgr.getPositions();
                 if (window.capitalMode === 'off') return; // scheda cambiata durante l'await
+                if (positions.length && !_capitalPosLoggedSchema) {
+                    _capitalPosLoggedSchema = true;
+                    console.log('[CAPITAL] Schema posizione (per calibrazione P&L):', JSON.stringify(positions[0]));
+                }
                 let anyChanges = false;
                 const liveSyms = new Set();
                 for (const p of positions) {
@@ -4592,7 +4634,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                         activePositions[sym].isCapital = true;
                         activePositions[sym].simulated = false;
                     }
-                    if (posObj.upl !== undefined) activePositions[sym].brokerUnrealizedPnL = parseFloat(posObj.upl || 0);
+                    // P&L non realizzato REALE dal broker (importo autorevole: include
+                    // valore-pip e moltiplicatore di contratto — il calcolo locale
+                    // (entry-live)×qty è sbagliato sui CFD/FX, es. USD/JPY). Nome campo
+                    // robusto: 'upl' è quello documentato, teniamo alternative.
+                    const uplRaw = posObj.upl !== undefined ? posObj.upl
+                        : posObj.unrealizedPnL !== undefined ? posObj.unrealizedPnL
+                        : posObj.pnl !== undefined ? posObj.pnl
+                        : posObj.profit;
+                    if (uplRaw !== undefined && uplRaw !== null) activePositions[sym].brokerUnrealizedPnL = parseFloat(uplRaw) || 0;
+                    if (posObj.contractSize !== undefined) activePositions[sym].contractSize = parseFloat(posObj.contractSize) || 1;
                 }
                 // Rimuovi le posizioni non più presenti sul broker (chiuse altrove)
                 for (const sym in activePositions) {
@@ -4644,6 +4695,79 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (added) { persistData(); if (typeof renderHistory === 'function') renderHistory(); if (typeof updateDashboard === 'function') updateDashboard(); }
             } catch (e) { console.warn('[CAPITAL] Errore sync storico:', e && e.message ? e.message : e); }
         }
+
+        // ─── STEP 2: routing ordini REALE su Capital.com ───
+        // Chiamati dal motore (tengine.js openTrade/closeTrade) quando la scheda
+        // attiva è capd/capl. La contabilità (capitale/posizioni/storico) NON è
+        // locale: arriva dai sync del broker subito dopo l'ordine.
+        const _capitalMinSizeCache = {};
+        async function capitalComputeSize(mgr, epic, sym, price) {
+            // v1: usa il minDealSize del mercato (ordine minimo VALIDO e sicuro).
+            // La calibrazione su investUsd (10% del conto) arriva dopo la verifica
+            // del flusso sul demo: il size Capital è per-strumento (margine/contratto)
+            // e va tarato sui dati reali, non indovinato.
+            let minDeal = _capitalMinSizeCache[epic];
+            if (minDeal == null) {
+                try {
+                    const md = await mgr.getMarketDetails(epic);
+                    const v = md && md.dealingRules && md.dealingRules.minDealSize && md.dealingRules.minDealSize.value;
+                    minDeal = (typeof v === 'number' && v > 0) ? v : 1;
+                    _capitalMinSizeCache[epic] = minDeal;
+                } catch (_) { minDeal = 1; }
+            }
+            // Riferimento per la futura calibrazione: quanto vorrebbe il 10%/importo.
+            try {
+                const invUsd = (typeof getInvestUsd === 'function') ? getInvestUsd() : 0;
+                if (invUsd > 0 && price > 0) console.log(`[CAPITAL] ${sym}: size minDeal=${minDeal} (riferimento investUsd/price≈${(invUsd / price).toFixed(2)} — calibrazione futura).`);
+            } catch (_) { }
+            return minDeal;
+        }
+
+        window.capitalRouteOpen = async function (type, sym, price, dynTP, dynSL, confidence) {
+            if (window.capitalMode === 'off' || window.__ctxOverride) return;
+            if (activePositions[sym]) return; // già aperta su questo simbolo
+            const maxPos = (typeof maxPositionsLimit !== 'undefined') ? maxPositionsLimit : 30;
+            if (Object.keys(activePositions).length >= maxPos) return;
+            const mgr = getCapitalManager();
+            if (!mgr || typeof mgr.createPosition !== 'function') return;
+            const epic = CAPITAL_EPIC_MAP[sym];
+            if (!epic) { console.warn(`[CAPITAL] Nessun epic per ${sym}: ordine saltato.`); return; }
+            const direction = (type === 'LONG') ? 'BUY' : 'SELL';
+            try {
+                const size = await capitalComputeSize(mgr, epic, sym, price);
+                console.log(`[CAPITAL] Apertura ${direction} ${epic} (${sym}) size=${size}...`);
+                const res = await mgr.createPosition(direction, epic, size);
+                if (res && res.ok) {
+                    console.log(`[CAPITAL] ✅ Posizione aperta ${sym}: dealId=${res.dealId} level=${res.level} size=${res.size}`);
+                    if (typeof showNotification === 'function') showNotification(`Capital.com: aperta ${direction} ${displaySymbol ? displaySymbol(sym) : sym} (size ${size}).`, 'success');
+                    setTimeout(() => { syncCapitalPositions(); syncCapitalAccount(); }, 1500);
+                } else {
+                    console.warn(`[CAPITAL] ❌ Apertura ${direction} ${epic} RIFIUTATA:`, res && (res.reason || res.status));
+                    if (typeof showNotification === 'function') showNotification(`Capital.com: ordine ${sym} rifiutato dal broker (${(res && res.status) || 'errore'}).`, 'error');
+                }
+            } catch (e) { console.warn('[CAPITAL] Errore apertura:', e && e.message ? e.message : e); }
+        };
+
+        window.capitalRouteClose = async function (sym, reason) {
+            if (window.capitalMode === 'off' || window.__ctxOverride) return false;
+            const pos = activePositions[sym];
+            if (!pos) return false;
+            const mgr = getCapitalManager();
+            if (!mgr || typeof mgr.closePosition !== 'function') return false;
+            if (!pos.dealId) { console.warn(`[CAPITAL] Nessun dealId per ${sym}: impossibile chiudere sul broker (attendo il prossimo sync posizioni).`); return false; }
+            try {
+                console.log(`[CAPITAL] Chiusura ${sym} dealId=${pos.dealId} (${reason})...`);
+                const res = await mgr.closePosition(pos.dealId);
+                if (res && res.ok) {
+                    console.log(`[CAPITAL] ✅ Chiusa ${sym} (${reason}).`);
+                    if (typeof showNotification === 'function') showNotification(`Capital.com: chiusa ${displaySymbol ? displaySymbol(sym) : sym} (${reason}).`, 'info');
+                    setTimeout(() => { syncCapitalPositions(); syncCapitalAccount(); syncCapitalHistory(); }, 1500);
+                    return true;
+                }
+                console.warn(`[CAPITAL] ❌ Chiusura ${sym} fallita:`, res && (res.reason || res.status));
+                return false;
+            } catch (e) { console.warn('[CAPITAL] Errore chiusura:', e && e.message ? e.message : e); return false; }
+        };
 
         // Prezzi in tempo reale (polling 3s) — GET /api/v1/markets?epics=...
         // Alimenta radar/grafico/strategia con il mid bid/offer, come gli altri feed.
@@ -5910,7 +6034,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const livePrice = getLivePriceFor(sym) || pos.entryPrice;
                         // Stessa contabilità del pannello: PnL del broker se disponibile,
                         // altrimenti calcolato dal prezzo live
-                        const unrealized = (pos.brokerUnrealizedPnL !== undefined && brokerViewActive())
+                        const unrealized = (pos.brokerUnrealizedPnL !== undefined && (brokerViewActive() || pos.isCapital))
                             ? pos.brokerUnrealizedPnL
                             : (pos.type === 'LONG' ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice)) * pos.amount;
                         const invested = pos.invested || pos.entryPrice * pos.amount;
@@ -6560,7 +6684,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const p = activePositions[sym];
                 const livePrice = getLivePriceFor(sym) || p.entryPrice;
                 let pnl = 0;
-                if (p.brokerUnrealizedPnL !== undefined && brokerViewActive()) {
+                if (p.brokerUnrealizedPnL !== undefined && (brokerViewActive() || p.isCapital)) {
                     pnl = p.brokerUnrealizedPnL;
                 } else if (livePrice > 0) {
                     pnl = p.type === 'LONG' ? (livePrice - p.entryPrice) * p.amount : (p.entryPrice - livePrice) * p.amount;
@@ -6568,7 +6692,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 openUnrealizedTotal += pnl;
                 if (p.brokerMarketValue !== undefined && brokerViewActive()) {
                     openMarketValueTotal += p.brokerMarketValue;
-                } else if (livePrice > 0) {
+                } else if (livePrice > 0 && !p.isCapital) {
                     openMarketValueTotal += p.amount * livePrice;
                 }
                 // Somma delle commissioni stimate (stessa metrica di ogni card, vedi
@@ -6576,6 +6700,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const pInvested = p.invested || p.entryPrice * p.amount;
                 const pFeePct = (typeof getNetBreakevenPct === 'function') ? getNetBreakevenPct(sym) : 0;
                 openFeeTotal += pInvested * (pFeePct / 100);
+            }
+            // Capital: totale non realizzato AUTOREVOLE = P/L aperto del conto
+            // (sempre corretto), non la somma per-posizione. Vedi window.capitalOpenPnL.
+            if (window.capitalMode && window.capitalMode !== 'off' && typeof window.capitalOpenPnL === 'number') {
+                openUnrealizedTotal = window.capitalOpenPnL;
             }
 
             let currentCommissions = 0;
@@ -6850,7 +6979,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const cat = getAssetType(sym);
 
                 let unrealized;
-                if (pos.brokerUnrealizedPnL !== undefined && brokerViewActive()) {
+                // Capital.com incluso: il P&L reale del broker (upl) include il
+                // moltiplicatore di contratto dei CFD ed è l'importo autorevole
+                // (quello che vedi su Capital.com). Il calcolo locale lo ignora.
+                if (pos.brokerUnrealizedPnL !== undefined && (brokerViewActive() || pos.isCapital)) {
                     unrealized = pos.brokerUnrealizedPnL;
                 } else {
                     unrealized = pos.type === 'LONG'
@@ -6860,7 +6992,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Calcolo percentuale non realizzata
                 const invested = pos.invested || pos.entryPrice * pos.amount;
-                const unrealizedPct = (unrealized / invested) * 100;
+                // Per Capital la % viene dal RAPPORTO PREZZI (indipendente da valuta
+                // e moltiplicatore): il P&L broker è in valuta conto (EUR) mentre
+                // invested è in valuta di quotazione, quindi unrealized/invested
+                // mischierebbe valute. Per gli altri broker resta invariata.
+                const unrealizedPct = pos.isCapital
+                    ? (pos.type === 'LONG' ? (livePrice / pos.entryPrice - 1) * 100 : (pos.entryPrice / livePrice - 1) * 100)
+                    : (unrealized / invested) * 100;
 
                 // TP/SL dinamici e gestione rischio: delegati al motore (tengine.js).
                 const _risk = manageOpenPositionRisk(sym, pos, livePrice, unrealizedPct, {

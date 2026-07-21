@@ -62,6 +62,12 @@ const MIN_EDGE_COST_MULT_STOCK = 2.5;
 // non raddoppia l'escursione attesa, la moltiplica per √2.
 const EDGE_HORIZON_STOCK_S = 600;         // ~10 min: età minima 5 min + corsa al TP
 const EDGE_HORIZON_CRYPTO_S = 4 * 3600;   // ~4h: durata tipica osservata dei TP crypto
+// Forex/Materie (Capital.com): sul breve si muovono MOLTO meno di azioni/crypto
+// (EUR/USD ~0.03% in 10 min), ma su qualche ora fanno 0.1-0.3%. Con l'orizzonte
+// azioni (10 min) il filtro edge bloccava OGNI ingresso Forex/Materie (osservato
+// 21/07/2026: "Saltate: 378 movimento < costi", zero operazioni in 8h). Orizzonte
+// più lungo = escursione attesa realistica per queste categorie tenute più a lungo.
+const EDGE_HORIZON_FX_S = 4 * 3600;       // ~4h: durata tipica intraday Forex/Materie
 // Guardie anti-artefatto sull'INGRESSO: con uno storico troppo corto gli
 // indicatori sono rumore, e una larghezza Bollinger irrealistica su ~100s
 // (18/07/2026: BB 5.3% su mercato piatto, causata dal mix di feed di venue
@@ -131,6 +137,11 @@ const POST_TRADE_COOLDOWN_LOSS_MS = 300000;
 // radar. Ora il filtro vive SOLO dentro "if (!pos)" (vedi sotto): gating
 // solo sull'apertura di nuove posizioni, radar sempre aggiornato.
 const ATR_FLATNESS_MIN_PCT = 0.15;
+// Forex/Materie: ATR% naturale molto più basso delle azioni (EUR/USD ~0.01-0.03%
+// su ~40s). Con la soglia azioni (0.15%) il mercato risultava SEMPRE "piatto" e
+// nessun ingresso passava. Floor dedicato, basso ma non nullo (blocca solo i
+// periodi davvero morti, es. liquidità notturna).
+const ATR_FLATNESS_MIN_PCT_FX = 0.01;
 // Finestra di gara apertura->sync: dopo l'invio di un ordine di apertura,
 // activePositions[sym] resta vuoto finché syncAlpacaPositions() non conferma
 // la posizione (schedulata ~1s dopo, poi la rete ci mette il suo). Se la
@@ -477,9 +488,11 @@ function evaluateStrategyAI(sym, history, price) {
         const isBearTrend = price < ema26;
 
         if (!pos) {
+            // Categoria a bassa volatilità (Forex/Materie): floor flatness dedicato.
+            const _isFx = (getAssetType(sym) === 'FOREX' || getAssetType(sym) === 'COMMODITY');
             // Mercato piatto: nessuna nuova apertura (il segnale/radar sopra
             // sono già stati calcolati e mostrati, quindi il radar resta vivo).
-            if (atrPct < ATR_FLATNESS_MIN_PCT) return;
+            if (atrPct < (_isFx ? ATR_FLATNESS_MIN_PCT_FX : ATR_FLATNESS_MIN_PCT)) return;
 
             // Storico troppo corto: indicatori non affidabili, niente ingressi
             // (il segnale/radar sopra restano comunque aggiornati).
@@ -533,7 +546,10 @@ function evaluateStrategyAI(sym, history, price) {
             // catturare), in un mercato mosso l'escursione proiettata supera
             // i costi e l'ingresso passa.
             const obsWindowS = Math.max(20, Math.min(history.length, 100)); // campioni ~1s
-            const edgeHorizonS = getAssetType(sym) === 'CRYPTO' ? EDGE_HORIZON_CRYPTO_S : EDGE_HORIZON_STOCK_S;
+            const _edgeCat = getAssetType(sym);
+            const edgeHorizonS = _edgeCat === 'CRYPTO' ? EDGE_HORIZON_CRYPTO_S
+                : (_edgeCat === 'FOREX' || _edgeCat === 'COMMODITY') ? EDGE_HORIZON_FX_S
+                : EDGE_HORIZON_STOCK_S;
             const horizonScale = Math.sqrt(edgeHorizonS / obsWindowS);
             // Volatilità NETTA dello spread: il mid delle quote rimbalza di
             // ~±spread/2 anche a prezzo fermo (alt illiquide: spread 0.3-0.6%
@@ -544,7 +560,10 @@ function evaluateStrategyAI(sym, history, price) {
             // Si proietta solo l'ECCEDENZA della banda oltre lo spread.
             const cleanVolPct = Math.max(0, volatilityPct - spreadEstEntry);
             const expectedMovePct = (cleanVolPct / 2) * horizonScale;
-            const edgeMult = getAssetType(sym) === 'CRYPTO' ? MIN_EDGE_COST_MULT : MIN_EDGE_COST_MULT_STOCK;
+            // Forex/Materie usano il moltiplicatore base (2) come le crypto: gli
+            // spread Capital su queste categorie sono stretti, non serve il 2.5×
+            // pensato per i micro-scalp azionari a bassa volatilità.
+            const edgeMult = (_edgeCat === 'STOCK') ? MIN_EDGE_COST_MULT_STOCK : MIN_EDGE_COST_MULT;
             if (expectedMovePct < roundTripCostPct * edgeMult) {
                 if (isBotActive && Date.now() % 15000 < 500) {
                     console.log(`[STRAT] ${sym}: movimento atteso ${expectedMovePct.toFixed(2)}% (su ~${Math.round(edgeHorizonS / 60)} min) < ${edgeMult}× costi ${roundTripCostPct.toFixed(2)}% — ingresso saltato.`);
@@ -931,13 +950,17 @@ async function openTrade(type, price, sym, dynTP = null, dynSL = null, confidenc
     // getBrokerHttp() nelle funzioni d'ordine (alpacaCreateOrder/closeTrade).
     if (activePositions[sym]) return;
 
-    // Capital.com (capd/capl) — STEP 1: la scheda è in MONITORAGGIO del conto
-    // reale (posizioni/saldo/storico letti dal broker via syncCapital*). Il bot
-    // NON apre posizioni: creerebbe voci locali che il sync del broker
-    // cancellerebbe. Il routing ordini reale su Capital arriva nello Step 2.
+    // Capital.com (capd/capl) — STEP 2: routing ordini REALE sul conto. Delego a
+    // app.js (window.capitalRouteOpen) che conosce epic, size (minDealSize) e
+    // manager. La contabilità (capitale/posizioni/storico) NON è locale: arriva
+    // dai sync del broker (syncCapitalPositions/Account) subito dopo l'ordine.
+    // Solo foreground: in background (execInCtx) Capital non opera.
     if (window.capitalMode && window.capitalMode !== 'off') {
-        if (isBotActive && !window.__ctxOverride) {
-            botNotify('capmon', tr('bot_skip_capital_monitor', 'Capital.com in monitoraggio del conto reale: nessun ordine inviato (routing ordini in arrivo).'), 'info', 60000);
+        // Solo DEMO: il routing reale sul conto LIVE (denaro vero) resta disattivato
+        // finché il bot non è provato redditizio e l'utente non lo abilita
+        // esplicitamente. Su capl la scheda resta in monitoraggio.
+        if (!window.__ctxOverride && window.capitalMode === 'demo' && typeof window.capitalRouteOpen === 'function') {
+            window.capitalRouteOpen(type, sym, price, dynTP, dynSL, confidence);
         }
         return;
     }
@@ -1424,6 +1447,23 @@ async function closeTrade(sym, price, reason = 'MANUAL') {
     if (!pos || pos.isActuallyClosing) return;
     // Anti-duplicazione: se una chiusura broker è in corso/appena inviata, non ripetere
     if (reason !== 'MANUAL' && Date.now() - (recentlyClosed[sym] || 0) < 30000) return;
+
+    // Capital.com (capd/capl) — STEP 2: chiusura REALE sul broker via dealId.
+    // Delego a app.js (window.capitalRouteClose). Il sync riflette la rimozione
+    // della posizione e aggiorna equity/storico. recentlyClosed (blackout
+    // riapertura) si arma solo a chiusura confermata.
+    if (window.capitalMode && window.capitalMode !== 'off' && !window.__ctxOverride && (pos.isCapital || pos.dealId)) {
+        // Solo DEMO chiude via routing reale; su LIVE (monitoraggio) non tocchiamo
+        // le posizioni (denaro reale, nessuna azione automatica).
+        if (window.capitalMode === 'demo') {
+            pos.isActuallyClosing = true;
+            let ok = false;
+            try { if (typeof window.capitalRouteClose === 'function') ok = await window.capitalRouteClose(sym, reason); } catch (_) { }
+            if (ok) recentlyClosed[sym] = Date.now();
+            else pos.isActuallyClosing = false;
+        }
+        return;
+    }
 
     if (reason !== 'MANUAL' && brokerViewActive() && !pos.simulated) {
         window.__lastAlpacaAction = window.__lastAlpacaAction || 0;
